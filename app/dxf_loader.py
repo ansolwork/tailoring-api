@@ -1,10 +1,9 @@
 import os
 import ezdxf
 import sys
-from ezdxf.groupby import groupby
-from dxf_visualize import DXFVisualize
+import pandas as pd
 import matplotlib.pyplot as plt
-
+from shapely.geometry import Point, Polygon
 
 class DXFLoader:
     def __init__(self):
@@ -21,118 +20,208 @@ class DXFLoader:
             print(f"Error loading DXF file '{self.file_path}': {e}")
             sys.exit(1)
 
-    def process_text_entities(self):
-        # Iterate through entities in the model space
+    def extract_annotations(self):
+        annotations = []
         for entity in self.msp:
             if entity.dxftype() == "TEXT":
-                text_content = entity.dxf.text
-                position = (entity.dxf.insert[0], entity.dxf.insert[1])  # Text position (x, y)
-                height = entity.dxf.height  # Text height
-                style = entity.dxf.style  # Text style
-                # Process or store the text information as needed
-                # print(f"Text: {text_content}, Position: {position}, Height: {height}, Style: {style}")
+                annotations.append({
+                    "Text": entity.dxf.text,
+                    "Position": (entity.dxf.insert[0], entity.dxf.insert[1])
+                })
+        return annotations
 
-    def group_by_layer(self):
-        return groupby(entities=self.msp, dxfattrib="layer")
+    def classify_annotations(self, annotations):
+        classified_annotations = {
+            "Piece_Name": [],
+            "Size": [],
+            "Annotation": [],
+            "Quantity": [],
+            "Category": []
+        }
+        for annotation in annotations:
+            text = annotation["Text"]
+            position = annotation["Position"]
+            if "Piece Name:" in text:
+                classified_annotations["Piece_Name"].append({"Text": text, "Position": position})
+            elif "Size:" in text:
+                classified_annotations["Size"].append({"Text": text, "Position": position})
+            elif "Annotation:" in text:
+                classified_annotations["Annotation"].append({"Text": text, "Position": position})
+            elif "Quantity:" in text:
+                classified_annotations["Quantity"].append({"Text": text, "Position": position})
+            elif "Category:" in text:
+                classified_annotations["Category"].append({"Text": text, "Position": position})
+        return classified_annotations
 
-    def group_by_custom(self, input_key):
-        return self.msp.groupby(key=input_key)
+    def associate_annotations(self, entity_data, classified_annotations):
+        if entity_data.get("Vertices") and len(entity_data["Vertices"]) >= 4:
+            polygon = Polygon(entity_data["Vertices"])
+            for key, annotations in classified_annotations.items():
+                for annotation in annotations:
+                    point = Point(annotation["Position"])
+                    if polygon.contains(point):
+                        if key not in entity_data:
+                            entity_data[key] = []
+                        entity_data[key].append(annotation["Text"])
+        return entity_data
 
-    @staticmethod
-    def layer_and_color_key(entity):
-        return (entity.dxf.layer, entity.dxf.color) if entity.dxf.layer != "0" else None
-
-    def group_by_color(self):
-        grouped_entities = {}
+    def entities_to_dataframe(self, filename):
+        data = []
+        annotations = self.extract_annotations()
+        classified_annotations = self.classify_annotations(annotations)
         for entity in self.msp:
-            color = entity.dxf.color
-            grouped_entities.setdefault(color, []).append(entity)
-        return grouped_entities
-
-    def group_by_entity_type(self):
-        grouped_entities = {}
-        for entity in self.msp:
-            entity_type = entity.dxftype()
-            grouped_entities.setdefault(entity_type, []).append(entity)
-        return grouped_entities
-
-    def group_by_blocks(self):
-        grouped_blocks = {}
-        for entity in self.msp:
+            entity_data = {
+                "Filename": filename,
+                "Type": entity.dxftype(),
+                "Layer": entity.dxf.layer,
+                "Color": entity.dxf.color,
+                "Vertices": [],
+                "Text": None,
+                "Position_X": None,
+                "Position_Y": None,
+                "Height": None,
+                "Style": None,
+                "Block": None,
+                "Start_X": None,
+                "Start_Y": None,
+                "End_X": None,
+                "End_Y": None,
+                "Center_X": None,
+                "Center_Y": None,
+                "Radius": None,
+                "Major_Axis_End_X": None,
+                "Major_Axis_End_Y": None,
+                "Minor_Axis_End_X": None,
+                "Minor_Axis_End_Y": None
+            }
             if entity.dxftype() == 'INSERT':
                 block_name = entity.dxf.name
-                grouped_blocks.setdefault(block_name, []).append(entity)
-        return grouped_blocks
+                block = self.doc.blocks.get(block_name)
+                if block is None:
+                    continue
+                for block_entity in block:
+                    block_entity_data = {
+                        "Filename": filename,
+                        "Type": block_entity.dxftype(),
+                        "Layer": block_entity.dxf.layer,
+                        "Color": block_entity.dxf.color,
+                        "Block": block_name,
+                        "Vertices": [],
+                        "Text": None,
+                        "Position_X": None,
+                        "Position_Y": None,
+                        "Height": None,
+                        "Style": None,
+                        "Start_X": None,
+                        "Start_Y": None,
+                        "End_X": None,
+                        "End_Y": None,
+                        "Center_X": None,
+                        "Center_Y": None,
+                        "Radius": None,
+                        "Major_Axis_End_X": None,
+                        "Major_Axis_End_Y": None,
+                        "Minor_Axis_End_X": None,
+                        "Minor_Axis_End_Y": None
+                    }
+                    self.update_entity_data(block_entity, block_entity_data)
+                    block_entity_data = self.associate_annotations(block_entity_data, classified_annotations)
+                    data.append(block_entity_data)
+            else:
+                self.update_entity_data(entity, entity_data)
+                entity_data = self.associate_annotations(entity_data, classified_annotations)
+                data.append(entity_data)
+        return pd.DataFrame(data)
 
-    def view_block_geometry(self, block_name):
-        for entity in self.msp.query(f'INSERT[name=="{block_name}"]'):
-            block = self.doc.blocks.get(entity.dxf.name)
-            if block is None:
-                print(f"Block '{entity.dxf.name}' not found.")
-                continue
+    def update_entity_data(self, entity, entity_data):
+        if entity.dxftype() == "TEXT":
+            entity_data.update({
+                "Text": entity.dxf.text,
+                "Position_X": entity.dxf.insert[0],
+                "Position_Y": entity.dxf.insert[1],
+                "Height": entity.dxf.height,
+                "Style": entity.dxf.style
+            })
+        elif entity.dxftype() == "LINE":
+            entity_data.update({
+                "Start_X": entity.dxf.start[0],
+                "Start_Y": entity.dxf.start[1],
+                "End_X": entity.dxf.end[0],
+                "End_Y": entity.dxf.end[1]
+            })
+        elif entity.dxftype() == "CIRCLE":
+            entity_data.update({
+                "Center_X": entity.dxf.center[0],
+                "Center_Y": entity.dxf.center[1],
+                "Radius": entity.dxf.radius
+            })
+        elif entity.dxftype() == "POLYLINE" or entity.dxftype() == "LWPOLYLINE":
+            vertices = [(vertex.dxf.location.x, vertex.dxf.location.y) for vertex in entity.vertices] if entity.dxftype() == "POLYLINE" else [(point[0], point[1]) for point in entity.get_points()]
+            entity_data.update({
+                "Vertices": vertices
+            })
+        elif entity.dxftype() == "POINT":
+            entity_data.update({
+                "Position_X": entity.dxf.location[0],
+                "Position_Y": entity.dxf.location[1]
+            })
+        elif entity.dxftype() == "ARC":
+            entity_data.update({
+                "Center_X": entity.dxf.center[0],
+                "Center_Y": entity.dxf.center[1],
+                "Radius": entity.dxf.radius,
+                "Start_Angle": entity.dxf.start_angle,
+                "End_Angle": entity.dxf.end_angle
+            })
+        elif entity.dxftype() == "ELLIPSE":
+            entity_data.update({
+                "Center_X": entity.dxf.center[0],
+                "Center_Y": entity.dxf.center[1],
+                "Major_Axis_End_X": entity.dxf.major_axis[0],
+                "Major_Axis_End_Y": entity.dxf.major_axis[1],
+                "Minor_Axis_End_X": entity.dxf.minor_axis[0],
+                "Minor_Axis_End_Y": entity.dxf.minor_axis[1]
+            })
+        elif entity.dxftype() == "SPLINE":
+            vertices = [(control_point[0], control_point[1]) for control_point in entity.control_points]
+            entity_data.update({
+                "Vertices": vertices
+            })
 
-            print(f"Geometry of block '{entity.dxf.name}':")
-            for e in block:
-                print(f"Type: {e.dxftype()}")
-                for attribute in e.dxf.all_existing_dxf_attribs():
-                    print(f"  {attribute}: {getattr(e.dxf, attribute)}")
-
-    def visualize_block(self, block_name, output_folder):
-        dxf_visualize = DXFVisualize()
-        fig, ax = plt.subplots()
-        ax.set_aspect('equal')
-
-        block_entities = self.msp.query(f'INSERT[name=="{block_name}"]')
-        if not block_entities:
-            print(f"Block '{block_name}' not found in the model space.")
-            return
-
-        for insert_entity in block_entities:
-            block = self.doc.blocks.get(insert_entity.dxf.name)
-            if block is None:
-                print(f"Block '{insert_entity.dxf.name}' not found.")
-                continue
-
-            for entity in block:
-                if entity.dxftype() == 'LINE':
-                    start = (entity.dxf.start[0], entity.dxf.start[1])
-                    end = (entity.dxf.end[0], entity.dxf.end[1])
-                    dxf_visualize.draw_line(ax, start, end)
-                elif entity.dxftype() == 'CIRCLE':
-                    dxf_visualize.draw_circle(ax, (-entity.dxf.center.x, entity.dxf.center.y), entity.dxf.radius)
-                elif entity.dxftype() == 'POLYLINE':
-                    vertices = [(vertex.dxf.location[0], vertex.dxf.location[1]) for vertex in entity.vertices()]
-                    dxf_visualize.draw_polyline(ax, vertices)
-                elif entity.dxftype() == 'TEXT':
-                    position = (entity.dxf.insert[0], entity.dxf.insert[1]) if isinstance(entity.dxf.insert, tuple) else (
-                        entity.dxf.align_point[0], entity.dxf.align_point[1])
-                    text_content = entity.dxf.text
-                    dxf_visualize.draw_text(ax, position, text_content)
-
-        ax.autoscale_view()
-        output_path = os.path.join(output_folder, block_name + ".png")
-        plt.savefig(output_path, dpi=300)
-        plt.close()
-
+    def print_all_entities(self):
+        entity_types = set()
+        for entity in self.msp:
+            entity_types.add(entity.dxftype())
+        print("All DXF entity types found:", entity_types)
 
 if __name__ == "__main__":
-    dxf_directory = "../data/dxf/"
-    output_image_directory = "../data/output_images"
+    # Change pattern folder here
+    #pattern = "basic_pattern"
+    pattern = "" # If no pattern dir
+
+    dxf_directory = "../data/02-07-2024-dxf-files/" + str(pattern) + "/"
+    output_table_directory = "../data/output_tables/" + pattern + "_"
 
     dxf_loader = DXFLoader()
 
+    all_data = []
+
+    print(dxf_directory)
+
     for filename in os.listdir(dxf_directory):
         file_path = os.path.join(dxf_directory, filename)
+        print(filename)
         if os.path.isfile(file_path) and filename.lower().endswith('.dxf'):
             dxf_loader.load_dxf(file_path)
-            dxf_loader.process_text_entities()
-            dxf_loader.group_by_layer()
-            dxf_loader.group_by_custom(DXFLoader.layer_and_color_key)
-            dxf_loader.group_by_entity_type()
-            dxf_loader.group_by_blocks()
-            dxf_loader.group_by_color()
+            dxf_loader.print_all_entities()  # Print all entity types found in the current DXF file
+            df = dxf_loader.entities_to_dataframe(filename)
+            all_data.append(df)
 
-            for block_name in dxf_loader.group_by_blocks().keys():
-                print(f'Block: {block_name}')
-                dxf_loader.view_block_geometry(block_name)
-                print("-" * 40)
+    combined_df = pd.concat(all_data, ignore_index=True)
+    sorted_df = combined_df.sort_values(by=['Filename', 'Type', 'Layer'])
+
+    # Save the sorted DataFrame to CSV and Excel files
+    sorted_df.to_csv(output_table_directory + 'combined_entities.csv', index=False)
+    sorted_df.to_excel(output_table_directory + 'combined_entities.xlsx', index=False)
+
+    print(sorted_df.head())  # Display the first few rows of the sorted DataFrame for verification
