@@ -3,6 +3,8 @@ other_files/
 images/
 svg_files/
 data/
+flagged/
+persistent_output/
 
 # Don't include documents
 technical_book.*

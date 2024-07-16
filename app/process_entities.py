@@ -1,7 +1,7 @@
-import pandas as pd
 import os
+import pandas as pd
 from matplotlib import pyplot as plt
-import ast
+from collections import defaultdict
 
 class ExcelFileReader:
     def __init__(self, file_path):
@@ -29,15 +29,15 @@ class ExcelFileReader:
         else:
             print("Data frame is empty. Please read the file first.")
 
-    def filter_by_column_value(self, column_name, value):
+    def filter_by_column_value(self, column_name, values):
         if self.data_frame is not None:
             if column_name in self.data_frame.columns:
-                self.filtered_data_frame = self.data_frame[self.data_frame[column_name] == value]
+                self.filtered_data_frame = self.data_frame[self.data_frame[column_name].isin(values)]
                 if not self.filtered_data_frame.empty:
-                    print(f"Filtered data (where {column_name} == {value}):")
-                    print(self.filtered_data_frame)
+                    print(f"Filtered data (where {column_name} in {values}):")
+                    print(self.filtered_data_frame.head())
                 else:
-                    print(f"No rows found with {column_name} == {value}")
+                    print(f"No rows found with {column_name} in {values}")
             else:
                 print(f"Column {column_name} not found in the data frame.")
         else:
@@ -46,70 +46,64 @@ class ExcelFileReader:
     def display_filtered_contents(self):
         if self.filtered_data_frame is not None and not self.filtered_data_frame.empty:
             print("Displaying filtered data frame:")
-            print(self.filtered_data_frame.to_string(index=False))
+            print(self.filtered_data_frame.head())
         else:
             print("Filtered data frame is empty. Please apply a filter first.")
 
-    def draw_lines(self, output_directory):
+    def draw_lines_and_polylines(self, output_directory):
         if self.filtered_data_frame is not None and not self.filtered_data_frame.empty:
             if not os.path.exists(output_directory):
                 os.makedirs(output_directory)
 
             grouped = self.filtered_data_frame.groupby('Filename')
             for name, group in grouped:
-                plt.figure(figsize=(10, 6))
-                for _, row in group.iterrows():
-                    plt.plot([row['Start_X'], row['End_X']], [row['Start_Y'], row['End_Y']], marker='o')
+                plt.figure(figsize=(16, 10))  # Increase figure size
 
-                plt.title(f'Line Plot for {name}')
-                plt.xlabel('X Coordinate')
-                plt.ylabel('Y Coordinate')
+                # Draw lines
+                lines = group[group['Type'] == 'LINE']
+                for _, row in lines.iterrows():
+                    if pd.notna(row['Line_Start_X']) and pd.notna(row['Line_End_X']) and pd.notna(row['Line_Start_Y']) and pd.notna(row['Line_End_Y']):
+                        plt.plot([row['Line_Start_X'], row['Line_End_X']], [row['Line_Start_Y'], row['Line_End_Y']], marker='o', linewidth=0.5, markersize=5)
+                        plt.text(row['Line_Start_X'], row['Line_Start_Y'], f"({row['Line_Start_X']}, {row['Line_Start_Y']})", fontsize=10, ha='right', va='bottom')
+                        plt.text(row['Line_End_X'], row['Line_End_Y'], f"({row['Line_End_X']}, {row['Line_End_Y']})", fontsize=10, ha='right', va='bottom')
+
+                # Draw polylines
+                polylines = group[group['Type'].isin(['POLYLINE', 'LWPOLYLINE'])]
+                unique_points = polylines.drop_duplicates(subset=['PL_POINT_X', 'PL_POINT_Y'])
+                for vertex_label in polylines['Vertex Label'].unique():
+                    vertex_group = polylines[polylines['Vertex Label'] == vertex_label]
+                    xs = vertex_group['PL_POINT_X'].tolist()
+                    ys = vertex_group['PL_POINT_Y'].tolist()
+                    plt.plot(xs, ys, marker='o', linewidth=0.5, markersize=5)
+
+                # Annotate unique points
+                for x, y, point_label in zip(unique_points['PL_POINT_X'], unique_points['PL_POINT_Y'], unique_points['Point Label']):
+                    plt.text(x, y, f'{point_label}', fontsize=10, ha='right', va='bottom')
+
+                plt.title(f'Polyline Plot for {name}', fontsize=16)
+                plt.xlabel('X Coordinate', fontsize=14)
+                plt.ylabel('Y Coordinate', fontsize=14)
+                plt.xticks(fontsize=12)
+                plt.yticks(fontsize=12)
                 plt.grid(True)
+                plt.tight_layout()  # Improve layout
 
-                output_path = os.path.join(output_directory, f"line_plot_{name}.png")
-                plt.savefig(output_path)
-                plt.show()
-
-                print(f"Line plot for {name} saved to {output_path}")
-        else:
-            print("Filtered data frame is empty. Please apply a filter first.")
-
-    def draw_polylines(self, output_directory, entity_value):
-        if self.filtered_data_frame is not None and not self.filtered_data_frame.empty:
-            if not os.path.exists(output_directory):
-                os.makedirs(output_directory)
-
-            grouped = self.filtered_data_frame.groupby('Filename')
-            for name, group in grouped:
-                plt.figure(figsize=(10, 6))
-                for _, row in group.iterrows():
-                    vertices = ast.literal_eval(row['Vertices'])
-                    xs, ys = zip(*vertices)
-                    plt.plot(xs, ys, marker='o')
-                    
-                    # Annotate each point with a number
-                    for i, (x, y) in enumerate(zip(xs, ys), start=1):
-                        plt.text(x, y, f'{i}', fontsize=8, ha='right')
-
-                plt.title(f'Polyline Plot for {entity_value} - {name}')
-                plt.xlabel('X Coordinate')
-                plt.ylabel('Y Coordinate')
-                plt.grid(True)
-
-                # Save the plot
-                output_path = os.path.join(output_directory, f"polyline_plot_{entity_value}_{name}.png")
-                plt.savefig(output_path)
-                plt.show()
+                output_path = os.path.join(output_directory, f"polyline_plot_{name}.png")
+                plt.savefig(output_path, dpi=300)  # Increase DPI for better quality
+                plt.close()
 
                 print(f"Polyline plot for {name} saved to {output_path}")
 
                 # Create and save the table of coordinates
-                coordinates_df = pd.DataFrame({'Point': range(1, len(xs)+1), 'X Coordinate': xs, 'Y Coordinate': ys})
+                all_xs = unique_points['PL_POINT_X'].dropna().tolist()
+                all_ys = unique_points['PL_POINT_Y'].dropna().tolist()
+                point_labels = unique_points['Point Label'].dropna().tolist()
+                coordinates_df = pd.DataFrame({'Point': point_labels, 'X Coordinate': all_xs, 'Y Coordinate': all_ys})
                 
-                coordinates_table_path_csv = os.path.join(output_directory, f"coordinates_table_{entity_value}_{name}.csv")
+                coordinates_table_path_csv = os.path.join(output_directory, f"coordinates_table_{name}.csv")
                 coordinates_df.to_csv(coordinates_table_path_csv, index=False)
 
-                coordinates_table_path_excel = os.path.join(output_directory, f"coordinates_table_{entity_value}_{name}.xlsx")
+                coordinates_table_path_excel = os.path.join(output_directory, f"coordinates_table_{name}.xlsx")
                 coordinates_df.to_excel(coordinates_table_path_excel, index=False)
 
                 print(f"Coordinates table for {name} saved to {coordinates_table_path_csv} and {coordinates_table_path_excel}")
@@ -119,7 +113,7 @@ class ExcelFileReader:
 if __name__ == "__main__":
     table_directory = "../data/output_tables/"
     filename = "_combined_entities.xlsx"
-    output_dir = "../data/output_graphs/"  # Specify the output directory
+    output_dir = "../data/output_graphs/dxf_plots/"  # Specify the output directory
 
     filepath = os.path.join(table_directory, filename)
     
@@ -129,17 +123,9 @@ if __name__ == "__main__":
     if df is not None:
         file_reader.display_contents()
 
-        column_name = 'Type'  # Replace with actual column name
-        values = ['LINE', 'POLYLINE']  # Replace with actual value to filter by
-        for value in values:
-            file_reader.filter_by_column_value(column_name, value)
+        column_name = 'Type'
+        values = ['LINE', 'POLYLINE', 'LWPOLYLINE']  # List of entity types to filter by
+        file_reader.filter_by_column_value(column_name, values)
 
-            if value == 'LINE' and file_reader.filtered_data_frame is not None:
-                file_reader.filtered_data_frame = file_reader.filtered_data_frame[['Filename','Type', 'Block', 'Start_X', 'Start_Y', 'End_X', 'End_Y']]
-                file_reader.display_filtered_contents()
-                file_reader.draw_lines(output_dir)
-
-            if value == 'POLYLINE':
-                file_reader.filtered_data_frame = file_reader.filtered_data_frame[['Filename','Type', 'Block', 'Vertices']]
-                file_reader.display_filtered_contents()
-                file_reader.draw_polylines(output_dir, value)
+        file_reader.display_filtered_contents()
+        file_reader.draw_lines_and_polylines(output_dir)
