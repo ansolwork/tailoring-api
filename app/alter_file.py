@@ -67,7 +67,6 @@ class MakeAlteration:
         return first_index, second_index
 
     def apply_smoothing(self, vertices, start_index, end_index, shift, ascending, change_x, change_y, reverse=False):
-        # Apply a simple linear interpolation smoothing
         num_points = abs(end_index - start_index) + 1
 
         x_shift = np.zeros(num_points)
@@ -99,7 +98,6 @@ class MakeAlteration:
         print("------")
         print(f"Alt Type: {row['alt type']}")
         print(f"MTM Points: {mtm_points}")
-        # Additional debug prints for critical values
         print(f"Rule Name: {row['rule name']}")
         print(f"Point Label: {row['point label']}")
         print(f"Vertex Index: {row['vertex_index']}")
@@ -123,7 +121,7 @@ class MakeAlteration:
         # Determine if smoothing should be ascending or descending
         ascending = False
         if (second_point_altered[0] > first_point[0] and second_point_altered[1] > first_point[1]) or \
-           (second_point_altered[0] < first_point[0] and second_point_altered[1] > first_point[1]):
+        (second_point_altered[0] < first_point[0] and second_point_altered[1] > first_point[1]):
             ascending = True
 
         # Find the vertices between first and second PT
@@ -140,36 +138,80 @@ class MakeAlteration:
         else:
             row['altered_vertices'] = "Vertices not found"
 
-        print(f"Altered Vertices Before Replacement: {row['altered_vertices']}")
+        print(f"Altered Vertices Before Smoothing: {row['altered_vertices']}")
 
-        # Replace the corresponding vertex indices
+        # Collect MTM points that are in the altered vertices and their original indices
+        mtm_points_in_altered_vertices = []
+        if isinstance(row['altered_vertices'], list):
+            # Filter out NaN values from the altered_vertices
+            altered_vertices = [v for v in row['altered_vertices'] if not pd.isna(v)]
+
+            print(f"Filtered Altered Vertices: {altered_vertices}")
+
+            # Create a dictionary to map coordinates to their original indices
+            vertex_index_map = {v: i for i, v in enumerate(row['altered_vertices'])}
+
+            # Collect MTM points from the start_df
+            for _, mtm_row in self.start_df.iterrows():
+                mtm_point = (mtm_row['pl_point_x'], mtm_row['pl_point_y'])
+                mtm_point_label = mtm_row['mtm points']
+                print(f"Checking MTM Point: {mtm_point_label}, Coordinates: {mtm_point}")
+                
+                if not pd.isna(mtm_point_label) and mtm_point in altered_vertices:
+                    # Exclude the MTM points that correspond to the first and second points
+                    if mtm_point != first_point and mtm_point != second_point:
+                        # Find the original index of the MTM point in the altered vertices list
+                        original_index = vertex_index_map.get(mtm_point, 'Not found')
+
+                        mtm_points_in_altered_vertices.append({
+                            'mtm_point': mtm_point_label,
+                            'original_coordinates': mtm_point,
+                            'original_index': original_index
+                        })
+
+        # Apply smoothing to the altered vertices
         altered_vertices = row['altered_vertices']
-        if isinstance(altered_vertices, list):  # Check if it's a valid list before proceeding
+        if isinstance(altered_vertices, list):
             if row['alt type'] == 'CW Ext':
                 altered_vertices[-1] = second_point_altered
                 shift = (second_point_altered[0] - altered_vertices[-2][0],
-                         second_point_altered[1] - altered_vertices[-2][1])
+                        second_point_altered[1] - altered_vertices[-2][1])
                 row['altered_vertices'] = self.apply_smoothing(altered_vertices, 0, len(altered_vertices) - 2, shift, ascending, change_x, change_y)
-
             elif row['alt type'] == 'CCW Ext':
                 altered_vertices[0] = second_point_altered
                 shift = (second_point_altered[0] - altered_vertices[1][0],
-                         second_point_altered[1] - altered_vertices[1][1])
-                
+                        second_point_altered[1] - altered_vertices[1][1])
                 row['altered_vertices'] = self.apply_smoothing(altered_vertices, 1, len(altered_vertices) - 1, shift, ascending, change_x, change_y, reverse=True)
 
-        print(f"Altered Vertices After Replacement: {row['altered_vertices']}")
-        print("")
+        print(f"Altered Vertices After Smoothing: {row['altered_vertices']}")
 
+        # Update the altered_coordinates after smoothing
+        if isinstance(row['altered_vertices'], list):
+            # Create a dictionary to map original indices to coordinates after smoothing
+            altered_index_map = {i: coord for i, coord in enumerate(row['altered_vertices'])}
+            
+            for point_info in mtm_points_in_altered_vertices:
+                original_index = point_info['original_index']
+                if original_index is not None:
+                    point_info['altered_coordinates'] = altered_index_map.get(original_index, (None, None))
+
+        print("MTM Points within Altered Vertices:")
+        for point_info in mtm_points_in_altered_vertices:
+            print(f"MTM Point: {point_info['mtm_point']}, Original Coordinates: {point_info['original_coordinates']}, Original Index: {point_info['original_index']}, Altered Coordinates: {point_info['altered_coordinates']}")
+
+        row['mtm_points_in_altered_vertices'] = mtm_points_in_altered_vertices
+
+        print(f"Final Altered Vertices: {row['altered_vertices']}")
+        print("")
         return row
-    
+
     def plot_altered_table(self, output_dir="../data/output_graphs/"):
         os.makedirs(output_dir, exist_ok=True)
         
         plt.figure(figsize=(14, 10))  # Set the figure size here
 
         plotted_vertices = set()
-
+        
         for _, row in self.df_alt.iterrows():
             try:
                 if pd.isna(row['vertices']) or row['vertices'] in ['nan', 'None', '', 'NaN']:
@@ -208,14 +250,23 @@ class MakeAlteration:
                     plt.plot(modified_x, modified_y, 'go', markersize=8)  # Plot the modified points in green
                     plt.text(modified_x, modified_y, str(int(row['mtm points'])), color='green', fontsize=12)  # Label them
 
-                # Add MTM point label for the altered second point
+                # Add MTM point labels for the altered second point
                 second_pt = row['second pt']
                 if isinstance(altered_vertices, list) and not pd.isna(second_pt):
                     altered_mtm_label = str(int(second_pt))  # Remove trailing zeros from second MTM point
                     second_point_altered = altered_vertices[0] if row['alt type'] == 'CCW Ext' else altered_vertices[-1]
                     plt.text(second_point_altered[0], second_point_altered[1], altered_mtm_label, color='blue', fontsize=12)
                     plt.plot(second_point_altered[0], second_point_altered[1], 'bo')  # Mark the point in blue
-            
+
+                # Add MTM labels for the points in the altered list
+                mtm_points_in_altered_vertices = row.get('mtm_points_in_altered_vertices', [])
+                if isinstance(mtm_points_in_altered_vertices, list):
+                    for mtm_info in mtm_points_in_altered_vertices:
+                        altered_coordinates = mtm_info['altered_coordinates']
+                        mtm_label = mtm_info['mtm_point']
+                        plt.text(altered_coordinates[0], altered_coordinates[1], str(int(mtm_label)), color='purple', fontsize=12)
+                        plt.plot(altered_coordinates[0], altered_coordinates[1], 'mo')  # Mark the point in magenta
+
             except (ValueError, SyntaxError):
                 continue
 
@@ -230,6 +281,7 @@ class MakeAlteration:
         output_path = os.path.join(output_dir, "polyline_plot_test.png")
         plt.savefig(output_path, dpi=300)
         plt.close()
+
 
 if __name__ == "__main__":
     input_table_path = "../data/output_tables/merged_with_rule_subset.xlsx"
