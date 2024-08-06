@@ -273,6 +273,8 @@ class MakeAlteration:
         if isinstance(altered_vertices, list):
             if row['alt type'] == 'CW Ext':
                 print(f"CW EXT Ascending: {ascending}")
+                print(f"Using altered vertices")
+                print(altered_vertices)
                 altered_vertices[-1] = second_point_altered
                 shift = (second_point_altered[0] - altered_vertices[-2][0],
                         second_point_altered[1] - altered_vertices[-2][1])
@@ -285,6 +287,8 @@ class MakeAlteration:
                 print(f"Vertices after smoothing {row['altered_vertices']}, {{'Alt Type': {row['alt type']}}}")
             elif row['alt type'] == 'CCW Ext':
                 print(f"CCW EXT Ascending: {ascending}")
+                print(f"Using altered vertices")
+                print(altered_vertices)
                 altered_vertices[0] = second_point_altered
                 shift = (second_point_altered[0] - altered_vertices[1][0],
                         second_point_altered[1] - altered_vertices[1][1])

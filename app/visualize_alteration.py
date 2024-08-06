@@ -120,13 +120,9 @@ class VisualizeAlteration:
             'altered_vertices_xs': [],
             'altered_vertices_ys': [],
 
-            'altered_vertices_smoothened': [],
-            'altered_vertices_smoothened_xs': [],
-            'altered_vertices_smoothened_ys': [],
-
-            'altered_vertices_smoothened_reduced': [],
-            'altered_vertices_smoothened_reduced_xs': [],
-            'altered_vertices_smoothened_reduced_ys': [],            
+            'altered_vertices_reduced': [],
+            'altered_vertices_reduced_xs': [],
+            'altered_vertices_reduced_ys': [],
         }
         
         # Create a copy of the DataFrame to avoid modifying the original data
@@ -182,25 +178,15 @@ class VisualizeAlteration:
                         plot_data['altered_vertices_xs'].append(xs_altered)
                         plot_data['altered_vertices_ys'].append(ys_altered)
 
-            # Smoothened
-            raw_altered_smoothened = row['altered_vertices_smoothened']
-            if not pd.isna(raw_altered_smoothened):
-                altered_vertices_list_smoothened = ast.literal_eval(raw_altered_smoothened)
-                if altered_vertices_list_smoothened not in plot_data['altered_vertices_smoothened'] and len(altered_vertices_list_smoothened) != 0:
-                    plot_data['altered_vertices_smoothened'].append(altered_vertices_list_smoothened)
-                    xs_altered_smoothened, ys_altered_smoothened = zip(*altered_vertices_list_smoothened)
-                    plot_data['altered_vertices_smoothened_xs'].append(xs_altered_smoothened)
-                    plot_data['altered_vertices_smoothened_ys'].append(ys_altered_smoothened)
-
             # Smoothened & Reduced
-            raw_altered_smoothened_reduced = row['altered_vertices_smoothened_reduced']
-            if not pd.isna(raw_altered_smoothened):
-                altered_vertices_list_smoothened_reduced = ast.literal_eval(raw_altered_smoothened_reduced)
-                if altered_vertices_list_smoothened_reduced not in plot_data['altered_vertices_smoothened_reduced'] and len(altered_vertices_list_smoothened_reduced) != 0:
-                    plot_data['altered_vertices_smoothened_reduced'].append(altered_vertices_list_smoothened_reduced)
-                    xs_altered_smoothened_reduced, ys_altered_smoothened_reduced = zip(*altered_vertices_list_smoothened_reduced)
-                    plot_data['altered_vertices_smoothened_reduced_xs'].append(xs_altered_smoothened_reduced)
-                    plot_data['altered_vertices_smoothened_reduced_ys'].append(ys_altered_smoothened_reduced)
+            raw_altered_reduced = row['altered_vertices_reduced']
+            if not pd.isna(raw_altered_reduced):
+                altered_vertices_list_reduced = ast.literal_eval(raw_altered_reduced)
+                if altered_vertices_list_reduced not in plot_data['altered_vertices_reduced'] and len(altered_vertices_list_reduced) != 0:
+                    plot_data['altered_vertices_reduced'].append(altered_vertices_list_reduced)
+                    xs_altered_reduced, ys_altered_reduced = zip(*altered_vertices_list_reduced)
+                    plot_data['altered_vertices_reduced_xs'].append(xs_altered_reduced)
+                    plot_data['altered_vertices_reduced_ys'].append(ys_altered_reduced)
         
             # --------------------------------- #
 
@@ -213,30 +199,23 @@ class VisualizeAlteration:
             'unique_vertices_y': plot_data['unique_vertices_ys'],
         })
 
-        df_altered_original = pd.DataFrame({
+        # Includes all smoothing and reducing points
+        df_altered = pd.DataFrame({
+
             'altered_vertices': plot_data['altered_vertices'],
             'altered_vertices_x': plot_data['altered_vertices_xs'],
             'altered_vertices_y': plot_data['altered_vertices_ys'],
-        })
 
-        # Includes all smoothing and reducing points
-        df_altered_modified = pd.DataFrame({
-
-            'altered_vertices_smoothened': plot_data['altered_vertices_smoothened'],
-            'altered_vertices_smoothened_x': plot_data['altered_vertices_smoothened_xs'],
-            'altered_vertices_smoothened_y': plot_data['altered_vertices_smoothened_ys'],
-
-            'altered_vertices_smoothened_reduced': plot_data['altered_vertices_smoothened_reduced'],
-            'altered_vertices_smoothened_reduced_x': plot_data['altered_vertices_smoothened_reduced_xs'],
-            'altered_vertices_smoothened_reduced_y': plot_data['altered_vertices_smoothened_reduced_ys']
+            'altered_vertices_reduced': plot_data['altered_vertices_reduced'],
+            'altered_vertices_reduced_x': plot_data['altered_vertices_reduced_xs'],
+            'altered_vertices_reduced_y': plot_data['altered_vertices_reduced_ys']
         })
 
         # Concatenate these DataFrames along the columns
-        plot_df = pd.concat([df_unique, df_altered_original, df_altered_modified], axis=1)
+        plot_df = pd.concat([df_unique, df_altered], axis=1)
         plot_df.columns = ['unique_vertices', 'unique_vertices_x', 'unique_vertices_y', 
                            'altered_vertices', 'altered_vertices_x', 'altered_vertices_y',
-                           'altered_vertices_smoothened', 'altered_vertices_smoothened_x', 'altered_vertices_smoothened_y',
-                           'altered_vertices_smoothened_reduced', 'altered_vertices_smoothened_reduced_x', 'altered_vertices_smoothened_reduced_y']
+                           'altered_vertices_reduced', 'altered_vertices_reduced_x', 'altered_vertices_reduced_y']
 
         # Define the output path for the Excel file
         output_path = os.path.join(output_dir, "unique_vertices.xlsx")
@@ -294,24 +273,17 @@ class VisualizeAlteration:
             xs_alt_list = VisualizeAlteration.flatten_tuple(xs_alt_list)
             ys_alt_list = VisualizeAlteration.flatten_tuple(ys_alt_list)
 
-            # Smoothened
-            xs_alt_smooth = row['altered_vertices_smoothened_x']
-            ys_alt_smooth = row['altered_vertices_smoothened_y']
-
             # Smoothened Reduced
-            xs_alt_smooth_reduced = row['altered_vertices_smoothened_reduced_x']
-            ys_alt_smooth_reduced = row['altered_vertices_smoothened_reduced_y']      
+            xs_alt_reduced = row['altered_vertices_reduced_x']
+            ys_alt_reduced = row['altered_vertices_reduced_y']      
 
             # Plot figure
             original_line, = ax.plot(xs, ys, marker='o', linewidth=0.5, markersize=5, color="#006400")
-            altered_smooth_line, = ax.plot(xs_alt_smooth, ys_alt_smooth, marker='o', linewidth=0.5, markersize=5, color="#DAA520")
-            altered_smooth_line_reduced, = ax.plot(xs_alt_smooth_reduced, ys_alt_smooth_reduced, marker='o', linewidth=0.5, markersize=5, color="#40E0D0")
+            altered_line, = ax.plot(xs_alt_list, ys_alt_list, marker='o', linewidth=0.5, markersize=5, color="#DAA520")
+            altered_line_reduced, = ax.plot(xs_alt_reduced, ys_alt_reduced, marker='o', linewidth=0.5, markersize=5, color="#40E0D0")
         
         print("Altered (Y)")
         print(ys_alt_list)
-
-        # Todo, maybe don't need to loop, just plot entire list?
-        altered_line, = ax.plot(xs_alt_list, ys_alt_list, marker='o', linewidth=0.5, markersize=5, color="#FF8C00")
 
         # What I got
         x_test = (16.918, 19.794, 20.608, 23.119, 27.527, 27.712, 28.335, 11.385, 14.524, 16.307, 16.912)
@@ -347,8 +319,7 @@ class VisualizeAlteration:
         original_line.set_label("Original")
         altered_ref.set_label("Altered Ref")
         altered_line.set_label("Altered")
-        altered_smooth_line.set_label("Altered Smooth")
-        altered_smooth_line_reduced.set_label("Altered Smooth Reduced")
+        altered_line_reduced.set_label("Altered Reduced")
 
         ax.legend()
 
