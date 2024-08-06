@@ -356,8 +356,6 @@ class MakeAlteration:
         return first_index, second_index
 
     def apply_smoothing(self, vertices, start_index, end_index, shift, ascending, change_x, change_y, reverse=False):
-        # Test
-        #ascending = False
         num_points = abs(end_index - start_index) + 1
         x_shift = np.zeros(num_points)
         y_shift = np.zeros(num_points)
@@ -561,7 +559,7 @@ class MakeAlteration:
 
                         # Run smoothing on a copy of the entry
                         vertices_to_mod_copy = vertices_to_mod.copy()
-                        new_altered_vertices_tst = self.apply_smoothing(vertices_to_mod_copy, 1, len(vertices_to_mod_copy) - 2, shift, ascending, change_x, change_y, reverse=False)
+                        new_altered_vertices_tst = self.apply_smoothing(vertices_to_mod_copy, 0, len(vertices_to_mod_copy) - 2, shift, ascending, change_x, change_y, reverse=False)
                         print("Smoothened Vertices to mod")
                         print(new_altered_vertices_tst)
                         
