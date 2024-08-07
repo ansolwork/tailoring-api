@@ -6,6 +6,8 @@ import numpy as np
 import seaborn as sns
 import math
 
+from matplotlib.lines import Line2D
+
 class VisualizeAlteration:
     def __init__(self, input_table_path):
         self.input_table_path = input_table_path
@@ -47,14 +49,29 @@ class VisualizeAlteration:
                     # Handle all points (including inbetween alteration points), except the main alteration points
                     pl_point_x = row['pl_point_x']
                     pl_point_y = row['pl_point_y']
+
                     if pl_point_x is not None and pl_point_y is not None:
-                        plot_data['mtm_points'].append({'x': pl_point_x, 'y': pl_point_y, 'label': str(int(mtm_points)), 'color': 'red', 'belongs_to': 'original'})
+                        plot_data['mtm_points'].append({'x': pl_point_x, 
+                                                        'y': pl_point_y, 
+                                                        'movement_x': 0.,
+                                                        'movement_y': 0.,
+                                                        'label': str(int(mtm_points)), 
+                                                        'color': 'red', 
+                                                        'belongs_to': 'original'})
                     
                     # Handle the alteration points
                     mtm_point_alteration = row['mtm_points_alteration']
                     if mtm_point_alteration and not pd.isna(mtm_point_alteration):
                         mtm_new_coords = ast.literal_eval(row['new_coordinates'])
-                        plot_data['mtm_points'].append({'x': mtm_new_coords[0], 'y': mtm_new_coords[1], 'label': str(int(mtm_point_alteration)), 'color': 'blue', 'belongs_to': 'altered'})
+                        movement_x = row['movement_x']
+                        movement_y = row['movement_y']
+                        plot_data['mtm_points'].append({'x': mtm_new_coords[0], 
+                                                        'y': mtm_new_coords[1], 
+                                                        'label': str(int(mtm_point_alteration)), 
+                                                        'movement_x': movement_x,
+                                                        'movement_y': movement_y,
+                                                        'color': 'blue', 
+                                                        'belongs_to': 'altered'})
 
                 mtm_points_in_altered_vertices = ast.literal_eval(row.get('mtm_points_in_altered_vertices', []))
                 if isinstance(mtm_points_in_altered_vertices, list):
@@ -63,9 +80,24 @@ class VisualizeAlteration:
                         altered_coordinates = mtm_info.get('altered_coordinates', (None, None))
                         mtm_label = int(mtm_info['mtm_point'])
                         if original_coordinates[0] is not None and original_coordinates[1] is not None:
-                            plot_data['mtm_points'].append({'x': original_coordinates[0], 'y': original_coordinates[1], 'label': str(int(mtm_label)), 'color': 'red', 'belongs_to': 'original'})
+                            plot_data['mtm_points'].append({'x': original_coordinates[0], 
+                                                            'y': original_coordinates[1], 
+                                                            'movement_x': 0.,
+                                                            'movement_y': 0.,
+                                                            'label': str(int(mtm_label)), 
+                                                            'color': 'red', 
+                                                            'belongs_to': 'original'})
+                        
                         if altered_coordinates[0] is not None and altered_coordinates[1] is not None:
-                            plot_data['mtm_points'].append({'x': altered_coordinates[0], 'y': altered_coordinates[1], 'label': str(int(mtm_label)), 'color': 'blue', 'belongs_to': 'altered'})
+                            movement_x = row['movement_x']
+                            movement_y = row['movement_y']
+                            plot_data['mtm_points'].append({'x': altered_coordinates[0], 
+                                                            'y': altered_coordinates[1], 
+                                                            'movement_x': movement_x,
+                                                            'movement_y': movement_y,
+                                                            'label': str(int(mtm_label)), 
+                                                            'color': 'blue', 
+                                                            'belongs_to': 'altered'})
 
                 if vertices_list not in plot_data['unique_vertices'] and len(vertices_list) != 0:
                     plot_data['unique_vertices'].append(vertices_list)
@@ -188,6 +220,10 @@ class VisualizeAlteration:
                 plt.plot(point['x'], point['y'], 'o', color=point['color'], markersize=5)
                 plt.text(point['x'], point['y'], point['label'], color=point['color'], fontsize=12)
 
+                # Plot movement for altered points
+                if point['color'] == 'blue':
+                    plt.text(point['x'], point['y'], (point['movement_x'], point['movement_y']), color='black', ha='right', va='center', fontsize=10)  # Moves text slightly to the right
+
         x_test = (16.918, 19.794, 20.608, 23.119, 27.527, 27.712, 28.335, 11.385, 14.524, 16.307, 16.912)
         y_test = (17.537499999999998, 17.063633333333332, 16.847199999999997, 16.54733333333333, 16.277749999999997, 15.891316666666667, 15.824883333333332, 15.814166666666665, 14.659866666666666, 14.181716666666667, 13.873)
 
@@ -212,12 +248,15 @@ class VisualizeAlteration:
 
         altered_ref, = ax.plot(x_old_list, y_old_list, marker='o', linewidth=0.5, markersize=5, color="#333FFF")
 
+        movement_line = Line2D([0], [0], color='black', marker='o', linestyle='None', markersize=5)
+
         original_line.set_label("Original")
         altered_ref.set_label("Altered Ref")
         altered_line.set_label("Altered")
         altered_line_reduced.set_label("Altered Reduced")
+        movement_line.set_label("X,Y Point Movement [%]")
 
-        ax.legend()
+        ax.legend(handles=[original_line, altered_ref, altered_line, altered_line_reduced, movement_line])
 
         ax.set_title('Polyline Plot for ALT Table', fontsize=16)
         ax.set_xlabel('X Coordinate', fontsize=14)
