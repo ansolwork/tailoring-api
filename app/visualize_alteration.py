@@ -7,6 +7,8 @@ from alter_file import MakeAlteration
 import seaborn as sns
 import math
 
+# MTM point positions are off..
+
 class VisualizeAlteration:
     def __init__(self, input_table_path):
         self.input_table_path = input_table_path
@@ -15,99 +17,6 @@ class VisualizeAlteration:
 
     def load_df(self):
         return pd.read_excel(self.input_table_path)
-
-    def get_plotting_info(self, df):
-        plotted_vertices = set()
-        plot_info = {'original': [], 'altered': [], 'new': [], 'xy_move_points': [], 'mtm_points': []}
-
-        start_points = df[['pl_point_x', 'pl_point_y']].to_numpy()
-        #print("Start Points")
-        #print(start_points)
-
-        for _, row in df.iterrows():
-            try:
-                if pd.isna(row['vertices']) or row['vertices'] in ['nan', 'None', '', 'NaN']:
-                    continue
-                vertices_list = ast.literal_eval(row['vertices'])
-                #print("Vertices List")
-                #print(vertices_list)
-                unique_vertices = [v for v in vertices_list if tuple(v) not in plotted_vertices]
-
-                plotted_vertices.update(tuple(v) for v in unique_vertices)
-                if unique_vertices:
-                    reduced_vertices = MakeAlteration.reduce_points(vertices=unique_vertices, threshold=0.1)
-                    plot_info['original'].append({'vertices': reduced_vertices})
-
-                #print("Altered Vertices")
-                altered_vertices = row['altered_vertices']
-                #print(altered_vertices)
-
-                if isinstance(altered_vertices, list):
-                    unique_altered_vertices = [altered_vertices[0]] + [v for v in altered_vertices[1:-1] if tuple(v) not in plotted_vertices] + [altered_vertices[-1]]
-                    plotted_vertices.update(tuple(v) for v in unique_altered_vertices)
-                    if unique_altered_vertices:
-                        reduced_altered_vertices = MakeAlteration.reduce_points(vertices=unique_altered_vertices, threshold=0.1)
-                        plot_info['altered'].append({'vertices': reduced_altered_vertices})
-                        plot_info['new'].append({'vertices': reduced_altered_vertices})
-
-                mtm_points = row['mtm points']
-                if not pd.isna(mtm_points):
-                    pl_point_x = row['pl_point_x']
-                    pl_point_y = row['pl_point_y']
-                    if pl_point_x is not None and pl_point_y is not None:
-                        plot_info['mtm_points'].append({'x': pl_point_x, 'y': pl_point_y, 'label': str(int(mtm_points)), 'color': 'red', 'belongs_to': 'original'})
-
-                if row['alteration'] == 'X Y MOVE':
-                    modified_x = row['pl_point_x_modified']
-                    modified_y = row['pl_point_y_modified']
-                    if modified_x is not None and modified_y is not None:
-                        plot_info['xy_move_points'].append({'x': modified_x, 'y': modified_y, 'label': str(int(row['mtm points'])), 'color': 'blue'})
-                    original_y = row['pl_point_y']
-                    if modified_y < original_y:
-                        mtm_points_in_altered_vertices = row.get('mtm_points_in_altered_vertices', [])
-                        if isinstance(mtm_points_in_altered_vertices, list) and len(mtm_points_in_altered_vertices) >= 3:
-                            prev_point = mtm_points_in_altered_vertices[0]['original_coordinates']
-                            current_point = mtm_points_in_altered_vertices[1]['altered_coordinates']
-                            next_point = mtm_points_in_altered_vertices[2]['original_coordinates']
-                            if (current_point[0] is not None and current_point[1] is not None and
-                                next_point[0] is not None and next_point[1] is not None and
-                                prev_point[0] is not None and prev_point[1] is not None):
-
-                                new_xy_move_points = {'line': [(prev_point[0], current_point[0], next_point[0]), (prev_point[1], current_point[1], next_point[1])]}
-                                plot_info['xy_move_points'].append(new_xy_move_points)
-
-                second_pt = row['mtm points']
-                if isinstance(altered_vertices, list) and not pd.isna(second_pt):
-                    altered_mtm_label = str(int(second_pt))
-                    second_point_altered = altered_vertices[0] if row['alt type'] == 'CCW Ext' else altered_vertices[-1]
-                    if second_point_altered[0] is not None and second_point_altered[1] is not None:
-                        plot_info['mtm_points'].append({'x': second_point_altered[0], 'y': second_point_altered[1], 'label': altered_mtm_label, 'color': 'blue', 'belongs_to': 'altered'})
-
-                mtm_points_in_altered_vertices = row.get('mtm_points_in_altered_vertices', [])
-                if isinstance(mtm_points_in_altered_vertices, list):
-                    for mtm_info in mtm_points_in_altered_vertices:
-                        original_coordinates = mtm_info['original_coordinates']
-                        altered_coordinates = mtm_info.get('altered_coordinates', (None, None))
-                        mtm_label = mtm_info['mtm_point']
-                        if original_coordinates[0] is not None and original_coordinates[1] is not None:
-                            plot_info['mtm_points'].append({'x': original_coordinates[0], 'y': original_coordinates[1], 'label': str(int(mtm_label)), 'color': 'red', 'belongs_to': 'original'})
-                        if altered_coordinates[0] is not None and altered_coordinates[1] is not None:
-                            plot_info['mtm_points'].append({'x': altered_coordinates[0], 'y': altered_coordinates[1], 'label': str(int(mtm_label)), 'color': 'blue', 'belongs_to': 'altered'})
-
-                for vertex in vertices_list:
-                    vertex_array = np.array(vertex)
-                    match = np.all(start_points == vertex_array, axis=1)
-                    matching_indices = np.where(match)[0]
-                    if matching_indices.size > 0:
-                        mtm_label = str(int(df.iloc[matching_indices[0]]['mtm points']))
-                        plot_info['mtm_points'].append({'x': vertex[0], 'y': vertex[1], 'label': mtm_label, 'color': 'red', 'belongs_to': 'original'})
-
-            except (ValueError, SyntaxError):
-                continue
-
-        df['plot_info'] = [plot_info] * len(df)
-        df.to_excel("../data/output_tables/plotting_info.xlsx", index=False)
-        return df
     
     def prepare_plot_data(self, output_dir="../data/output_tables/"):
         # Initialize plot_data with lists for unique vertices, xs, and ys
@@ -123,6 +32,8 @@ class VisualizeAlteration:
             'altered_vertices_reduced': [],
             'altered_vertices_reduced_xs': [],
             'altered_vertices_reduced_ys': [],
+
+            'mtm_points': [],
         }
         
         # Create a copy of the DataFrame to avoid modifying the original data
@@ -139,6 +50,27 @@ class VisualizeAlteration:
             try:         
                 # Evaluate the string representation of the list of vertices into an actual list
                 vertices_list = ast.literal_eval(row['original_vertices_reduced'])
+
+                ### ---- Add MTM Points ---- ###
+                # TODO: GET ALL THE MTM POINTS
+                mtm_points = row['mtm points']
+                if not pd.isna(mtm_points):
+                    pl_point_x = row['pl_point_x']
+                    pl_point_y = row['pl_point_y']
+                    if pl_point_x is not None and pl_point_y is not None:
+                        plot_data['mtm_points'].append({'x': pl_point_x, 'y': pl_point_y, 'label': str(int(mtm_points)), 'color': 'red', 'belongs_to': 'original'})
+
+                # Can change to y later
+                mtm_points_in_altered_vertices = ast.literal_eval(row.get('mtm_points_in_altered_vertices', []))
+                if isinstance(mtm_points_in_altered_vertices, list):
+                    for mtm_info in mtm_points_in_altered_vertices:
+                        original_coordinates = mtm_info['original_coordinates']
+                        altered_coordinates = mtm_info.get('altered_coordinates', (None, None))
+                        mtm_label = int(mtm_info['mtm_point'])
+                        if original_coordinates[0] is not None and original_coordinates[1] is not None:
+                            plot_data['mtm_points'].append({'x': original_coordinates[0], 'y': original_coordinates[1], 'label': str(int(mtm_label)), 'color': 'red', 'belongs_to': 'original'})
+                        if altered_coordinates[0] is not None and altered_coordinates[1] is not None:
+                            plot_data['mtm_points'].append({'x': altered_coordinates[0], 'y': altered_coordinates[1], 'label': str(int(mtm_label)), 'color': 'blue', 'belongs_to': 'altered'})
 
                 # Check if this list of vertices is already in unique_vertices
                 if vertices_list not in plot_data['unique_vertices'] and len(vertices_list) != 0:
@@ -164,6 +96,7 @@ class VisualizeAlteration:
             # Alteration Unmodified
             raw_altered = row['altered_vertices']
             if not pd.isna(raw_altered):
+                print(row['mtm points'])
                 altered_vertices_list = ast.literal_eval(raw_altered)
                 if altered_vertices_list not in plot_data['altered_vertices'] and len(altered_vertices_list) != 0:
                     plot_data['altered_vertices'].append(altered_vertices_list)
@@ -211,12 +144,17 @@ class VisualizeAlteration:
             'altered_vertices_reduced_y': plot_data['altered_vertices_reduced_ys']
         })
 
+        df_mtm_points = pd.DataFrame({
+            'mtm_points': plot_data['mtm_points']
+        })
+
         # Concatenate these DataFrames along the columns
-        plot_df = pd.concat([df_unique, df_altered], axis=1)
+        plot_df = pd.concat([df_unique, df_altered, df_mtm_points], axis=1)
         plot_df.columns = ['unique_vertices', 'unique_vertices_x', 'unique_vertices_y', 
                            'altered_vertices', 'altered_vertices_x', 'altered_vertices_y',
-                           'altered_vertices_reduced', 'altered_vertices_reduced_x', 'altered_vertices_reduced_y']
-
+                           'altered_vertices_reduced', 'altered_vertices_reduced_x', 'altered_vertices_reduced_y',
+                           'mtm_points']
+        
         # Define the output path for the Excel file
         output_path = os.path.join(output_dir, "unique_vertices.xlsx")
 
@@ -226,6 +164,7 @@ class VisualizeAlteration:
 
         self.plot_df = plot_df
 
+    @staticmethod
     def filter_valid_coordinates(coords):
         """Filter out NaN values and ensure coords is a list or tuple."""
         if isinstance(coords, (list, tuple)):
@@ -258,6 +197,7 @@ class VisualizeAlteration:
         plot_df = self.plot_df.copy()
 
         xs_alt_list, ys_alt_list = [], []
+        xs_alt_reduced_list, ys_alt_reduced_list = [], []
         # Loop through the rows and plot each set of vertices
         for _, row in plot_df.iterrows():
     
@@ -270,20 +210,24 @@ class VisualizeAlteration:
             xs_alt_list.append(xs_alt)
             ys_alt_list.append(ys_alt)
 
-            xs_alt_list = VisualizeAlteration.flatten_tuple(xs_alt_list)
-            ys_alt_list = VisualizeAlteration.flatten_tuple(ys_alt_list)
+            xs_alt_list = VisualizeAlteration.filter_valid_coordinates(VisualizeAlteration.flatten_tuple(xs_alt_list))
+            ys_alt_list = VisualizeAlteration.filter_valid_coordinates(VisualizeAlteration.flatten_tuple(ys_alt_list))
 
-            # Smoothened Reduced
-            xs_alt_reduced = row['altered_vertices_reduced_x']
-            ys_alt_reduced = row['altered_vertices_reduced_y']      
+            # Altered Reduced
+            xs_alt_reduced = VisualizeAlteration.filter_valid_coordinates(row['altered_vertices_reduced_x'])
+            ys_alt_reduced = VisualizeAlteration.filter_valid_coordinates(row['altered_vertices_reduced_y'])    
+
+            xs_alt_reduced_list.extend(xs_alt_reduced)
+            ys_alt_reduced_list.extend(ys_alt_reduced) 
 
             # Plot figure
             original_line, = ax.plot(xs, ys, marker='o', linewidth=0.5, markersize=5, color="#006400")
-            altered_line, = ax.plot(xs_alt_list, ys_alt_list, marker='o', linewidth=0.5, markersize=5, color="#DAA520")
-            altered_line_reduced, = ax.plot(xs_alt_reduced, ys_alt_reduced, marker='o', linewidth=0.5, markersize=5, color="#40E0D0")
-        
-        print("Altered (Y)")
-        print(ys_alt_list)
+            altered_line, = ax.plot(xs_alt_list, ys_alt_list, marker='o', linestyle='-', linewidth=0.5, markersize=5, color="#80BEBF", alpha=0.5)
+            altered_line_reduced, = ax.plot(xs_alt_reduced_list, ys_alt_reduced_list, marker='x', linestyle='--', linewidth=1.5, markersize=10, color="#BA55D3", alpha=0.7)
+
+            for point in plot_df['mtm_points']:
+                plt.plot(point['x'], point['y'], 'o', color=point['color'], markersize=5)
+                plt.text(point['x'], point['y'], point['label'], color=point['color'], fontsize=12)
 
         # What I got
         x_test = (16.918, 19.794, 20.608, 23.119, 27.527, 27.712, 28.335, 11.385, 14.524, 16.307, 16.912)
