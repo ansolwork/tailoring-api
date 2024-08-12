@@ -13,6 +13,7 @@ class VisualizeAlteration:
         self.input_table_path = input_table_path
         self.df = self.load_df()
         self.plot_df = ""
+        self.scaling_factor = 25.4 # to mm
 
     def load_df(self):
         return pd.read_excel(self.input_table_path)
@@ -40,6 +41,9 @@ class VisualizeAlteration:
         df = self.df.copy()
         count = 0
 
+        scaled_unique_vertices = []
+        scaled_altered_vertices = []
+        scaled_altered_vertices_reduced = []
         for _, row in df.iterrows():
             try:
                 vertices_list = ast.literal_eval(row['original_vertices_reduced'])
@@ -51,8 +55,8 @@ class VisualizeAlteration:
                     pl_point_y = row['pl_point_y']
 
                     if pl_point_x is not None and pl_point_y is not None:
-                        plot_data['mtm_points'].append({'x': pl_point_x, 
-                                                        'y': pl_point_y, 
+                        plot_data['mtm_points'].append({'x': pl_point_x * self.scaling_factor, 
+                                                        'y': pl_point_y * self.scaling_factor, 
                                                         'movement_x': 0.,
                                                         'movement_y': 0.,
                                                         'label': str(int(mtm_points)), 
@@ -65,8 +69,8 @@ class VisualizeAlteration:
                         mtm_new_coords = ast.literal_eval(row['new_coordinates'])
                         movement_x = row['movement_x']
                         movement_y = row['movement_y']
-                        plot_data['mtm_points'].append({'x': mtm_new_coords[0], 
-                                                        'y': mtm_new_coords[1], 
+                        plot_data['mtm_points'].append({'x': mtm_new_coords[0 ]* self.scaling_factor, 
+                                                        'y': mtm_new_coords[1] * self.scaling_factor, 
                                                         'label': str(int(mtm_point_alteration)), 
                                                         'movement_x': movement_x,
                                                         'movement_y': movement_y,
@@ -80,8 +84,8 @@ class VisualizeAlteration:
                         altered_coordinates = mtm_info.get('altered_coordinates', (None, None))
                         mtm_label = int(mtm_info['mtm_point'])
                         if original_coordinates[0] is not None and original_coordinates[1] is not None:
-                            plot_data['mtm_points'].append({'x': original_coordinates[0], 
-                                                            'y': original_coordinates[1], 
+                            plot_data['mtm_points'].append({'x': original_coordinates[0] * self.scaling_factor, 
+                                                            'y': original_coordinates[1] * self.scaling_factor, 
                                                             'movement_x': 0.,
                                                             'movement_y': 0.,
                                                             'label': str(int(mtm_label)), 
@@ -91,8 +95,8 @@ class VisualizeAlteration:
                         if altered_coordinates[0] is not None and altered_coordinates[1] is not None:
                             movement_x = row['movement_x']
                             movement_y = row['movement_y']
-                            plot_data['mtm_points'].append({'x': altered_coordinates[0], 
-                                                            'y': altered_coordinates[1], 
+                            plot_data['mtm_points'].append({'x': altered_coordinates[0] * self.scaling_factor, 
+                                                            'y': altered_coordinates[1] * self.scaling_factor, 
                                                             'movement_x': movement_x,
                                                             'movement_y': movement_y,
                                                             'label': str(int(mtm_label)), 
@@ -102,9 +106,15 @@ class VisualizeAlteration:
                 if vertices_list not in plot_data['unique_vertices'] and len(vertices_list) != 0:
                     plot_data['unique_vertices'].append(vertices_list)
                     xs, ys = zip(*vertices_list)
+
+                    # Add scaling
+                    xs = tuple(x * self.scaling_factor for x in xs)
+                    ys = tuple(y * self.scaling_factor for y in ys)
                     
                     plot_data['unique_vertices_xs'].append(xs)
                     plot_data['unique_vertices_ys'].append(ys)
+
+                    scaled_unique_vertices.append(tuple(zip(xs, ys)))
 
                     count += 1                
 
@@ -117,19 +127,40 @@ class VisualizeAlteration:
                 if altered_vertices_list not in plot_data['altered_vertices'] and len(altered_vertices_list) != 0:
                     plot_data['altered_vertices'].append(altered_vertices_list)
                     xs_altered, ys_altered = zip(*altered_vertices_list)
+                    
+                    # Apply scaling factor
+                    xs_altered = tuple(x * self.scaling_factor for x in xs_altered)
+                    ys_altered = tuple(y * self.scaling_factor for y in ys_altered)
+
+                    # Store the scaled coordinates in temporary list
+                    scaled_altered_vertices.append(tuple(zip(xs_altered, ys_altered)))
+
+                    #plot_data['altered_vertices'].append(scaled_coords)
                     plot_data['altered_vertices_xs'].append(xs_altered)
                     plot_data['altered_vertices_ys'].append(ys_altered)
-
+                        
             raw_altered_reduced = row['altered_vertices_reduced']
             if not pd.isna(raw_altered_reduced):
                 altered_vertices_list_reduced = ast.literal_eval(raw_altered_reduced)
                 if altered_vertices_list_reduced not in plot_data['altered_vertices_reduced'] and len(altered_vertices_list_reduced) != 0:
                     plot_data['altered_vertices_reduced'].append(altered_vertices_list_reduced)
                     xs_altered_reduced, ys_altered_reduced = zip(*altered_vertices_list_reduced)
+                    
+                    # Apply scaling factor
+                    xs_altered_reduced = tuple(x * self.scaling_factor for x in xs_altered_reduced)
+                    ys_altered_reduced = tuple(y * self.scaling_factor for y in ys_altered_reduced)
+
+                    # Replace the original coordinates with the new scaled coordinates
+                    scaled_altered_vertices_reduced.append(tuple(zip(xs_altered_reduced, ys_altered_reduced)))
+
                     plot_data['altered_vertices_reduced_xs'].append(xs_altered_reduced)
                     plot_data['altered_vertices_reduced_ys'].append(ys_altered_reduced)
         
         print(f"Number of Unique Original Vertices = {count}")
+
+        #plot_data['unique_vertices'] = scaled_unique_vertices
+        #plot_data['altered_vertices'] = scaled_altered_vertices
+        #plot_data['altered_vertices_reduced'] = scaled_altered_vertices_reduced
 
         df_unique = pd.DataFrame({
             'unique_vertices': plot_data['unique_vertices'],
@@ -213,7 +244,7 @@ class VisualizeAlteration:
             ys_alt_reduced_list.extend(ys_alt_reduced) 
 
             original_line, = ax.plot(xs, ys, marker='o', linewidth=0.5, markersize=5, color="#006400")
-            altered_line, = ax.plot(xs_alt_list, ys_alt_list, marker='o', linestyle='-', linewidth=0.5, markersize=5, color="#80BEBF", alpha=0.5)
+            #altered_line, = ax.plot(xs_alt_list, ys_alt_list, marker='o', linestyle='-', linewidth=0.5, markersize=5, color="#80BEBF", alpha=0.5)
             altered_line_reduced, = ax.plot(xs_alt_reduced_list, ys_alt_reduced_list, marker='x', linestyle='--', linewidth=1.5, markersize=10, color="#BA55D3", alpha=0.7)
 
             for point in plot_df['mtm_points']:
@@ -221,46 +252,22 @@ class VisualizeAlteration:
                 plt.text(point['x'], point['y'], point['label'], color=point['color'], fontsize=12)
 
                 # Plot movement for altered points
-                if point['color'] == 'blue':
-                    plt.text(point['x'], point['y'], (point['movement_x'], point['movement_y']), color='black', ha='right', va='center', fontsize=10)  # Moves text slightly to the right
+                #if point['color'] == 'blue':
+                #    plt.text(point['x'], point['y'], (point['movement_x'], point['movement_y']), color='black', ha='right', va='center', fontsize=10)  # Moves text slightly to the right
 
-        x_test = (16.918, 19.794, 20.608, 23.119, 27.527, 27.712, 28.335, 11.385, 14.524, 16.307, 16.912)
-        y_test = (17.537499999999998, 17.063633333333332, 16.847199999999997, 16.54733333333333, 16.277749999999997, 15.891316666666667, 15.824883333333332, 15.814166666666665, 14.659866666666666, 14.181716666666667, 13.873)
-
-        altered_vertices_ref = [
-                (9.74, 14.2044),
-                (9.74, 14.2044),
-                (11.385, 14.657),
-                (14.524, 15.239227272727272),
-                (16.918, 15.78375),
-                (16.918, 15.78375),
-                (19.794, 15.447434210526316),
-                (20.608, 15.276776315789474),
-                (23.119, 15.06846052631579),
-                (27.527, 14.913315789473684),
-                (28.335, 14.552)
-            ]
-        
-        print("Altered Vertices Ref (Y)")
-
-        x_old_list, y_old_list = zip(*altered_vertices_ref)
-        print(y_old_list)
-
-        altered_ref, = ax.plot(x_old_list, y_old_list, marker='o', linewidth=0.5, markersize=5, color="#333FFF")
-
-        movement_line = Line2D([0], [0], color='black', marker='o', linestyle='None', markersize=5)
+        #movement_line = Line2D([0], [0], color='black', marker='o', linestyle='None', markersize=5)
 
         original_line.set_label("Original")
-        altered_ref.set_label("Altered Ref")
-        altered_line.set_label("Altered")
+        #altered_line.set_label("Altered")
         altered_line_reduced.set_label("Altered Reduced")
-        movement_line.set_label("X,Y Point Movement [%]")
+        #movement_line.set_label("X,Y Point Movement [%]")
 
-        ax.legend(handles=[original_line, altered_ref, altered_line, altered_line_reduced, movement_line])
+        #ax.legend(handles=[original_line, altered_line, altered_line_reduced, movement_line])
+        ax.legend(handles=[original_line, altered_line_reduced])
 
         ax.set_title('Polyline Plot for ALT Table', fontsize=16)
-        ax.set_xlabel('X Coordinate', fontsize=14)
-        ax.set_ylabel('Y Coordinate', fontsize=14)
+        ax.set_xlabel('X Coordinate [mm]', fontsize=14)
+        ax.set_ylabel('Y Coordinate [mm]', fontsize=14)
 
         ax.tick_params(axis='both', which='major', labelsize=12)
 

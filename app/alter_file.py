@@ -108,10 +108,14 @@ class MakeAlteration:
 
         return merged_df
 
-    def apply_alteration_rules(self, df):
-        df = self.prepare_dataframe(df)
-        df = df.apply(self.reduce_original_vertices, axis=1)
-        df = df.apply(self.process_alteration_rules, axis=1)
+    def apply_alteration_rules(self, df, custom_alteration=False):
+
+        if custom_alteration:
+            print("Custom Alteration")
+        else:
+            df = self.prepare_dataframe(df)
+            df = df.apply(self.reduce_original_vertices, axis=1)
+            df = df.apply(self.process_alteration_rules, axis=1)
 
         print("")
         print("---------")
@@ -644,8 +648,6 @@ class MakeAlteration:
                 print(old_coordinates)
         return
 
-
-
     @staticmethod
     def visvalingam_whyatt(points, threshold):
         def calculate_area(a, b, c):
@@ -692,7 +694,12 @@ if __name__ == "__main__":
         print(f"Processing sheet: {sheet_name}")
         make_alteration.start_df = df
         make_alteration.df_alt = df.copy()
-        processed_df = make_alteration.apply_alteration_rules(df)
+
+
+        # Define custom alteration
+        custom_alteration = ["CW", ]
+        make_alteration.custom_alteration = custom_alteration
+        processed_df = make_alteration.apply_alteration_rules(df, custom_alteration=False)
         
         #plotting_df = make_alteration.get_plotting_info(processed_df)
 
