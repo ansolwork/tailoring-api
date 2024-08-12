@@ -35,6 +35,26 @@ class VisualizeAlteration:
             'altered_vertices_reduced_ys': [],
             'mtm_points': [],
         }
+    
+    @staticmethod
+    def filter_valid_coordinates(coords):
+        if isinstance(coords, (list, tuple)):
+            return [coord for coord in coords if not pd.isna(coord)]
+        return []
+    
+    @staticmethod
+    def flatten_tuple(nested_tuple):
+        flat_list = []
+        for item in nested_tuple:
+            if isinstance(item, (list, tuple)):
+                flat_list.extend(VisualizeAlteration.flatten_tuple(item))
+            else:
+                flat_list.append(item)
+        return flat_list
+    
+    @staticmethod
+    def drop_nans(lst):
+        return [item for item in lst if not (isinstance(item, float) and math.isnan(item))]
 
     def scale_coordinates(self, xs, ys):
         xs = tuple(x * self.scaling_factor for x in xs)
@@ -175,26 +195,6 @@ class VisualizeAlteration:
         plot_df.to_excel(output_path, index=False)
         print(f"Unique vertices saved to {output_path}")
         self.plot_df = plot_df
-
-    @staticmethod
-    def filter_valid_coordinates(coords):
-        if isinstance(coords, (list, tuple)):
-            return [coord for coord in coords if not pd.isna(coord)]
-        return []
-    
-    @staticmethod
-    def flatten_tuple(nested_tuple):
-        flat_list = []
-        for item in nested_tuple:
-            if isinstance(item, (list, tuple)):
-                flat_list.extend(VisualizeAlteration.flatten_tuple(item))
-            else:
-                flat_list.append(item)
-        return flat_list
-    
-    @staticmethod
-    def drop_nans(lst):
-        return [item for item in lst if not (isinstance(item, float) and math.isnan(item))]
 
     def plot_altered_table(self, output_dir="../data/output_graphs/"):
 
