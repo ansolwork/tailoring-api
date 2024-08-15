@@ -32,10 +32,13 @@ from smoothing import SmoothingFunctions  # Import the SmoothingFunctions class
 class MakeAlteration:
     def __init__(self, input_table_path):
         self.input_table_path = input_table_path
-        self.sheets_df = self.load_sheets()
+        #self.sheets_df = self.load_sheets()
         self.df_alt = ""
-        self.start_df = ""
+        self.start_df = self.load_csv()
         self.total_alt = []
+
+    def load_csv(self):
+        return pd.read_csv(self.input_table_path)
 
     @staticmethod
     def remove_duplicates(input_list):
@@ -71,8 +74,8 @@ class MakeAlteration:
     def prepare_dataframe(self, df):
         df['pl_point_x'] = pd.to_numeric(df['pl_point_x'], errors='coerce').fillna(0)
         df['pl_point_y'] = pd.to_numeric(df['pl_point_y'], errors='coerce').fillna(0)
-        df['movement x'] = df['movement x'].astype(str).str.replace('%', '').astype(float).fillna(0)
-        df['movement y'] = df['movement y'].astype(str).str.replace('%', '', regex=False).astype(float).fillna(0)
+        df['movement_x'] = df['movement_x'].astype(str).str.replace('%', '').astype(float).fillna(0)
+        df['movement y'] = df['movement_y'].astype(str).str.replace('%', '', regex=False).astype(float).fillna(0)
         df['pl_point_x_modified'] = ""
         df['pl_point_y_modified'] = ""
         df['altered_vertices'] = ""
@@ -81,32 +84,6 @@ class MakeAlteration:
     
     def create_total_alt_df(self):
         return pd.DataFrame(self.total_alt)
-    
-    def merge_with_original_df(self, original_df, total_alt_df):
-        original_df.drop(columns = ['alt type', 'altered_vertices', 'first pt', 'second pt',
-                                    'line_end_x', 'line_end_y', 'line_start_x', 'line_start_y',
-                                    'movement x', 'movement y'], inplace=True)
-        
-        
-        original_df.rename(columns={'mtm_points_in_altered_vertices': 'mtm_points_in_altered_vertices_ref'}, inplace=True)
-
-        # Assuming 'mtm_point' is the key to merge on
-        merged_df = original_df.merge(total_alt_df, left_on='mtm points', right_on='mtm_point', how='left')
-
-        # Drop the original 'mtm points' column
-        #merged_df.drop(columns=['mtm points'], inplace=True)
-        
-        # Optionally, rename 'mtm_point' to 'mtm points' if you need to keep the same column name
-        merged_df.rename(columns={'mtm_point': 'mtm_points_alteration'}, inplace=True)
-        merged_df.rename(columns={'vertices': 'original_vertices'}, inplace=True)
-
-        # Sort columns by X-Coordinate (again)
-        merged_df['alteration_set'] = merged_df['altered_vertices'].apply(MakeAlteration.sort_by_x)
-        merged_df['altered_vertices'] = merged_df['altered_vertices_smoothened'].apply(MakeAlteration.sort_by_x)
-        merged_df['altered_vertices_reduced'] = merged_df['altered_vertices_smoothened_reduced'].apply(MakeAlteration.sort_by_x)
-        merged_df.drop(columns = ['altered_vertices_smoothened', 'altered_vertices_smoothened_reduced'], inplace=True)
-
-        return merged_df
 
     def apply_alteration_rules(self, df, custom_alteration=False):
 
@@ -228,7 +205,7 @@ class MakeAlteration:
         return row
 
     def process_alteration_rules(self, row):
-        if pd.isna(row['alt type']):
+        if pd.isna(row['alteration_type']):
             return row
         
         def update_or_add_alt_set(alt_set):
@@ -272,19 +249,20 @@ class MakeAlteration:
             alt_set["split_vertices"] = {alt_set['alteration']: alt_set['altered_vertices']}
             self.total_alt.append(alt_set)
             return alt_set
-
-        if row['alt type'] == 'X Y MOVE':
+        
+        # The issue is that it is not enough to filter by alteration_type, since it can have other mtm points
+        if row['alteration_type'] == 'X Y MOVE' and pd.notna(row['mtm points']):
             print("---------")
             print("Alteration: ")
-            print(row['alt type'])
+            print(row['alteration_type'])
             print("---------")
             row = self.apply_xy_move(row)
 
             alt_set = {"mtm_point": int(row['mtm points']),
-                       "mtm_dependant" : int(row['first pt']),
-                    "alteration": row['alt type'],
-                    "movement_x": row['movement x'],
-                    "movement_y": row['movement y'],
+                       "mtm_dependant" : int(row['mtm_dependent']),
+                    "alteration": row['alteration_type'],
+                    "movement_x": row['movement_x'],
+                    "movement_y": row['movement_y'],
                     "old_coordinates": (row['pl_point_x'], row['pl_point_y']),
                     "new_coordinates": (
                         row['pl_point_x_modified'],
@@ -299,12 +277,12 @@ class MakeAlteration:
             alt_set["altered_vertices_smoothened"] = row["altered_vertices"]
             alt_set["altered_vertices_smoothened_reduced"] = row["altered_vertices"]
             
-        elif row['alt type'] in ['CW Ext', 'CCW Ext']:
-            if row['mtm points'] != row['first pt']:
+        elif row['alteration_type'] in ['CW Ext', 'CCW Ext'] and pd.notna(row['mtm points']):
+            if row['mtm points'] != row['mtm_dependent']:
                 print("")
                 print("---------")
                 print("Alteration Type (process rules): ")
-                print(row['alt type'])
+                print(row['alteration_type'])
                 print("---------")
                 print("")
                 print(f"Extension MTM {row['mtm points']}")
@@ -312,12 +290,14 @@ class MakeAlteration:
 
                 # Apply smoothing after getting the new coordinates (i.e. if they aggregate)
                 altered_vertices, mtm_points_in_altered_vertices = self.apply_extension(row)
+
+                print(row['mtm points'])
                 
                 alt_set = {"mtm_point": int(row['mtm points']),
-                           "mtm_dependant" : int(row['first pt']),
-                        "alteration": row['alt type'],
-                        "movement_x": row['movement x'],
-                        "movement_y": row['movement y'],
+                           "mtm_dependant" : int(row['mtm_dependent']),
+                        "alteration": row['alteration_type'],
+                        "movement_x": row['movement_x'],
+                        "movement_y": row['movement_y'],
                         "old_coordinates": (row['pl_point_x'], row['pl_point_y']),
                         "new_coordinates": (
                             row['pl_point_x_modified'] ,
@@ -341,8 +321,8 @@ class MakeAlteration:
         return prev_point, next_point
 
     def apply_xy_move(self, row):
-        row['pl_point_x_modified'] = row['pl_point_x'] * (1 + row['movement x'] / 100.0)
-        row['pl_point_y_modified'] = row['pl_point_y'] * (1 + row['movement y'] / 100.0)
+        row['pl_point_x_modified'] = row['pl_point_x'] * (1 + row['movement_x'] / 100.0)
+        row['pl_point_y_modified'] = row['pl_point_y'] * (1 + row['movement_y'] / 100.0)
         mtm_point = row['mtm points']
         prev_point, next_point = self.find_closest_points(mtm_point, row['pl_point_x'], row['pl_point_y'])
         prev_coordinates = (prev_point['pl_point_x'], prev_point['pl_point_y']) if prev_point is not None else (None, None)
@@ -384,8 +364,8 @@ class MakeAlteration:
         return first_index, second_index
     
     def apply_extension(self, row):
-        first_pt = row['first pt']
-        second_pt = row['second pt'] 
+        first_pt = row['mtm_dependent']
+        second_pt = row['mtm_alteration'] 
 
         first_point = self.get_pl_points(first_pt)
         second_point = self.get_pl_points(second_pt)
@@ -393,9 +373,9 @@ class MakeAlteration:
         vertices_list = ast.literal_eval(row['vertices'])
         first_index, second_index = self.find_vertex_indices(vertices_list, first_point, second_point)
         if first_index is not None and second_index is not None:
-            if row['alt type'] == 'CW Ext' and first_index < second_index:
+            if row['alteration_type'] == 'CW Ext' and first_index < second_index:
                 row['altered_vertices'] = vertices_list[first_index:second_index + 1]
-            elif row['alt type'] == 'CCW Ext' and first_index > second_index:
+            elif row['alteration_type'] == 'CCW Ext' and first_index > second_index:
                 row['altered_vertices'] = vertices_list[second_index:first_index + 1]
             else:
                 row['altered_vertices'] = "Invalid vertices range"
@@ -685,26 +665,43 @@ class MakeAlteration:
                     unique_vertices_set.add(vertex)
                     unique_vertices.append(vertex)
         return unique_vertices
+    
+    def merge_with_original_df(self, original_df, total_alt_df):
+        original_df.drop(columns = ['alteration_type', 'altered_vertices', 'mtm_dependent', 'alteration_mtm',
+                                    'line_end_x', 'line_end_y', 'line_start_x', 'line_start_y',
+                                    'movement_x', 'movement_y'], inplace=True)
+        
+        
+        original_df.rename(columns={'mtm_points_in_altered_vertices': 'mtm_points_in_altered_vertices_ref'}, inplace=True)
+
+        # Assuming 'mtm_point' is the key to merge on
+        merged_df = original_df.merge(total_alt_df, left_on='mtm points', right_on='mtm_point', how='left')
+
+        # Drop the original 'mtm points' column
+        #merged_df.drop(columns=['mtm points'], inplace=True)
+        
+        # Optionally, rename 'mtm_point' to 'mtm points' if you need to keep the same column name
+        merged_df.rename(columns={'mtm_point': 'mtm_points_alteration'}, inplace=True)
+        merged_df.rename(columns={'vertices': 'original_vertices'}, inplace=True)
+
+        # Sort columns by X-Coordinate (again)
+        merged_df['alteration_set'] = merged_df['altered_vertices'].apply(MakeAlteration.sort_by_x)
+        merged_df['altered_vertices'] = merged_df['altered_vertices_smoothened'].apply(MakeAlteration.sort_by_x)
+        merged_df['altered_vertices_reduced'] = merged_df['altered_vertices_smoothened_reduced'].apply(MakeAlteration.sort_by_x)
+        merged_df.drop(columns = ['altered_vertices_smoothened', 'altered_vertices_smoothened_reduced'], inplace=True)
+
+        return merged_df
 
 if __name__ == "__main__":
-    input_table_path = "../data/output_tables/merged_with_rule_subset.xlsx"
+    #input_table_path = "../data/output_tables/merged_with_rule_subset.xlsx"
+    input_table_path = "../data/output_tables/combined_alteration_tables/combined_table_4-WAIST.csv"
+    
     make_alteration = MakeAlteration(input_table_path)
 
-    for sheet_name, df in make_alteration.sheets_df.items():
-        print(f"Processing sheet: {sheet_name}")
-        make_alteration.start_df = df
-        make_alteration.df_alt = df.copy()
-
-
-        # Define custom alteration
-        custom_alteration = ["CW", ]
-        make_alteration.custom_alteration = custom_alteration
-        processed_df = make_alteration.apply_alteration_rules(df, custom_alteration=False)
+    start_df = make_alteration.start_df.copy()
+    print(start_df.head())
+    processed_df = make_alteration.apply_alteration_rules(start_df, custom_alteration=False)
         
-        #plotting_df = make_alteration.get_plotting_info(processed_df)
-
-        #output_dir = f"../data/output_graphs/{sheet_name}"
-        #make_alteration.plot_altered_table(plotting_df, output_dir=output_dir)
-        #make_alteration.plot_final_altered_table(plotting_df, output_dir=output_dir)
-
-        break
+    #output_dir = f"../data/output_graphs/{sheet_name}"
+    #make_alteration.plot_altered_table(plotting_df, output_dir=output_dir)
+    #make_alteration.plot_final_altered_table(plotting_df, output_dir=output_dir)
