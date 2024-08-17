@@ -5,53 +5,32 @@ import os
 import numpy as np
 from scipy.interpolate import splprep, splev, interp1d, Rbf
 from smoothing import SmoothingFunctions  # Import the SmoothingFunctions class
+from data_processing_utils import DataProcessingUtils
 
-
-# TODO: CHECK IF MTM POINTS APPEAR CORRECTLY IN THE ALTRED SMOOTH LINE
 
 # Further notes:
 # Vertices have to be sorted (by x-coordinate) before smoothing is applied
 # Vertices need to not have duplicate coordinate entries 
 
-# Todo:
-# Add the new altered coordinate to the alteration list
-# Consider if all other points need to be doubled? Think!
-# Does the alteration list include the main mtm point?
-# Which coordinates should the list have?
-# Look into what smoothing does
-
-# PRIO: TODO INVESTIGATE THE FIRST LINE WHY THE ALTERED VERSION LOOKS OFF
-# SECOND LOOKS OK?
-
-## TODO: Fix CCW EXT FIRST POINT. ADJACANT IS 8017?
-
-# TODO later: Do cleanup
-
-# TODO: append XY POINT TO ALTERED VERTICES
+# Done: Fixed coordinates
+# Next -> ?
 
 class MakeAlteration:
-    def __init__(self, input_table_path):
+    def __init__(self, input_table_path, input_vertices_path):
+        self.processing_utils = DataProcessingUtils()
+
         self.input_table_path = input_table_path
-        #self.sheets_df = self.load_sheets()
+        self.input_vertices_path = input_vertices_path
+
         self.df_alt = ""
-        self.start_df = self.load_csv()
+        self.start_df = self.processing_utils.load_csv(input_table_path)
+        self.vertices_df = self.processing_utils.load_csv(input_vertices_path)
         self.total_alt = []
-
-    def load_csv(self):
-        return pd.read_csv(self.input_table_path)
-
-    @staticmethod
-    def remove_duplicates(input_list):
-        '''
-            Remove Duplicates from list of Tuples / coordinates.
-        '''
-        seen = set()
-        output_list = []
-        for item in input_list:
-            if item not in seen:
-                seen.add(item)
-                output_list.append(item)
-        return output_list
+        self.vertices_list = []
+    
+    #def join_tables(self, on_piece):
+    #    self.start_df = pd.merge(self.input_table_path, self.input_vertices_path, on)
+    #    self.input_table_path
 
     @staticmethod
     def reduce_points(vertices, threshold=0.1):
@@ -61,19 +40,13 @@ class MakeAlteration:
             return reduced_points
         return vertices
 
-    def load_sheets(self):
-        return pd.read_excel(self.input_table_path, sheet_name=None)
-    
-    # Function to sort coordinates by x-coordinate
-    @staticmethod
-    def sort_by_x(coords):
-        if isinstance(coords, list) and all(isinstance(coord, (list, tuple)) for coord in coords):
-            return sorted(coords, key=lambda coord: coord[0])
-        return coords  # Return as is if not a list of tuples
-
     def prepare_dataframe(self, df):
         df['pl_point_x'] = pd.to_numeric(df['pl_point_x'], errors='coerce').fillna(0)
         df['pl_point_y'] = pd.to_numeric(df['pl_point_y'], errors='coerce').fillna(0)
+        df['maximum_movement_inches_positive'] = pd.to_numeric(df['maximum_movement_inches_positive'], errors='coerce').fillna(0)
+        df['maximum_movement_inches_negative'] = pd.to_numeric(df['maximum_movement_inches_negative'], errors='coerce').fillna(0)
+        df['minimum_movement_inches_positive'] = pd.to_numeric(df['minimum_movement_inches_positive'], errors='coerce').fillna(0)
+        df['minimum_movement_inches_negative'] = pd.to_numeric(df['minimum_movement_inches_negative'], errors='coerce').fillna(0)
         df['movement_x'] = df['movement_x'].astype(str).str.replace('%', '').astype(float).fillna(0)
         df['movement y'] = df['movement_y'].astype(str).str.replace('%', '', regex=False).astype(float).fillna(0)
         df['pl_point_x_modified'] = ""
@@ -82,8 +55,43 @@ class MakeAlteration:
         df['distance_euq'] = ""
         return df
     
-    def create_total_alt_df(self):
-        return pd.DataFrame(self.total_alt)
+    def apply_alteration_rules_2(self, custom_alteration=False):
+        alteration_df = self.prepare_dataframe(self.start_df.copy())
+        self.vertices_df = self.vertices_df.copy().apply(self.reduce_original_vertices, axis=1)
+        
+        # Extract vertices column from DataFrame as a list of strings
+        vertices_string_list = self.vertices_df['vertices'].tolist()
+
+        # Convert the string representation of lists to actual lists
+        vertices_nested_list = [ast.literal_eval(vertices) for vertices in vertices_string_list]
+
+        # Flatten the list of lists into a single list of coordinates
+        flattened_vertices_list = [vertex for sublist in vertices_nested_list for vertex in sublist]
+
+        # Remove duplicates while preserving order
+        self.vertices_list = self.processing_utils.remove_duplicates_preserve_order(flattened_vertices_list)
+        
+        # Perhaps you dont need to do this for now
+        #combined_df = pd.merge(alteration_df, vertices_df, on="piece_name", how="right")
+        #print("Combined DF columns")
+        #print(combined_df.columns)
+        #debug
+        #combined_df.to_excel("../data/output_tables/combined_df_test.xlsx", index=False)
+        #combined_df = combined_df.apply(self.process_alteration_rules, axis=1)
+
+        alteration_df = alteration_df.apply(self.process_alteration_rules, axis=1)
+
+        self.vertex_smoothing()
+        self.reduce_and_smooth_vertices()
+
+        # Create DataFrame from total_alt
+        total_alt_df = pd.DataFrame(self.total_alt)
+        print(total_alt_df.columns)
+
+        # TODO: Coordinate alterations not happening
+
+        merged_df = self.merge_with_original_df(alteration_df, total_alt_df)
+        merged_df.to_excel("../data/output_tables/processed_alterations_2.xlsx", index=False)
 
     def apply_alteration_rules(self, df, custom_alteration=False):
 
@@ -118,7 +126,7 @@ class MakeAlteration:
         print(self.total_alt)
 
         # Create DataFrame from total_alt
-        total_alt_df = self.create_total_alt_df()
+        total_alt_df = pd.DataFrame(self.total_alt)
 
         # Combine coordinates - Adjust for inbetween mtm points and add to the smoothened lines
         #total_alt_df = total_alt_df.apply(self.add_inbetween_mtm_points, axis=1)
@@ -139,71 +147,7 @@ class MakeAlteration:
         
         self.df_alt = merged_df
         return merged_df
-
-    def calculate_distance(self):
-        for index, row in self.df_alt.iterrows():
-            if isinstance(row['mtm_points_in_altered_vertices'], list):
-                distances = []
-                for point_info in row['mtm_points_in_altered_vertices']:
-                    if 'altered_coordinates' in point_info and 'original_coordinates' in point_info:
-                        original = point_info['original_coordinates']
-                        altered = point_info['altered_coordinates']
-                        if None not in original and None not in altered:
-                            distance = np.sqrt((altered[0] - original[0])**2 + (altered[1] - original[1])**2)
-                            distances.append(distance)
-                            print(f"MTM Point {point_info['mtm_point']}, Distance: {distance:.2f} cm")
-                if distances:
-                    max_distance = max(distances) * 100  # Convert to cm
-                    self.df_alt.at[index, 'distance_euq'] = max_distance
-
-                # Check for additional MTM points and calculate distance
-                if not pd.isna(row['mtm points']):
-                    mtm_x = row['pl_point_x_modified']
-                    mtm_y = row['pl_point_y_modified']
-                    if not pd.isna(mtm_x) and not pd.isna(mtm_y):
-                        distance = np.sqrt((mtm_x - row['pl_point_x'])**2 + (mtm_y - row['pl_point_y'])**2) 
-                        distances.append(distance)
-                        print(f"MTM Point {row['mtm points']}, Distance: {distance:.2f} cm")
-                    if distances:
-                        max_distance = max(distances)  # Convert to cm
-                        self.df_alt.at[index, 'distance_euq'] = max_distance
-
-    def reduce_and_smooth_vertices(self, use_smoothened = True):
-        for entry in self.total_alt:
-            try:
-                if use_smoothened:
-                    reduced_vertices = MakeAlteration.reduce_points(vertices=entry['altered_vertices_smoothened'], threshold=0.1)
-                    entry["altered_vertices_smoothened_reduced"] = reduced_vertices
-                else:
-                    reduced_vertices = MakeAlteration.reduce_points(vertices=entry['altered_vertices'], threshold=0.1)
-                    entry["altered_vertices_reduced"] = reduced_vertices
-            
-            except KeyError or ValueError:
-                print("")
-                print(f"No reducing points needed for {entry['alteration']}")
-
-    def reduce_original_vertices(self, row):
-        if pd.isna(row['vertices']) or row['vertices'] in ['nan', 'None', '', 'NaN']:
-            row['original_vertices_reduced'] = []
-        else:
-            try:
-                vertices_list = ast.literal_eval(row['vertices'])
-                #print(f"Parsed vertices_list: {vertices_list}")
-                if isinstance(vertices_list, list) and all(isinstance(vertex, (list, tuple)) and len(vertex) == 2 for vertex in vertices_list):
-                    #print(f"Original vertices length: {len(vertices_list)}")
-                    reduced_vertices = self.reduce_points(vertices=vertices_list, threshold=0.1)
-                    # Ensure the reduced vertices are in the same structure (list of tuples)
-                    reduced_vertices = [tuple(vertex) for vertex in reduced_vertices]
-                    #print(f"Reduced vertices length: {len(reduced_vertices)}")
-                    row['original_vertices_reduced'] = reduced_vertices
-                else:
-                    print(f"Invalid format in 'vertices' column for row: {row}")
-                    row['original_vertices_reduced'] = []
-            except (ValueError, SyntaxError) as e:
-                print(f"Error processing vertices for row: {row}, Error: {e}")
-                row['original_vertices_reduced'] = []
-        return row
-
+    
     def process_alteration_rules(self, row):
         if pd.isna(row['alteration_type']):
             return row
@@ -222,10 +166,18 @@ class MakeAlteration:
                     existing['movement_y'] += alt_set['movement_y']
                     
                     # Recalculate new coordinates based on the summed movements
+                    # Assuming coordinates are in decimal form: e.g. 12.5 % <-> 0.125
+                    # Multiplication: (old_coordinates) * (1 + 0.125), to apply movement
                     existing['new_coordinates'] = (
-                        existing['old_coordinates'][0] * (1 + existing['movement_x'] / 100.0) ,
-                        existing['old_coordinates'][1] * (1 + existing['movement_y'] / 100.0)
+                        existing['old_coordinates'][0] * (1 + existing['movement_x']),
+                        existing['old_coordinates'][1] * (1 + existing['movement_y'])
                     )
+                    print("Movement Y")
+                    print(existing['movement_y'])
+                    print("Old Coordinates")
+                    print(existing['old_coordinates'])
+                    print("New coordinates")
+                    print(existing['new_coordinates'])
                     
                     existing['mtm_points_in_altered_vertices'] = alt_set['mtm_points_in_altered_vertices'] + existing['mtm_points_in_altered_vertices']
 
@@ -288,6 +240,9 @@ class MakeAlteration:
                 print(f"Extension MTM {row['mtm points']}")
                 row = self.apply_xy_move(row)
 
+                print("Row")
+                print(row)
+
                 # Apply smoothing after getting the new coordinates (i.e. if they aggregate)
                 altered_vertices, mtm_points_in_altered_vertices = self.apply_extension(row)
 
@@ -303,13 +258,118 @@ class MakeAlteration:
                             row['pl_point_x_modified'] ,
                             row['pl_point_y_modified']
                         ), 
-                        "altered_vertices" : MakeAlteration.sort_by_x(MakeAlteration.remove_duplicates(altered_vertices)),
+                        "altered_vertices" : self.processing_utils.sort_by_x(self.processing_utils.remove_duplicates(altered_vertices)),
                         "split_vertices" : [],
                         "mtm_points_in_altered_vertices" : mtm_points_in_altered_vertices,
                         }
                 alt_set = update_or_add_alt_set(alt_set)
                 print(f"Alteration Set Before Smoothing: {alt_set["altered_vertices"]}")
 
+        return row
+    
+    def apply_extension(self, row):
+
+        first_pt = row['mtm_dependent']
+        second_pt = row['mtm points'] 
+
+        first_point = self.get_pl_points(first_pt)
+        second_point = self.get_pl_points(second_pt)
+        
+        #vertices_list = ast.literal_eval(row['vertices'])
+        vertices_list = self.vertices_list.copy()
+        
+        first_index, second_index = self.find_vertex_indices(vertices_list, first_point, second_point)
+        if first_index is not None and second_index is not None:
+            if row['alteration_type'] == 'CW Ext' and first_index < second_index:
+                row['altered_vertices'] = vertices_list[first_index:second_index + 1]
+            elif row['alteration_type'] == 'CCW Ext' and first_index > second_index:
+                row['altered_vertices'] = vertices_list[second_index:first_index + 1]
+            else:
+                row['altered_vertices'] = "Invalid vertices range"
+        else:
+            row['altered_vertices'] = "Vertices not found"
+
+        # This is where the error is. Find point 8050
+        mtm_points_in_altered_vertices = []
+        if isinstance(row['altered_vertices'], list):
+            altered_vertices = [v for v in row['altered_vertices'] if not pd.isna(v)]
+            vertex_index_map = {v: i for i, v in enumerate(row['altered_vertices'])}
+            for _, mtm_row in self.start_df.iterrows():
+                mtm_point = (mtm_row['pl_point_x'], mtm_row['pl_point_y'])
+                mtm_point_label = mtm_row['mtm points']
+                if not pd.isna(mtm_point_label) and mtm_point in altered_vertices:
+                    if mtm_point != first_point and mtm_point != second_point:
+                        original_index = vertex_index_map.get(mtm_point, 'Not found')
+                        mtm_points_in_altered_vertices.append({
+                            'mtm_point': mtm_point_label,
+                            'original_coordinates': mtm_point,
+                            'original_index': original_index, 
+                        })
+        altered_vertices = row['altered_vertices']
+        return altered_vertices, mtm_points_in_altered_vertices
+
+    def calculate_distance(self):
+        for index, row in self.df_alt.iterrows():
+            if isinstance(row['mtm_points_in_altered_vertices'], list):
+                distances = []
+                for point_info in row['mtm_points_in_altered_vertices']:
+                    if 'altered_coordinates' in point_info and 'original_coordinates' in point_info:
+                        original = point_info['original_coordinates']
+                        altered = point_info['altered_coordinates']
+                        if None not in original and None not in altered:
+                            distance = np.sqrt((altered[0] - original[0])**2 + (altered[1] - original[1])**2)
+                            distances.append(distance)
+                            print(f"MTM Point {point_info['mtm_point']}, Distance: {distance:.2f} cm")
+                if distances:
+                    max_distance = max(distances) * 100  # Convert to cm
+                    self.df_alt.at[index, 'distance_euq'] = max_distance
+
+                # Check for additional MTM points and calculate distance
+                if not pd.isna(row['mtm points']):
+                    mtm_x = row['pl_point_x_modified']
+                    mtm_y = row['pl_point_y_modified']
+                    if not pd.isna(mtm_x) and not pd.isna(mtm_y):
+                        distance = np.sqrt((mtm_x - row['pl_point_x'])**2 + (mtm_y - row['pl_point_y'])**2) 
+                        distances.append(distance)
+                        print(f"MTM Point {row['mtm points']}, Distance: {distance:.2f} cm")
+                    if distances:
+                        max_distance = max(distances)  # Convert to cm
+                        self.df_alt.at[index, 'distance_euq'] = max_distance
+
+    def reduce_and_smooth_vertices(self, use_smoothened = True):
+        for entry in self.total_alt:
+            try:
+                if use_smoothened:
+                    reduced_vertices = MakeAlteration.reduce_points(vertices=entry['altered_vertices_smoothened'], threshold=0.1)
+                    entry["altered_vertices_smoothened_reduced"] = reduced_vertices
+                else:
+                    reduced_vertices = MakeAlteration.reduce_points(vertices=entry['altered_vertices'], threshold=0.1)
+                    entry["altered_vertices_reduced"] = reduced_vertices
+            
+            except KeyError or ValueError:
+                print("")
+                print(f"No reducing points needed for {entry['alteration']}")
+
+    def reduce_original_vertices(self, row):
+        if pd.isna(row['vertices']) or row['vertices'] in ['nan', 'None', '', 'NaN']:
+            row['original_vertices_reduced'] = []
+        else:
+            try:
+                vertices_list = ast.literal_eval(row['vertices'])
+                print(f"Parsed vertices_list: {vertices_list}")
+                if isinstance(vertices_list, list) and all(isinstance(vertex, (list, tuple)) and len(vertex) == 2 for vertex in vertices_list):
+                    #print(f"Original vertices length: {len(vertices_list)}")
+                    reduced_vertices = self.reduce_points(vertices=vertices_list, threshold=0.1)
+                    # Ensure the reduced vertices are in the same structure (list of tuples)
+                    reduced_vertices = [tuple(vertex) for vertex in reduced_vertices]
+                    #print(f"Reduced vertices length: {len(reduced_vertices)}")
+                    row['original_vertices_reduced'] = reduced_vertices
+                else:
+                    print(f"Invalid format in 'vertices' column for row: {row}")
+                    row['original_vertices_reduced'] = []
+            except (ValueError, SyntaxError) as e:
+                print(f"Error processing vertices for row: {row}, Error: {e}")
+                row['original_vertices_reduced'] = []
         return row
 
     def find_closest_points(self, mtm_point, current_x, current_y):
@@ -321,8 +381,8 @@ class MakeAlteration:
         return prev_point, next_point
 
     def apply_xy_move(self, row):
-        row['pl_point_x_modified'] = row['pl_point_x'] * (1 + row['movement_x'] / 100.0)
-        row['pl_point_y_modified'] = row['pl_point_y'] * (1 + row['movement_y'] / 100.0)
+        row['pl_point_x_modified'] = row['pl_point_x'] * (1 + row['movement_x'])
+        row['pl_point_y_modified'] = row['pl_point_y'] * (1 + row['movement_y'])
         mtm_point = row['mtm points']
         prev_point, next_point = self.find_closest_points(mtm_point, row['pl_point_x'], row['pl_point_y'])
         prev_coordinates = (prev_point['pl_point_x'], prev_point['pl_point_y']) if prev_point is not None else (None, None)
@@ -363,44 +423,6 @@ class MakeAlteration:
                 second_index = i
         return first_index, second_index
     
-    def apply_extension(self, row):
-        first_pt = row['mtm_dependent']
-        second_pt = row['mtm_alteration'] 
-
-        first_point = self.get_pl_points(first_pt)
-        second_point = self.get_pl_points(second_pt)
-        
-        vertices_list = ast.literal_eval(row['vertices'])
-        first_index, second_index = self.find_vertex_indices(vertices_list, first_point, second_point)
-        if first_index is not None and second_index is not None:
-            if row['alteration_type'] == 'CW Ext' and first_index < second_index:
-                row['altered_vertices'] = vertices_list[first_index:second_index + 1]
-            elif row['alteration_type'] == 'CCW Ext' and first_index > second_index:
-                row['altered_vertices'] = vertices_list[second_index:first_index + 1]
-            else:
-                row['altered_vertices'] = "Invalid vertices range"
-        else:
-            row['altered_vertices'] = "Vertices not found"
-
-        # This is where the error is. Find point 8050
-        mtm_points_in_altered_vertices = []
-        if isinstance(row['altered_vertices'], list):
-            altered_vertices = [v for v in row['altered_vertices'] if not pd.isna(v)]
-            vertex_index_map = {v: i for i, v in enumerate(row['altered_vertices'])}
-            for _, mtm_row in self.start_df.iterrows():
-                mtm_point = (mtm_row['pl_point_x'], mtm_row['pl_point_y'])
-                mtm_point_label = mtm_row['mtm points']
-                if not pd.isna(mtm_point_label) and mtm_point in altered_vertices:
-                    if mtm_point != first_point and mtm_point != second_point:
-                        original_index = vertex_index_map.get(mtm_point, 'Not found')
-                        mtm_points_in_altered_vertices.append({
-                            'mtm_point': mtm_point_label,
-                            'original_coordinates': mtm_point,
-                            'original_index': original_index, 
-                        })
-        altered_vertices = row['altered_vertices']
-        return altered_vertices, mtm_points_in_altered_vertices
-    
     def vertex_smoothing(self, smoothing_method='linear', rbf_function='multiquadric', epsilon=None):
         coord_mapping = {}
 
@@ -413,9 +435,6 @@ class MakeAlteration:
             new_coordinates_y = alt_set["new_coordinates"][1]
             altered_vertices = alt_set["altered_vertices"]
             split_vertices = alt_set["split_vertices"]
-
-            print("Old coordinates")
-            print(old_coordinates)
 
             # This one has to be after the alteration set is done
             # Now add the alteration on the second point
@@ -620,12 +639,6 @@ class MakeAlteration:
                 print("Change Y")
                 print(change_y)
 
-                # Second PT ordering
-                # CW EXT: END
-                # CCW EXT: BEGINNING
-                # Add more cases later...
-                print("Old Coordinates")
-                print(old_coordinates)
         return
 
     @staticmethod
@@ -667,8 +680,8 @@ class MakeAlteration:
         return unique_vertices
     
     def merge_with_original_df(self, original_df, total_alt_df):
-        original_df.drop(columns = ['alteration_type', 'altered_vertices', 'mtm_dependent', 'alteration_mtm',
-                                    'line_end_x', 'line_end_y', 'line_start_x', 'line_start_y',
+        print(original_df.columns)
+        original_df.drop(columns = ['alteration_type', 'altered_vertices', 'mtm_dependent',
                                     'movement_x', 'movement_y'], inplace=True)
         
         
@@ -685,22 +698,23 @@ class MakeAlteration:
         merged_df.rename(columns={'vertices': 'original_vertices'}, inplace=True)
 
         # Sort columns by X-Coordinate (again)
-        merged_df['alteration_set'] = merged_df['altered_vertices'].apply(MakeAlteration.sort_by_x)
-        merged_df['altered_vertices'] = merged_df['altered_vertices_smoothened'].apply(MakeAlteration.sort_by_x)
-        merged_df['altered_vertices_reduced'] = merged_df['altered_vertices_smoothened_reduced'].apply(MakeAlteration.sort_by_x)
+        merged_df['alteration_set'] = merged_df['altered_vertices'].apply(self.processing_utils.sort_by_x)
+        merged_df['altered_vertices'] = merged_df['altered_vertices_smoothened'].apply(self.processing_utils.sort_by_x)
+        merged_df['altered_vertices_reduced'] = merged_df['altered_vertices_smoothened_reduced'].apply(self.processing_utils.sort_by_x)
         merged_df.drop(columns = ['altered_vertices_smoothened', 'altered_vertices_smoothened_reduced'], inplace=True)
 
         return merged_df
 
 if __name__ == "__main__":
     #input_table_path = "../data/output_tables/merged_with_rule_subset.xlsx"
-    input_table_path = "../data/output_tables/combined_alteration_tables/combined_table_4-WAIST.csv"
-    
-    make_alteration = MakeAlteration(input_table_path)
 
-    start_df = make_alteration.start_df.copy()
-    print(start_df.head())
-    processed_df = make_alteration.apply_alteration_rules(start_df, custom_alteration=False)
+    # Todo, run through all Vertices / Combined tables
+    input_table_path = "../data/output_tables/combined_alteration_tables/combined_table_4-WAIST.csv"
+    input_vertices_path = "../data/output_tables/vertices/LGFG-SH-01-CCB-FO_vertices.csv"
+    
+    make_alteration = MakeAlteration(input_table_path, input_vertices_path)
+
+    processed_df = make_alteration.apply_alteration_rules_2(custom_alteration=False)
         
     #output_dir = f"../data/output_graphs/{sheet_name}"
     #make_alteration.plot_altered_table(plotting_df, output_dir=output_dir)
