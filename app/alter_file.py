@@ -32,14 +32,6 @@ class MakeAlteration:
     #    self.start_df = pd.merge(self.input_table_path, self.input_vertices_path, on)
     #    self.input_table_path
 
-    @staticmethod
-    def reduce_points(vertices, threshold=0.1):
-        if isinstance(vertices, list) and len(vertices) > 2:
-            points = np.array(vertices)
-            reduced_points = MakeAlteration.visvalingam_whyatt(points, threshold)
-            return reduced_points
-        return vertices
-
     def prepare_dataframe(self, df):
         df['pl_point_x'] = pd.to_numeric(df['pl_point_x'], errors='coerce').fillna(0)
         df['pl_point_y'] = pd.to_numeric(df['pl_point_y'], errors='coerce').fillna(0)
@@ -55,7 +47,7 @@ class MakeAlteration:
         df['distance_euq'] = ""
         return df
     
-    def apply_alteration_rules_2(self, custom_alteration=False):
+    def apply_alteration_rules(self, custom_alteration=False):
         alteration_df = self.prepare_dataframe(self.start_df.copy())
         self.vertices_df = self.vertices_df.copy().apply(self.reduce_original_vertices, axis=1)
         
@@ -70,83 +62,16 @@ class MakeAlteration:
 
         # Remove duplicates while preserving order
         self.vertices_list = self.processing_utils.remove_duplicates_preserve_order(flattened_vertices_list)
-        
-        # Perhaps you dont need to do this for now
-        #combined_df = pd.merge(alteration_df, vertices_df, on="piece_name", how="right")
-        #print("Combined DF columns")
-        #print(combined_df.columns)
-        #debug
-        #combined_df.to_excel("../data/output_tables/combined_df_test.xlsx", index=False)
-        #combined_df = combined_df.apply(self.process_alteration_rules, axis=1)
 
+        # Apply alteration rules
         alteration_df = alteration_df.apply(self.process_alteration_rules, axis=1)
-
         self.vertex_smoothing()
         self.reduce_and_smooth_vertices()
 
-        # Create DataFrame from total_alt
+        # Merge and save
         total_alt_df = pd.DataFrame(self.total_alt)
-        print(total_alt_df.columns)
-
-        # TODO: Coordinate alterations not happening
-
         merged_df = self.merge_with_original_df(alteration_df, total_alt_df)
         merged_df.to_excel("../data/output_tables/processed_alterations_2.xlsx", index=False)
-
-    def apply_alteration_rules(self, df, custom_alteration=False):
-
-        if custom_alteration:
-            print("Custom Alteration")
-        else:
-            df = self.prepare_dataframe(df)
-            df = df.apply(self.reduce_original_vertices, axis=1)
-            df = df.apply(self.process_alteration_rules, axis=1)
-
-        print("")
-        print("---------")
-        print("Initial Alteration Set")
-        print("")
-        print(self.total_alt)
-
-        # Apply smoothing (DONE)
-        self.vertex_smoothing()
-
-        print("")
-        print("---------")
-        print("Alteration Set After Smoothing")
-        print("")
-        print(self.total_alt)
-
-        self.reduce_and_smooth_vertices()
-
-        print("")
-        print("---------")
-        print("Alteration Set After Reducing Points")
-        print("")
-        print(self.total_alt)
-
-        # Create DataFrame from total_alt
-        total_alt_df = pd.DataFrame(self.total_alt)
-
-        # Combine coordinates - Adjust for inbetween mtm points and add to the smoothened lines
-        #total_alt_df = total_alt_df.apply(self.add_inbetween_mtm_points, axis=1)
-        #print("")
-        #print("---------")
-        #print("Alteration Set After Combining Coordinates")
-        #print("")
-        #print(self.total_alt)
-
-        # Merge with the original DataFrame
-        merged_df = self.merge_with_original_df(df, total_alt_df)
-
-        # Adjust for missing mtm points
-        #merged_df["original_vertices_reduced"] = merged_df.apply(self.add_mtm_points_to_original, axis=1)
-
-        # Save the resulting DataFrame to an Excel file
-        merged_df.to_excel("../data/output_tables/processed_alterations.xlsx", index=False)
-        
-        self.df_alt = merged_df
-        return merged_df
     
     def process_alteration_rules(self, row):
         if pd.isna(row['alteration_type']):
@@ -172,12 +97,6 @@ class MakeAlteration:
                         existing['old_coordinates'][0] * (1 + existing['movement_x']),
                         existing['old_coordinates'][1] * (1 + existing['movement_y'])
                     )
-                    print("Movement Y")
-                    print(existing['movement_y'])
-                    print("Old Coordinates")
-                    print(existing['old_coordinates'])
-                    print("New coordinates")
-                    print(existing['new_coordinates'])
                     
                     existing['mtm_points_in_altered_vertices'] = alt_set['mtm_points_in_altered_vertices'] + existing['mtm_points_in_altered_vertices']
 
@@ -239,9 +158,6 @@ class MakeAlteration:
                 print("")
                 print(f"Extension MTM {row['mtm points']}")
                 row = self.apply_xy_move(row)
-
-                print("Row")
-                print(row)
 
                 # Apply smoothing after getting the new coordinates (i.e. if they aggregate)
                 altered_vertices, mtm_points_in_altered_vertices = self.apply_extension(row)
@@ -340,10 +256,10 @@ class MakeAlteration:
         for entry in self.total_alt:
             try:
                 if use_smoothened:
-                    reduced_vertices = MakeAlteration.reduce_points(vertices=entry['altered_vertices_smoothened'], threshold=0.1)
+                    reduced_vertices = self.processing_utils.reduce_points(vertices=entry['altered_vertices_smoothened'], threshold=0.1)
                     entry["altered_vertices_smoothened_reduced"] = reduced_vertices
                 else:
-                    reduced_vertices = MakeAlteration.reduce_points(vertices=entry['altered_vertices'], threshold=0.1)
+                    reduced_vertices = self.processing_utils.reduce_points(vertices=entry['altered_vertices'], threshold=0.1)
                     entry["altered_vertices_reduced"] = reduced_vertices
             
             except KeyError or ValueError:
@@ -359,7 +275,7 @@ class MakeAlteration:
                 print(f"Parsed vertices_list: {vertices_list}")
                 if isinstance(vertices_list, list) and all(isinstance(vertex, (list, tuple)) and len(vertex) == 2 for vertex in vertices_list):
                     #print(f"Original vertices length: {len(vertices_list)}")
-                    reduced_vertices = self.reduce_points(vertices=vertices_list, threshold=0.1)
+                    reduced_vertices = self.processing_utils.reduce_points(vertices=vertices_list, threshold=0.1)
                     # Ensure the reduced vertices are in the same structure (list of tuples)
                     reduced_vertices = [tuple(vertex) for vertex in reduced_vertices]
                     #print(f"Reduced vertices length: {len(reduced_vertices)}")
@@ -616,12 +532,12 @@ class MakeAlteration:
                 second_point = self.get_pl_points(second_pt)
 
                 # Get coordinates of First PT (e.g. 8015)
-                print("First point")
+                print("MTM Point Coordinates")
                 print(first_pt)
                 print(first_point)
 
                 # Get coordinates of Second PT (e.g. 8016)
-                print("Second Point")
+                print("MTM Dependent Coordinates")
                 print(second_pt)
                 print(second_point)
 
@@ -633,38 +549,7 @@ class MakeAlteration:
                 ascending = (new_coordinates[0] > first_point[0] and new_coordinates[1] > first_point[1]) or \
                             (new_coordinates[0] < first_point[0] and new_coordinates[1] > first_point[1])
 
-                print("Change X")
-                print(change_x)
-
-                print("Change Y")
-                print(change_y)
-
         return
-
-    @staticmethod
-    def visvalingam_whyatt(points, threshold):
-        def calculate_area(a, b, c):
-            return 0.5 * abs(a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1]))
-
-        def filter_points(points, threshold):
-            if len(points) < 3:
-                return points
-            areas = [float('inf')] * len(points)
-            for i in range(1, len(points) - 1):
-                areas[i] = calculate_area(points[i - 1], points[i], points[i + 1])
-            while min(areas) < threshold:
-                min_index = areas.index(min(areas))
-                points.pop(min_index)
-                areas.pop(min_index)
-                if min_index > 0 and min_index < len(points) - 1:
-                    areas[min_index - 1] = calculate_area(points[min_index - 2], points[min_index - 1], points[min_index]) if min_index - 1 != 0 else float('inf')
-                    areas[min_index] = calculate_area(points[min_index - 1], points[min_index], points[min_index + 1]) if min_index + 1 != len(points) - 1 else float('inf')
-            return points
-        points = [tuple(point) for point in points]
-        simplified_points = filter_points(points, threshold)
-
-        #print(f"Number of Points after Simplification: {len(simplified_points)}")
-        return simplified_points
 
     def get_unique_vertices(self, df):
         unique_vertices_set = set()
@@ -680,7 +565,6 @@ class MakeAlteration:
         return unique_vertices
     
     def merge_with_original_df(self, original_df, total_alt_df):
-        print(original_df.columns)
         original_df.drop(columns = ['alteration_type', 'altered_vertices', 'mtm_dependent',
                                     'movement_x', 'movement_y'], inplace=True)
         
@@ -706,16 +590,9 @@ class MakeAlteration:
         return merged_df
 
 if __name__ == "__main__":
-    #input_table_path = "../data/output_tables/merged_with_rule_subset.xlsx"
-
-    # Todo, run through all Vertices / Combined tables
+    # TODO: run through all Vertices / Combined tables
     input_table_path = "../data/output_tables/combined_alteration_tables/combined_table_4-WAIST.csv"
     input_vertices_path = "../data/output_tables/vertices/LGFG-SH-01-CCB-FO_vertices.csv"
     
     make_alteration = MakeAlteration(input_table_path, input_vertices_path)
-
-    processed_df = make_alteration.apply_alteration_rules_2(custom_alteration=False)
-        
-    #output_dir = f"../data/output_graphs/{sheet_name}"
-    #make_alteration.plot_altered_table(plotting_df, output_dir=output_dir)
-    #make_alteration.plot_final_altered_table(plotting_df, output_dir=output_dir)
+    processed_df = make_alteration.apply_alteration_rules(custom_alteration=False)
