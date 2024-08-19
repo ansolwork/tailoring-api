@@ -1,12 +1,8 @@
 import pandas as pd
-from matplotlib import pyplot as plt
 import ast
-import os
 import numpy as np
-from scipy.interpolate import splprep, splev, interp1d, Rbf
 from smoothing import SmoothingFunctions  # Import the SmoothingFunctions class
 from data_processing_utils import DataProcessingUtils
-
 
 # Further notes:
 # Vertices have to be sorted (by x-coordinate) before smoothing is applied
@@ -27,10 +23,9 @@ class MakeAlteration:
         self.vertices_df = self.processing_utils.load_csv(input_vertices_path)
         self.total_alt = []
         self.vertices_list = []
-    
-    #def join_tables(self, on_piece):
-    #    self.start_df = pd.merge(self.input_table_path, self.input_vertices_path, on)
-    #    self.input_table_path
+
+        self.scaling_factor = 25.4 # to mm
+
 
     def prepare_dataframe(self, df):
         df['pl_point_x'] = pd.to_numeric(df['pl_point_x'], errors='coerce').fillna(0)
@@ -50,6 +45,8 @@ class MakeAlteration:
     def apply_alteration_rules(self, custom_alteration=False):
         alteration_df = self.prepare_dataframe(self.start_df.copy())
         self.vertices_df = self.vertices_df.copy().apply(self.reduce_original_vertices, axis=1)
+        self.vertices_df.to_excel("../data/output_tables/vertices_df.xlsx", index=False)
+    
         
         # Extract vertices column from DataFrame as a list of strings
         vertices_string_list = self.vertices_df['vertices'].tolist()
@@ -71,6 +68,10 @@ class MakeAlteration:
         # Merge and save
         total_alt_df = pd.DataFrame(self.total_alt)
         merged_df = self.merge_with_original_df(alteration_df, total_alt_df)
+        merged_df = self.get_mtm_dependent_coords(merged_df)
+
+        # TODO: Optional, order columns
+
         merged_df.to_excel("../data/output_tables/processed_alterations_2.xlsx", index=False)
     
     def process_alteration_rules(self, row):
@@ -93,9 +94,10 @@ class MakeAlteration:
                     # Recalculate new coordinates based on the summed movements
                     # Assuming coordinates are in decimal form: e.g. 12.5 % <-> 0.125
                     # Multiplication: (old_coordinates) * (1 + 0.125), to apply movement
+                    # Base unit already in inches. Forget above
                     existing['new_coordinates'] = (
                         existing['old_coordinates'][0] * (1 + existing['movement_x']),
-                        existing['old_coordinates'][1] * (1 + existing['movement_y'])
+                        existing['old_coordinates'][1] + (1 + existing['movement_y'])
                     )
                     
                     existing['mtm_points_in_altered_vertices'] = alt_set['mtm_points_in_altered_vertices'] + existing['mtm_points_in_altered_vertices']
@@ -297,8 +299,13 @@ class MakeAlteration:
         return prev_point, next_point
 
     def apply_xy_move(self, row):
+        # Old version - multiply as a base percentage
+        #row['pl_point_x_modified'] = row['pl_point_x'] * (1 + row['movement_x'])
+        #row['pl_point_y_modified'] = row['pl_point_y'] * (1 + row['movement_y'])
+
         row['pl_point_x_modified'] = row['pl_point_x'] * (1 + row['movement_x'])
         row['pl_point_y_modified'] = row['pl_point_y'] * (1 + row['movement_y'])
+        
         mtm_point = row['mtm points']
         prev_point, next_point = self.find_closest_points(mtm_point, row['pl_point_x'], row['pl_point_y'])
         prev_coordinates = (prev_point['pl_point_x'], prev_point['pl_point_y']) if prev_point is not None else (None, None)
@@ -588,6 +595,67 @@ class MakeAlteration:
         merged_df.drop(columns = ['altered_vertices_smoothened', 'altered_vertices_smoothened_reduced'], inplace=True)
 
         return merged_df
+        
+    def get_mtm_dependent_coords(self, df):
+        # Initialize new columns with object dtype to handle lists or strings
+        df['mtm_dependant_x'] = pd.Series(dtype='object')
+        df['mtm_dependant_y'] = pd.Series(dtype='object')
+
+        def parse_labels(labels):
+            if isinstance(labels, str):
+                return ast.literal_eval(labels)
+            return labels if isinstance(labels, list) else [labels]
+
+        def check_all_labels_in_list(labels, matching_list):
+            labels = parse_labels(labels)
+            return all(item in matching_list for item in labels)
+
+        # Flatten and print mtm dependant values
+        mtm_dependant_vals = df['mtm_dependant'].dropna().tolist()
+        mtm_dependant_vals_flattened = self.processing_utils.flatten_if_needed(mtm_dependant_vals)
+        print("MTM Dependent:", mtm_dependant_vals)
+
+        # Get matching rows based on mtm points
+        matching_rows = df[df['mtm points'].isin(mtm_dependant_vals_flattened)]
+        matching_mtm_labels = matching_rows['mtm points'].unique()
+        print("Matching mtm labels:", matching_mtm_labels)
+
+        # Define a dictionary to keep track of unique (x, y) pairs
+        unique_coords = {}
+
+        # Add unique points to the dictionary
+        for label, x, y in zip(matching_rows['mtm points'], matching_rows['pl_point_x'], matching_rows['pl_point_y']):
+            if (x, y) not in unique_coords:
+                unique_coords[(x, y)] = label
+
+        # Convert the dictionary back to lists
+        coords = {
+            "coords_x": [key[0] for key in unique_coords.keys()],
+            "coords_y": [key[1] for key in unique_coords.keys()],
+            "label": list(unique_coords.values())
+        }
+        print("COORDS:", coords)
+
+        # Now that coords is defined, we can safely use it in the lambda function
+        mtm_dependant_labels = df[df['mtm_dependant'].apply(lambda x: check_all_labels_in_list(x, coords["label"]))]
+        print("MTM Dependant labels:", mtm_dependant_labels)
+
+        # Iterate over the rows in mtm_dependant_labels
+        for _, row in mtm_dependant_labels.iterrows():
+            labels = parse_labels(row['mtm_dependant'])
+            
+            x_coords = []
+            y_coords = []
+            
+            if all(label in coords["label"] for label in labels):
+                x_coords = [coords["coords_x"][coords["label"].index(label)] for label in labels]
+                y_coords = [coords["coords_y"][coords["label"].index(label)] for label in labels]
+            
+            # Assign the coordinates to the DataFrame
+            df.at[row.name, 'mtm_dependant_x'] = x_coords if len(x_coords) > 1 else x_coords[0]
+            df.at[row.name, 'mtm_dependant_y'] = y_coords if len(y_coords) > 1 else y_coords[0]
+
+        return df
 
 if __name__ == "__main__":
     # TODO: run through all Vertices / Combined tables

@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import math
 
 class DataProcessingUtils:
     """
@@ -28,6 +29,9 @@ class DataProcessingUtils:
         save_path (str): The file path where the CSV should be saved.
         """
         df.to_csv(save_path, index=False)
+
+    def load_excel(self, input_table_path):
+        return pd.read_excel(input_table_path)
     
     def load_all_excel_sheets(self, df):
         """
@@ -72,6 +76,23 @@ class DataProcessingUtils:
                 seen.add(item)
                 output_list.append(item)
         return output_list
+    
+    def drop_nans(self, lst):
+        return [item for item in lst if not (isinstance(item, float) and math.isnan(item))]
+    
+    def flatten_tuple(self, nested_tuple):
+        flat_list = []
+        for item in nested_tuple:
+            if isinstance(item, (list, tuple)):
+                flat_list.extend(self.flatten_tuple(item))
+            else:
+                flat_list.append(item)
+        return flat_list
+    
+    def filter_valid_coordinates(self, coords):
+        if isinstance(coords, (list, tuple)):
+            return [coord for coord in coords if not pd.isna(coord)]
+        return []
 
     def remove_duplicates_preserve_order(self, flattened_list):
         """
@@ -123,6 +144,15 @@ class DataProcessingUtils:
             reduced_points = self.visvalingam_whyatt(points, threshold)
             return reduced_points
         return vertices
+
+    def flatten_if_needed(self, nested_list):
+        flattened = []
+        for item in nested_list:
+            if isinstance(item, list):  # Check if the item is a list
+                flattened.extend(item)  # If so, extend the flattened list
+            else:
+                flattened.append(item)  # If not, simply append the item
+        return flattened
     
     def visvalingam_whyatt(self, points, threshold):
         """
