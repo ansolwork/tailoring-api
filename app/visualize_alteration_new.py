@@ -87,8 +87,8 @@ class VisualizeAlteration:
 
     def process_mtm_points(self, row, plot_data):
         def add_point(x, y, x_old, y_old, label, mtm_dependent, mtm_dependent_x, mtm_dependent_y, 
-                    color, movement_x=0., movement_y=0., nearby_point_left=None, nearby_point_right=None,
-                    nearby_point_left_coords=None, nearby_point_right_coords=None):
+                      color, movement_x=0., movement_y=0., nearby_point_left=None, nearby_point_right=None,
+                      nearby_point_left_coords=None, nearby_point_right_coords=None):
             if x is not None and y is not None:
                 plot_data['mtm_points'].append({
                     'x': x * self.scaling_factor,
@@ -117,31 +117,22 @@ class VisualizeAlteration:
                     label=row['mtm points'], mtm_dependent=row['mtm_dependant'], 
                     mtm_dependent_x=row['mtm_dependant_x'], mtm_dependent_y=row['mtm_dependant_y'], 
                     color='red')
-
+        
             # Add the altered point, if applicable
             mtm_point_alteration = row.get('mtm_points_alteration')
             if pd.notna(mtm_point_alteration):
                 mtm_new_coords = ast.literal_eval(row['new_coordinates'])
-
-                # Safely handle inbetween_points to avoid index errors
-                inbetween_points = ast.literal_eval(row.get('mtm_points_in_altered_vertices', '[]'))
-                if len(inbetween_points) >= 3:
-                    add_point(x=mtm_new_coords[0], y=mtm_new_coords[1], 
-                            x_old=row['pl_point_x'], y_old=row['pl_point_y'],
-                            label=mtm_point_alteration, mtm_dependent=row['mtm_dependant'], 
-                            mtm_dependent_x=row['mtm_dependant_x'], mtm_dependent_y=row['mtm_dependant_y'],
-                            movement_x=row['movement_x'], movement_y=row['movement_y'],
-                            nearby_point_left=inbetween_points[0]['mtm_point'], nearby_point_right=inbetween_points[2]['mtm_point'],
-                            nearby_point_left_coords=inbetween_points[0]['original_coordinates'], 
-                            nearby_point_right_coords=inbetween_points[2]['original_coordinates'],
-                            color='blue')
-                else:
-                    # Handle the case where inbetween_points is not as expected
-                    add_point(x=mtm_new_coords[0], y=mtm_new_coords[1], 
-                            x_old=row['pl_point_x'], y_old=row['pl_point_y'],
-                            label=mtm_point_alteration, mtm_dependent=row['mtm_dependant'], 
-                            mtm_dependent_x=row['mtm_dependant_x'], mtm_dependent_y=row['mtm_dependant_y'],
-                            color='blue', movement_x=row['movement_x'], movement_y=row['movement_y'])
+                inbetween_points = ast.literal_eval(row.get('mtm_points_in_altered_vertices'))
+                print(inbetween_points[2])
+                add_point(x=mtm_new_coords[0], y=mtm_new_coords[1], 
+                          x_old=row['pl_point_x'], y_old=row['pl_point_y'],
+                          label=mtm_point_alteration, mtm_dependent=row['mtm_dependant'], 
+                          mtm_dependent_x=row['mtm_dependant_x'], mtm_dependent_y=row['mtm_dependant_y'],
+                          movement_x=row['movement_x'], movement_y=row['movement_y'],
+                          nearby_point_left=inbetween_points[0]['mtm_point'], nearby_point_right=inbetween_points[2]['mtm_point'],
+                          nearby_point_left_coords = inbetween_points[0]['original_coordinates'], nearby_point_right_coords = inbetween_points[2]['original_coordinates'],
+                          color='blue'
+                          )
 
         # Process mtm_points_in_altered_vertices
         mtm_points_in_altered_vertices = ast.literal_eval(row.get('mtm_points_in_altered_vertices', '[]'))
@@ -153,27 +144,20 @@ class VisualizeAlteration:
             # Add the original coordinates if present
             if original_coords and original_coords[0] is not None and original_coords[1] is not None:
                 add_point(x=original_coords[0], y=original_coords[1], 
-                        x_old=original_coords[0], y_old=original_coords[1],
-                        label=mtm_label, mtm_dependent=row['mtm_dependant'], 
-                        mtm_dependent_x=row['mtm_dependant_x'], mtm_dependent_y=row['mtm_dependant_y'], 
-                        color='red')
-                    
+                          x_old=original_coords[0], y_old=original_coords[0],
+                            label=mtm_label, mtm_dependent=row['mtm_dependant'], 
+                            mtm_dependent_x=row['mtm_dependant_x'], mtm_dependent_y=row['mtm_dependant_y'], color='red')
+                
             if altered_coords and altered_coords[0] is not None and altered_coords[1] is not None:
-                # Safely handle inbetween_points again
-                if len(inbetween_points) >= 3:
-                    add_point(altered_coords[0], altered_coords[1], 
-                            original_coords[0], original_coords[1], 
-                            mtm_label, row['mtm_dependant'], mtm_dependent_x=row['mtm_dependant_x'], mtm_dependent_y=row['mtm_dependant_y'], 
-                            movement_x=row['movement_x'], movement_y=row['movement_y'],
-                            nearby_point_left=inbetween_points[0]['mtm_point'], nearby_point_right=inbetween_points[2]['mtm_point'],
-                            nearby_point_left_coords=inbetween_points[0]['original_coordinates'], 
-                            nearby_point_right_coords=inbetween_points[2]['original_coordinates'],
-                            color='blue')
-                else:
-                    add_point(altered_coords[0], altered_coords[1], 
-                            original_coords[0], original_coords[1], 
-                            mtm_label, row['mtm_dependant'], mtm_dependent_x=row['mtm_dependant_x'], mtm_dependent_y=row['mtm_dependant_y'], 
-                            color='blue', movement_x=row['movement_x'], movement_y=row['movement_y'])
+                inbetween_points = ast.literal_eval(row.get('mtm_points_in_altered_vertices'))
+                add_point(altered_coords[0], altered_coords[1], 
+                          original_coords[0], original_coords[1], 
+                          mtm_label, row['mtm_dependant'], mtm_dependent_x=row['mtm_dependant_x'], mtm_dependent_y=row['mtm_dependant_y'], 
+                          movement_x=row['movement_x'], movement_y=row['movement_y'],
+                          nearby_point_left=inbetween_points[0]['mtm_point'], nearby_point_right=inbetween_points[2]['mtm_point'],
+                          nearby_point_left_coords = inbetween_points[0]['original_coordinates'], nearby_point_right_coords = inbetween_points[2]['original_coordinates'],
+                          color='blue'
+                          )
     
     def prepare_plot_data(self, output_dir="../data/output_tables/"):
         plot_data = self.initialize_plot_data()
@@ -379,7 +363,6 @@ class VisualizeAlteration:
         dependent_first = coords["mtm_dependent_coords"][0]
         dependent_last = coords["mtm_dependent_coords"][-1]
 
-        xs_alt_list, ys_alt_list = [], []
         for _, row in plot_df.iterrows():
             xs_alt = self.data_processing_utils.filter_valid_coordinates(row['altered_vertices_x'])
             ys_alt = self.data_processing_utils.filter_valid_coordinates(row['altered_vertices_y'])
@@ -410,6 +393,10 @@ class VisualizeAlteration:
                 if current_segment:
                     segments.append(current_segment)
 
+                # Plot the altered segment
+                if xs_alt and ys_alt:  # Check if xs_alt and ys_alt are not empty
+                    ax.plot(xs_alt, ys_alt, marker='o', linestyle='-', linewidth=1, markersize=3, color="#00CED1", alpha=0.85, label="Altered")
+
                 # Replace vertices with new pairs and plot each segment separately
                 for segment in segments:
                     for index, pair in enumerate(segment):
@@ -425,18 +412,32 @@ class VisualizeAlteration:
                     # Plot the segment
                     if x_coords and y_coords:  # Ensure that the segment is not empty
                         ax.plot(x_coords, y_coords, marker='o', linestyle='-', linewidth=1, markersize=3, color="#00CED1", alpha=0.85, label="Altered")
+        
+                    x_coords_list.append(x_coords)
+                    y_coords_list.append(y_coords)
 
-                    if xs_alt and ys_alt:  # Check if xs_alt and ys_alt are not empty
-                        xs_alt_list.append(xs_alt)
-                        ys_alt_list.append(ys_alt)
+                    x_coords_list_alt.append(xs_alt)
+                    y_coords_list_alt.append(ys_alt)
 
-        xs_alt_list = self.data_processing_utils.flatten_if_needed(xs_alt_list)
-        ys_alt_list = self.data_processing_utils.flatten_if_needed(ys_alt_list)
+        x_coords_list_alt = self.data_processing_utils.flatten_if_needed(x_coords_list_alt)
+        y_coords_list_alt = self.data_processing_utils.flatten_if_needed(y_coords_list_alt)
+        coords_list_alt = list(zip(x_coords_list_alt, y_coords_list_alt))
 
-        # Plot the altered segment
-        ax.plot(xs_alt_list, ys_alt_list, marker='o', linestyle='-', linewidth=1, markersize=3, color="#00CED1", alpha=0.85, label="Altered")
+        # Doesnt matter which side we loop through
+        for nearby_coords in coords['nearby_coords_right']:
+            coords_left = coords['nearby_coords_left']
+            coords_right = coords['nearby_coords_right']
 
-        print(coords)
+            print(coords_list_alt)
+        
+            # Check if coords_left or coords_right is in coords_list alt
+            if coords_left in coords_list_alt:
+                print(f"Left coordinate {coords_left} found in altered coordinates.")
+            
+            if coords_right in coords_list_alt:
+                print(f"Right coordinate {coords_right} found in altered coordinates.")
+
+        #print(coords)           
 
         ax.set_title('Polyline Plot for ALT Table', fontsize=16)
         ax.set_xlabel('X Coordinate [in]', fontsize=14)
@@ -453,7 +454,6 @@ class VisualizeAlteration:
         plt.close()
 
         print(f"Altered Plot Saved To {output_path}")
-
 
 
     def plot_all_mtm_points(self, ax, row):
