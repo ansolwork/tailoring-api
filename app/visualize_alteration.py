@@ -299,6 +299,26 @@ class VisualizeAlteration:
         ax.set_xlabel("X Coordinates")
         ax.set_ylabel("Y Coordinates")
 
+    def save_plot_as_svg(self, fig, ax, output_svg_path):
+        """
+        Saves the given plot to an SVG file.
+        """
+        ax.set_title('Polyline Plot for ALT Table', fontsize=16)
+        ax.set_xlabel('X Coordinate [in]', fontsize=14)
+        ax.set_ylabel('Y Coordinate [in]', fontsize=14)
+
+        ax.tick_params(axis='both', which='major', labelsize=12)
+
+        ax.grid(True)
+
+        plt.tight_layout()
+
+        fig.savefig(output_svg_path, format='svg')
+        plt.close(fig)  # Close the figure after saving
+
+        print(f"SVG plot saved to {output_svg_path}")
+
+
     def plot_alteration_table(self, output_dir="../data/output_graphs/"):
 
         sns.set(style="whitegrid")
@@ -446,12 +466,12 @@ class VisualizeAlteration:
         plt.tight_layout()
 
         output_path = os.path.join(output_dir, "altered_polygon.png")
-        output_path_print = os.path.join(output_dir, "altered_polygon.svg")
+        output_path_svg = os.path.join(output_dir, "altered_polygon.svg")
 
         plt.savefig(output_path, dpi=300)
         plt.close()
 
-        plt.savefig(output_path_print)
+        self.save_plot_as_svg(fig, ax, output_path_svg)
 
         print(f"Altered Plot Saved To {output_path}")
 
