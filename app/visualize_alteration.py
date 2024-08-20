@@ -318,9 +318,6 @@ class VisualizeAlteration:
             "nearby_coords_left": [],
             "nearby_coords_right": []
         }
-
-        x_coords_list, y_coords_list = [], []
-        x_coords_list_alt, y_coords_list_alt = [], []
         
         for _, row in plot_df.iterrows():
             point = row['mtm_points']
@@ -449,12 +446,14 @@ class VisualizeAlteration:
         plt.tight_layout()
 
         output_path = os.path.join(output_dir, "altered_polygon.png")
+        output_path_print = os.path.join(output_dir, "altered_polygon.svg")
+
         plt.savefig(output_path, dpi=300)
         plt.close()
 
+        plt.savefig(output_path_print)
+
         print(f"Altered Plot Saved To {output_path}")
-
-
 
     def plot_all_mtm_points(self, ax, row):
         for point in row['mtm_points']:

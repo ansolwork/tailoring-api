@@ -12,6 +12,10 @@ class CreateTable:
         self.output_dir = "../data/output_tables"
         self.output_table_path = "../data/output_tables/combined_alteration_tables"
 
+        # Add more sheets if necessary
+        self.sheet_list = ["SHIRT-FRONT", "SHIRT-BACK", "SHIRT-YOKE", "SHIRT-SLEEVE", 
+                           "SHIRT-COLLAR", "SHIRT-COLLAR-BAND", "SHIRT-CUFF"]
+
     def load_table(self):
         # Load all sheets into a dictionary of DataFrames
         df_dict = pd.read_excel(self.alteration_filepath, sheet_name=None)
@@ -22,9 +26,9 @@ class CreateTable:
         df_csv = pd.read_csv(filepath)
         return df_csv
     
-    def process_table(self, sheets):
+    def process_table(self):
         # Filter the sheets dictionary to only include the specified sheets
-        selected_sheets = {name: self.df_dict[name] for name in sheets if name in self.df_dict}
+        selected_sheets = {name: self.df_dict[name] for name in self.sheet_list if name in self.df_dict}
         
         # Concatenate the DataFrames into a single DataFrame
         big_df = pd.concat(selected_sheets.values(), ignore_index=True)
@@ -141,17 +145,13 @@ class CreateTable:
             # Print the DataFrame (optional)
             print(f'Saved {output_path}')
 
-
 if __name__ == "__main__":
     alteration_filepath = "../data/input/MTM-POINTS.xlsx"
     combined_entities_folder = "../data/input/mtm-combined-entities/"
     create_table = CreateTable(alteration_filepath, combined_entities_folder)
-
-    # Included sheets
-    sheet_list = ["SHIRT-FRONT", "SHIRT-BACK", "SHIRT-YOKE", "SHIRT-SLEEVE", "SHIRT-COLLAR", "SHIRT-COLLAR-BAND", "SHIRT-CUFF"]
     
     # Process the sheets and get the combined DataFrame
-    create_table.process_table(sheet_list)
+    create_table.process_table()
     create_table.process_combined_entities()
 
     # Create Vertices DF
