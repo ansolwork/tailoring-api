@@ -6,6 +6,9 @@ import numpy as np
 import seaborn as sns
 import math
 import hashlib
+from svgpathtools import svg2paths2
+import vpype
+import subprocess
 
 from matplotlib.lines import Line2D
 from data_processing_utils import DataProcessingUtils
@@ -303,21 +306,40 @@ class VisualizeAlteration:
         """
         Saves the given plot to an SVG file.
         """
+        # Set the figure size and adjust layout to ensure the plot fits well
+        fig.set_size_inches(10, 6)  # Adjust as needed
+        plt.tight_layout()
+
+        # Set titles and labels if needed
         ax.set_title('Polyline Plot for ALT Table', fontsize=16)
         ax.set_xlabel('X Coordinate [in]', fontsize=14)
         ax.set_ylabel('Y Coordinate [in]', fontsize=14)
 
+        # Set tick parameters and grid for better visualization
         ax.tick_params(axis='both', which='major', labelsize=12)
-
         ax.grid(True)
 
-        plt.tight_layout()
-
-        fig.savefig(output_svg_path, format='svg')
+        # Save the figure as an SVG file
+        fig.savefig(output_svg_path, format='svg', bbox_inches='tight')
         plt.close(fig)  # Close the figure after saving
 
         print(f"SVG plot saved to {output_svg_path}")
 
+    def svg_to_hpgl(self, svg_path, output_hpgl_path):
+        """
+        Converts an SVG file to HPGL format using Inkscape.
+        """
+        try:
+            command = [
+                "inkscape", 
+                svg_path, 
+                "--export-type=hpgl", 
+                f"--export-filename={output_hpgl_path}"
+            ]
+            subprocess.run(command, check=True)
+            print(f"HPGL file saved to {output_hpgl_path}")
+        except subprocess.CalledProcessError as e:
+            print(f"An error occurred while converting SVG to HPGL: {e}")
 
     def plot_alteration_table(self, output_dir="../data/output_graphs/"):
 
@@ -474,6 +496,10 @@ class VisualizeAlteration:
         self.save_plot_as_svg(fig, ax, output_path_svg)
 
         print(f"Altered Plot Saved To {output_path}")
+
+        # Convert SVG to HPGL (Inkscape method)
+        #output_hpgl_path = os.path.join(output_dir, "altered_polygon.hpgl")
+        #self.svg_to_hpgl(output_path_svg, output_hpgl_path)
 
     def plot_all_mtm_points(self, ax, row):
         for point in row['mtm_points']:
