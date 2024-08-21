@@ -6,6 +6,7 @@ data/
 flagged/
 persistent_output/
 test/
+archive/
 
 # Don't include documents
 technical_book.*

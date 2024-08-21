@@ -1,6 +1,11 @@
 # Tailoring-api
+By The AI Framework. 
 
-Todo:
+## Introduction
 
-1. Alteration
-2. Nesting
+## Input
+
+## Output
+
+## Dependencies
+

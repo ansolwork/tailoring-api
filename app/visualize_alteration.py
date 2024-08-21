@@ -1,4 +1,3 @@
-from matplotlib import pyplot as plt
 import pandas as pd
 import os
 import ast
@@ -10,7 +9,11 @@ from svgpathtools import svg2paths2
 import vpype
 import subprocess
 
+import matplotlib
+from matplotlib import pyplot as plt
 from matplotlib.lines import Line2D
+matplotlib.use('Agg')  # Use 'Agg' backend for non-GUI environments
+
 from data_processing_utils import DataProcessingUtils
 
 class VisualizeAlteration:

@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
-from create_table import CreateTable
 import os
+from main import Main  
 
 app = Flask(__name__)
 
@@ -12,39 +12,38 @@ def hello():
 def ui_upload_dxf():
     return "Placeholder"
 
-@app.route("/test", methods=['POST'])
-def run_create_table():
+@app.route("/process", methods=['POST'])
+def run_main_process():
     # Get input data from the request
     alteration_filepath = request.json.get('alteration_filepath')
     combined_entities_folder = request.json.get('combined_entities_folder')
+    preprocessed_table_path = request.json.get('preprocessed_table_path')
+    input_vertices_path = request.json.get('input_vertices_path')
+    processed_alterations_path = request.json.get('processed_alterations_path')
+    processed_vertices_path = request.json.get('processed_vertices_path')
 
-    # Check if the provided paths are valid
+    # Validate the provided paths
     if not os.path.exists(alteration_filepath):
         return jsonify({"error": "Alteration file path does not exist."}), 400
     if not os.path.isdir(combined_entities_folder):
         return jsonify({"error": "Combined entities folder does not exist."}), 400
-    
+    if not os.path.exists(preprocessed_table_path):
+        return jsonify({"error": "Preprocessed table path does not exist."}), 400
+    if not os.path.exists(input_vertices_path):
+        return jsonify({"error": "Input vertices path does not exist."}), 400
+    if not os.path.exists(processed_alterations_path):
+        return jsonify({"error": "Processed alterations path does not exist."}), 400
+    if not os.path.exists(processed_vertices_path):
+        return jsonify({"error": "Processed vertices path does not exist."}), 400
+
     try:
-        # Initialize the CreateTable object
-        create_table = CreateTable(alteration_filepath, combined_entities_folder)
+        # Initialize the Main object and run the process
+        main_process = Main(alteration_filepath, combined_entities_folder, 
+                            preprocessed_table_path, input_vertices_path,
+                            processed_alterations_path, processed_vertices_path)
+        main_process.run()
 
-        # Process the sheets and get the combined DataFrame
-        create_table.process_table()
-        create_table.process_combined_entities()
-
-        # Create Vertices DF
-        create_table.create_vertices_df()
-
-        # Join tables
-        create_table.merge_tables()
-        
-        # Save the combined DataFrame as CSV files 
-        
-        # TODO: Save to S3
-        create_table.save_table_csv()
-        create_table.add_other_mtm_points()
-
-        return jsonify({"message": "Table creation and processing completed successfully."})
+        return jsonify({"message": "Processing completed successfully."})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
