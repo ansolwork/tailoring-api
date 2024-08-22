@@ -3,6 +3,7 @@ import ast
 import numpy as np
 from smoothing import SmoothingFunctions  # Import the SmoothingFunctions class
 from data_processing_utils import DataProcessingUtils
+import os
 
 # Further notes:
 # Vertices have to be sorted (by x-coordinate) before smoothing is applied
@@ -11,11 +12,12 @@ from data_processing_utils import DataProcessingUtils
 # Done: Fixed coordinates
 # Next -> ?
 
-# TODO: Filter based on piece? Done
-# TODO: The error is because the MTM points in the input file overrides the old - see create_table. NOT the alteration points, but all other points!
+# TODO: Optional, order columns
 
 class MakeAlteration:
-    def __init__(self, input_table_path, input_vertices_path, piece_name):
+    def __init__(self, input_table_path, input_vertices_path, 
+                 piece_name, save_folder, file_format):
+        
         self.processing_utils = DataProcessingUtils()
 
         self.input_table_path = input_table_path
@@ -31,6 +33,9 @@ class MakeAlteration:
         self.total_alt = []
         self.vertices_list = []
         self.scaling_factor = 25.4 # to mm
+
+        self.save_folder = save_folder
+        self.file_format = file_format
 
     def filter_by_piece_name(self):
         return self.start_df[self.start_df['piece_name'] == self.piece_name]
@@ -80,9 +85,14 @@ class MakeAlteration:
         merged_df = self.merge_with_original_df(alteration_df, total_alt_df)
         merged_df = self.get_mtm_dependent_coords(merged_df)
 
-        # TODO: Optional, order columns
-
-        merged_df.to_excel("../data/output_tables/processed_alterations_2.xlsx", index=False)
+        # Save final table
+        # Ensure the save folder exists
+        os.makedirs(save_folder, exist_ok=True)
+        save_filepath = f"{self.save_folder}/altered_{self.piece_name}{self.file_format}"
+        if self.file_format == '.xlsx':
+            merged_df.to_excel(save_filepath, index=False)
+        elif self.file_format == '.csv':
+            merged_df.to_csv(save_filepath, index=False)
     
     def process_alteration_rules(self, row):
         if pd.isna(row['alteration_type']):
@@ -695,6 +705,16 @@ if __name__ == "__main__":
     # Set Table paths
     input_table_path = "../data/output_tables/combined_alteration_tables/" + alteration_input
     input_vertices_path = "../data/output_tables/vertices/" + vertices_input
+
+    # Specify save folder Dir
+    save_folder = "../data/output_tables/processed_alterations/"
+    file_format = '.xlsx' 
+    #file_format = '.csv'
     
-    make_alteration = MakeAlteration(input_table_path, input_vertices_path, piece_name=piece_name)
+    make_alteration = MakeAlteration(input_table_path, input_vertices_path, 
+                                     piece_name=piece_name, save_folder = save_folder, 
+                                     file_format=file_format) 
+    
     processed_df = make_alteration.apply_alteration_rules(custom_alteration=False)
+
+    # Apply alteration for all, and save to separate directories
