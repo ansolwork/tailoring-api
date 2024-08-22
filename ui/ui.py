@@ -5,7 +5,7 @@ import tempfile
 import pandas as pd
 from matplotlib import pyplot as plt
 from dxf_loader import DXFLoader
-from ui.apply_alteration import ApplyAlteration  # Ensure this import is correct
+from apply_alteration import ApplyAlteration  # Ensure this import is correct
 
 # Define process_dxf function
 def process_dxf(file):

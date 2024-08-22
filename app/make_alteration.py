@@ -11,21 +11,29 @@ from data_processing_utils import DataProcessingUtils
 # Done: Fixed coordinates
 # Next -> ?
 
+# TODO: Filter based on piece? Done
+# TODO: The error is because the MTM points in the input file overrides the old - see create_table. NOT the alteration points, but all other points!
+
 class MakeAlteration:
-    def __init__(self, input_table_path, input_vertices_path):
+    def __init__(self, input_table_path, input_vertices_path, piece_name):
         self.processing_utils = DataProcessingUtils()
 
         self.input_table_path = input_table_path
         self.input_vertices_path = input_vertices_path
 
-        self.df_alt = ""
+        self.piece_name = piece_name
         self.start_df = self.processing_utils.load_csv(input_table_path)
+        self.start_df = self.filter_by_piece_name()
+
         self.vertices_df = self.processing_utils.load_csv(input_vertices_path)
+
+        self.df_alt = ""
         self.total_alt = []
         self.vertices_list = []
-
         self.scaling_factor = 25.4 # to mm
 
+    def filter_by_piece_name(self):
+        return self.start_df[self.start_df['piece_name'] == self.piece_name]
 
     def prepare_dataframe(self, df):
         df['pl_point_x'] = pd.to_numeric(df['pl_point_x'], errors='coerce').fillna(0)
@@ -46,7 +54,6 @@ class MakeAlteration:
         alteration_df = self.prepare_dataframe(self.start_df.copy())
         self.vertices_df = self.vertices_df.copy().apply(self.reduce_original_vertices, axis=1)
         self.vertices_df.to_excel("../data/output_tables/vertices_df.xlsx", index=False)
-    
         
         # Extract vertices column from DataFrame as a list of strings
         vertices_string_list = self.vertices_df['vertices'].tolist()
@@ -59,6 +66,9 @@ class MakeAlteration:
 
         # Remove duplicates while preserving order
         self.vertices_list = self.processing_utils.remove_duplicates_preserve_order(flattened_vertices_list)
+
+        print("Start Alteration Data")
+        print(self.start_df)
 
         # Apply alteration rules
         alteration_df = alteration_df.apply(self.process_alteration_rules, axis=1)
@@ -103,6 +113,8 @@ class MakeAlteration:
                     existing['mtm_points_in_altered_vertices'] = alt_set['mtm_points_in_altered_vertices'] + existing['mtm_points_in_altered_vertices']
 
                     # Don't forget to include all the altered vertices
+                    print("Altered Vertices Failure")
+                    print(altered_vertices)
                     altered_vertices_copy = altered_vertices.copy()
                     update_altered_vertices = altered_vertices_copy + existing['altered_vertices']
 
@@ -535,6 +547,9 @@ class MakeAlteration:
                 first_pt = alt_set["mtm_point"]
                 second_pt = alt_set["mtm_dependant"]
 
+                print("Alt Set")
+                print(alt_set)
+
                 first_point = self.get_pl_points(first_pt)
                 second_point = self.get_pl_points(second_pt)
 
@@ -658,9 +673,28 @@ class MakeAlteration:
         return df
 
 if __name__ == "__main__":
-    # TODO: run through all Vertices / Combined tables
-    input_table_path = "../data/output_tables/combined_alteration_tables/combined_table_4-WAIST.csv"
-    input_vertices_path = "../data/output_tables/vertices/LGFG-SH-01-CCB-FO_vertices.csv"
+
+    ###### Piece names ####
+    # Chest 
+    #piece_name = "LGFG-SH-01-CCB-FO"
+    #alteration_input = "combined_table_4-WAIST.csv"
+
+    # Cuffs
+    #piece_name = "LGFG-FG-CUFF-S2"
+    #piece_name = "LGFG-SH-CUFF-D1"
+    #alteration_input = "combined_table_2SL-FCUFF.csv"
+
+    # Collar
+    piece_name = "LGFG-1648-FG-07S"
+    alteration_input = "combined_table_3-COLLAR.csv"
+    ########
     
-    make_alteration = MakeAlteration(input_table_path, input_vertices_path)
+    # Vertices Input
+    vertices_input = piece_name + "_vertices.csv"
+
+    # Set Table paths
+    input_table_path = "../data/output_tables/combined_alteration_tables/" + alteration_input
+    input_vertices_path = "../data/output_tables/vertices/" + vertices_input
+    
+    make_alteration = MakeAlteration(input_table_path, input_vertices_path, piece_name=piece_name)
     processed_df = make_alteration.apply_alteration_rules(custom_alteration=False)

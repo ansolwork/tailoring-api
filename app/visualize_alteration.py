@@ -311,6 +311,8 @@ class VisualizeAlteration:
         """
         # Set the figure size and adjust layout to ensure the plot fits well
         fig.set_size_inches(10, 6)  # Adjust as needed
+        # Set the figure size to 12x12 inches to match the desired output size
+        #fig.set_size_inches(12, 12)
         plt.tight_layout()
 
         # Set titles and labels if needed

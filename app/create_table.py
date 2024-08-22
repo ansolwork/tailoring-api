@@ -14,7 +14,7 @@ class CreateTable:
 
         # Add more sheets if necessary
         self.sheet_list = ["SHIRT-FRONT", "SHIRT-BACK", "SHIRT-YOKE", "SHIRT-SLEEVE", 
-                           "SHIRT-COLLAR", "SHIRT-COLLAR-BAND", "SHIRT-CUFF"]
+                           "SHIRT-COLLAR", "SHIRT-COLLAR BAND", "SHIRT-CUFF"]
 
     def load_table(self):
         # Load all sheets into a dictionary of DataFrames
@@ -103,18 +103,22 @@ class CreateTable:
                 load_path = os.path.join(self.output_table_path, filename)
                 df = self.load_csv(load_path)
 
-                # Do operation here
-                join_col = df['piece_name'].iloc[0]  # Use .iloc[0] to safely get the first element
-                matching_rows = self.combined_entities_joined_df[self.combined_entities_joined_df['piece_name'] == join_col]
+                # Iterate over each unique piece_name in the DataFrame
+                unique_piece_names = df['piece_name'].unique()
+
+            for piece_name in unique_piece_names:
+                # Find matching rows in the combined_entities_joined_df for the current piece_name
+                matching_rows = self.combined_entities_joined_df[self.combined_entities_joined_df['piece_name'] == piece_name]
 
                 # Concatenate the DataFrames
                 df = pd.concat([df, matching_rows], axis=0)
                 
-                # Ensure 'vertices' is dropped
+            # Ensure 'vertices' column is dropped
+            if 'vertices' in df.columns:
                 df.drop(columns=['vertices'], inplace=True)
 
-                # Save the updated DataFrame back to CSV
-                df.to_csv(load_path, index=False)
+            # Save the updated DataFrame back to CSV
+            df.to_csv(load_path, index=False)
 
     def create_vertices_df(self):
         # Base directory where all piece_name directories will be created
