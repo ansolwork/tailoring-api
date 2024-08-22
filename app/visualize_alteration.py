@@ -305,6 +305,62 @@ class VisualizeAlteration:
         ax.set_xlabel("X Coordinates")
         ax.set_ylabel("Y Coordinates")
 
+    def plot_polylines_table_2(self, output_dir="../data/output_graphs/"):
+        '''
+            Same as above functionbut combines all points before plotting.
+        '''
+        sns.set(style="whitegrid")
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        plot_df = self.plot_df.copy()
+
+        xs_alt_list, ys_alt_list = [], []
+        xs_alt_reduced_list, ys_alt_reduced_list = [], []
+
+        for _, row in plot_df.iterrows():
+            xs, ys = row['unique_vertices_x'], row['unique_vertices_y']
+            xs_alt = self.data_processing_utils.filter_valid_coordinates(row['altered_vertices_x'])
+            ys_alt = self.data_processing_utils.filter_valid_coordinates(row['altered_vertices_y'])
+            xs_alt_reduced = self.data_processing_utils.filter_valid_coordinates(row['altered_vertices_reduced_x'])
+            ys_alt_reduced = self.data_processing_utils.filter_valid_coordinates(row['altered_vertices_reduced_y'])
+
+            xs_alt_list.extend(xs_alt)
+            ys_alt_list.extend(ys_alt)
+            xs_alt_reduced_list.extend(xs_alt_reduced)
+            ys_alt_reduced_list.extend(ys_alt_reduced)
+            
+            ax.plot(xs, ys, marker='o', linewidth=0.5, markersize=5, color="#006400", label="Original")
+
+            #self.plot_polylines(ax, row)
+            self.plot_all_mtm_points(ax, plot_df)
+        
+        ax.plot(xs_alt_list, ys_alt_list, marker='o', linestyle='-', linewidth=1, markersize=3, color="#00CED1", alpha=0.85, label="Altered")
+        ax.plot(xs_alt_reduced_list, ys_alt_reduced_list, marker='x', linestyle='-.', linewidth=1.5, markersize=8, color="#BA55D3", alpha=0.7, label="Altered Reduced")
+
+        # Customize and clean up the legend
+        ax.legend(handles=[
+            Line2D([0], [0], color="#006400", marker='o', label="Original", linewidth=0.5, markersize=5),
+            Line2D([0], [0], color="#00CED1", linestyle='-', marker='o', label="Altered", linewidth=0.5, markersize=3),
+            Line2D([0], [0], color="#BA55D3", linestyle='-.', marker='x', label="Altered Reduced", linewidth=1, markersize=8)
+        ])
+
+        ax.set_title('Polyline Plot for ALT Table', fontsize=16)
+        ax.set_xlabel('X Coordinate [mm]', fontsize=14)
+        ax.set_ylabel('Y Coordinate [mm]', fontsize=14)
+
+        ax.tick_params(axis='both', which='major', labelsize=12)
+
+        ax.grid(True)
+
+        plt.tight_layout()
+
+        output_path = os.path.join(output_dir, "polygon_debug.png")
+        plt.savefig(output_path, dpi=300)
+        plt.close()
+
+        print(f"Altered Plot Saved To {output_path}")
+
     def save_plot_as_svg(self, fig, ax, output_svg_path):
         """
         Saves the given plot to an SVG file.
@@ -437,7 +493,7 @@ class VisualizeAlteration:
                     points_between = coords_list[start_index + 1:end_index]
                     print(f"Points between {dependent_first} and {dependent_last}: {points_between}")
                 except:
-                    print(f"Point(s) {dependent_first} and {dependent_last} not found")
+                    #print(f"Point(s) {dependent_first} and {dependent_last} not found")
                     points_between = []
 
                 segments = []
@@ -477,10 +533,14 @@ class VisualizeAlteration:
         xs_alt_list = self.data_processing_utils.flatten_if_needed(xs_alt_list)
         ys_alt_list = self.data_processing_utils.flatten_if_needed(ys_alt_list)
 
+        # Set aspect ratio to be equal to maintain the scale in actual size
+        ax.set_aspect('equal', 'box')
+
+        # Set the figure size and adjust layout to ensure the plot fits well
+        plt.tight_layout()
+        
         # Plot the altered segment
         ax.plot(xs_alt_list, ys_alt_list, marker='o', linestyle='-', linewidth=1, markersize=3, color="#00CED1", alpha=0.85, label="Altered")
-
-        print(coords)
 
         ax.set_title('Polyline Plot for ALT Table', fontsize=16)
         ax.set_xlabel('X Coordinate [in]', fontsize=14)
@@ -490,12 +550,10 @@ class VisualizeAlteration:
 
         ax.grid(True)
 
-        plt.tight_layout()
-
         output_path = os.path.join(output_dir, "altered_polygon.png")
         output_path_svg = os.path.join(output_dir, "altered_polygon.svg")
 
-        plt.savefig(output_path, dpi=300)
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
 
         self.save_plot_as_svg(fig, ax, output_path_svg)
@@ -503,8 +561,8 @@ class VisualizeAlteration:
         print(f"Altered Plot Saved To {output_path}")
 
         # Convert SVG to HPGL (Inkscape method)
-        #output_hpgl_path = os.path.join(output_dir, "altered_polygon.hpgl")
-        #self.svg_to_hpgl(output_path_svg, output_hpgl_path)
+        output_hpgl_path = os.path.join(output_dir, "altered_polygon.hpgl")
+        self.svg_to_hpgl(output_path_svg, output_hpgl_path)
 
     def plot_all_mtm_points(self, ax, row):
         for point in row['mtm_points']:
