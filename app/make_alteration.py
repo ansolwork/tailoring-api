@@ -697,6 +697,11 @@ if __name__ == "__main__":
     # Collar
     piece_name = "LGFG-1648-FG-07S"
     alteration_input = "combined_table_3-COLLAR.csv"
+
+    # 1LTH-FULL
+    #piece_name = "CIRCLE-12BY12-INCH"
+    piece_name = "SQUARE-12BY12-INCH"
+    alteration_input = "combined_table_1LTH-FULL.csv"
     ########
     
     # Vertices Input
@@ -718,3 +723,4 @@ if __name__ == "__main__":
     processed_df = make_alteration.apply_alteration_rules(custom_alteration=False)
 
     # Apply alteration for all, and save to separate directories
+    # for .. all files in folder
