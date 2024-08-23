@@ -7,8 +7,8 @@ app = Flask(__name__)
 # TODO: Keep config outside the code,for now hardcoded
 ALLOWED_EXTENSIONS = {'xlsx', 'csv'}
 AWS_S3_BUCKET_NAME = 'lgfgbucket'
-AWS_ACCESS_KEY = 'AKIASVLKCGP2TVCZVKO2'
-AWS_SECRET_KEY = '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'
+AWS_ACCESS_KEY = ''
+AWS_SECRET_KEY = ''
 AWS_INPUT_DIR_PATH = "data/input/mtm-combined-entites/"
 
 
