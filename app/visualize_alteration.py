@@ -17,6 +17,10 @@ matplotlib.use('Agg')  # Use 'Agg' backend for non-GUI environments
 from data_processing_utils import DataProcessingUtils
 
 ## TODO:
+# Make SVG file for all
+# Make it consistent
+# Create a save directory for images
+
 # Fix so that plot polylines calls plot alteration as well
 # Fix SVG and HPGL Format to match the altered polygon name
 
@@ -288,20 +292,8 @@ class VisualizeAlteration:
         print(f"Vertices Plot Saved To {output_vertices_path}")
 
         # Plot the alteration table
-        fig_alteration, ax_alteration = plt.subplots(figsize=(10, 6))
-        self.plot_alteration_table(output_dir)
+        self.plot_alteration_table(output_dir=output_dir)
 
-        ax_alteration.set_title(f'Alteration Table Plot for {self.piece_name}', fontsize=16)
-        ax_alteration.set_xlabel('X Coordinate [in]', fontsize=14)
-        ax_alteration.set_ylabel('Y Coordinate [in]', fontsize=14)
-        ax_alteration.tick_params(axis='both', which='major', labelsize=12)
-        ax_alteration.grid(True)
-        plt.tight_layout()
-        output_alteration_path = os.path.join(output_dir, f"alteration_table_plot_{self.piece_name}.png")
-        plt.savefig(output_alteration_path, dpi=300)
-        plt.close(fig_alteration)
-        print(f"Alteration Table Plot Saved To {output_alteration_path}")
-     
     def plot_only_vertices(self, output_dir="../data/output_graphs/"):
         sns.set(style="whitegrid")
 
@@ -389,9 +381,9 @@ class VisualizeAlteration:
             Line2D([0], [0], color="#BA55D3", linestyle='-.', marker='x', label="Altered Reduced", linewidth=1, markersize=8)
         ])
 
-        ax.set_title('Polyline Plot for ALT Table', fontsize=16)
-        ax.set_xlabel('X Coordinate [mm]', fontsize=14)
-        ax.set_ylabel('Y Coordinate [mm]', fontsize=14)
+        ax.set_title('Combined Plot (Original + Altered)', fontsize=16)
+        ax.set_xlabel('X Coordinate [in]', fontsize=14)
+        ax.set_ylabel('Y Coordinate [in]', fontsize=14)
 
         ax.tick_params(axis='both', which='major', labelsize=12)
 
@@ -446,11 +438,11 @@ class VisualizeAlteration:
         except subprocess.CalledProcessError as e:
             print(f"An error occurred while converting SVG to HPGL: {e}")
 
-    def plot_alteration_table(self, output_dir="../data/output_graphs/"):
-
+    def plot_alteration_table(self, output_dir="../data/output_graphs/", fig=None, ax=None):
         sns.set(style="whitegrid")
 
-        fig, ax = plt.subplots(figsize=(10, 6))
+        if fig is None or ax is None:
+            fig, ax = plt.subplots(figsize=(10, 6))
 
         plot_df = self.plot_df.copy()
 
@@ -535,9 +527,7 @@ class VisualizeAlteration:
                     start_index = coords_list.index(dependent_first)
                     end_index = coords_list.index(dependent_last)
                     points_between = coords_list[start_index + 1:end_index]
-                    print(f"Points between {dependent_first} and {dependent_last}: {points_between}")
                 except:
-                    #print(f"Point(s) {dependent_first} and {dependent_last} not found")
                     points_between = []
 
                 segments = []
@@ -594,8 +584,8 @@ class VisualizeAlteration:
 
         ax.grid(True)
 
-        output_path = os.path.join(output_dir, "altered_polygon.png")
-        output_path_svg = os.path.join(output_dir, "altered_polygon.svg")
+        output_path = os.path.join(output_dir, f"altered_plot_{self.piece_name}.png")
+        output_path_svg = os.path.join(output_dir, "altered_plot.svg")
 
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
@@ -607,6 +597,7 @@ class VisualizeAlteration:
         # Convert SVG to HPGL (Inkscape method)
         output_hpgl_path = os.path.join(output_dir, "altered_polygon.hpgl")
         self.svg_to_hpgl(output_path_svg, output_hpgl_path)
+
 
     def plot_all_mtm_points(self, ax, row):
         for point in row['mtm_points']:
@@ -636,4 +627,4 @@ if __name__ == "__main__":
     visualize_alteration = VisualizeAlteration(input_table_path, input_vertices_path)
     visualize_alteration.prepare_plot_data()
     visualize_alteration.plot_polylines_table()
-    visualize_alteration.plot_alteration_table()
+    #visualize_alteration.plot_alteration_table()
