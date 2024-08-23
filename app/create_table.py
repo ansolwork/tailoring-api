@@ -14,13 +14,13 @@ class CreateTable:
 
         # Add more sheets if necessary
         self.sheet_list = ["SHIRT-FRONT", "SHIRT-BACK", "SHIRT-YOKE", "SHIRT-SLEEVE", 
-                           "SHIRT-COLLAR", "SHIRT-COLLAR-BAND", "SHIRT-CUFF"]
+                           "SHIRT-COLLAR", "SHIRT-COLLAR BAND", "SHIRT-CUFF", "SQUARE-PIECE", "CIRCLE-PIECE"]
 
     def load_table(self):
         # Load all sheets into a dictionary of DataFrames
         df_dict = pd.read_excel(self.alteration_filepath, sheet_name=None)
         return df_dict
-    
+        
     @staticmethod
     def load_csv(filepath):
         df_csv = pd.read_csv(filepath)
@@ -43,7 +43,7 @@ class CreateTable:
         for filename in os.listdir(self.combined_entities_folder):
             if filename.endswith(".xlsx"):
                 filepath = os.path.join(self.combined_entities_folder, filename)
-                print(f"Processing file: {filepath}")
+                #print(f"Processing file: {filepath}")
                 
                 # Load the current Excel file
                 combined_df = pd.read_excel(filepath)
@@ -51,8 +51,13 @@ class CreateTable:
                 # Rename the 'Filename' column to 'piece_name' and remove the '.dxf' extension
                 if 'Filename' in combined_df.columns:
                     combined_df = combined_df.rename(columns={'Filename': 'piece_name'})
-                    combined_df['piece_name'] = combined_df['piece_name'].str.replace(r'\d+\.dxf$', '', regex=True).str.strip()
-                
+                    
+                    # Remove the '.dxf' extension and strip leading/trailing whitespace
+                    combined_df['piece_name'] = combined_df['piece_name'].str.replace(r'\.dxf$', '', regex=True).str.strip()
+                    
+                    # Remove only trailing spaces and numbers, ensuring valid names remain intact
+                    combined_df['piece_name'] = combined_df['piece_name'].str.replace(r'\s+\d*$', '', regex=True).str.strip()
+
                 combined_df_list.append(combined_df)
         
         # Combine all the DataFrames from different files into one
@@ -68,16 +73,27 @@ class CreateTable:
         self.combined_entities_joined_df = final_combined_df
     
     def merge_tables(self):
-        # This will keep only the pieces we have combined entities for
-        self.merged_df = pd.merge(self.alteration_joined_df, self.combined_entities_joined_df, on=['piece_name', 'mtm points'], how='right')
-    
+        self.alteration_joined_df['piece_name'] = self.alteration_joined_df['piece_name'].fillna('')
+        self.combined_entities_joined_df['piece_name'] = self.combined_entities_joined_df['piece_name'].fillna('')
+
+        self.merged_df = pd.merge(
+            self.alteration_joined_df, 
+            self.combined_entities_joined_df, 
+            on=['piece_name', 'mtm points'], 
+            how='right'
+        )
+
+        self.merged_df.to_csv("../data/output_tables/merged_df.csv")
+
     def save_table_csv(self, output_filename_prefix="combined_table"):
         
         output_table_path = self.output_table_path
 
         # Ensure the output directory exists
         os.makedirs(output_table_path, exist_ok=True)
-        
+
+        self.merged_df['piece_name'] = self.merged_df['piece_name'].str.replace(".dxf", "", regex=False)
+
         # Group the DataFrame by 'alteration_rule'
         grouped = self.merged_df.groupby('alteration_rule')
         
@@ -103,18 +119,22 @@ class CreateTable:
                 load_path = os.path.join(self.output_table_path, filename)
                 df = self.load_csv(load_path)
 
-                # Do operation here
-                join_col = df['piece_name'].iloc[0]  # Use .iloc[0] to safely get the first element
-                matching_rows = self.combined_entities_joined_df[self.combined_entities_joined_df['piece_name'] == join_col]
+                # Iterate over each unique piece_name in the DataFrame
+                unique_piece_names = df['piece_name'].unique()
+
+            for piece_name in unique_piece_names:
+                # Find matching rows in the combined_entities_joined_df for the current piece_name
+                matching_rows = self.combined_entities_joined_df[self.combined_entities_joined_df['piece_name'] == piece_name]
 
                 # Concatenate the DataFrames
                 df = pd.concat([df, matching_rows], axis=0)
                 
-                # Ensure 'vertices' is dropped
+            # Ensure 'vertices' column is dropped
+            if 'vertices' in df.columns:
                 df.drop(columns=['vertices'], inplace=True)
 
-                # Save the updated DataFrame back to CSV
-                df.to_csv(load_path, index=False)
+            # Save the updated DataFrame back to CSV
+            df.to_csv(load_path, index=False)
 
     def create_vertices_df(self):
         # Base directory where all piece_name directories will be created
@@ -126,27 +146,30 @@ class CreateTable:
 
         # Loop through each unique piece_name
         for piece_name in unique_piece_names:
+            # Remove ".dxf" extension from piece_name
+            sanitized_piece_name = piece_name.replace(".dxf", "")
+
             # Filter rows where piece_name matches the current piece_name
             matching_rows = self.combined_entities_joined_df[self.combined_entities_joined_df['piece_name'] == piece_name]
             
             # Extract unique vertices for this piece_name
             unique_vertices = matching_rows['vertices'].unique()
-            
+
             # Create a DataFrame with piece_name and its corresponding unique vertices
-            vertices_df = pd.DataFrame({'piece_name': piece_name, 'vertices': unique_vertices})
+            vertices_df = pd.DataFrame({'piece_name': sanitized_piece_name, 'vertices': unique_vertices})
             
             # Drop rows where 'vertices' is empty or NaN
             vertices_df = vertices_df.dropna(subset=['vertices'])
             
             # Save the DataFrame to a CSV file in the corresponding directory
-            output_path = os.path.join(base_dir, f'{piece_name}_vertices.csv')
+            output_path = os.path.join(base_dir, f'{sanitized_piece_name}_vertices.csv')
             vertices_df.to_csv(output_path, index=False)
             
             # Print the DataFrame (optional)
-            print(f'Saved {output_path}')
+            #print(f'Saved {output_path}')
 
 if __name__ == "__main__":
-    alteration_filepath = "../data/input/MTM-POINTS.xlsx"
+    alteration_filepath = "../data/input/mtm_points.xlsx"
     combined_entities_folder = "../data/input/mtm-combined-entities/"
     create_table = CreateTable(alteration_filepath, combined_entities_folder)
     
@@ -163,3 +186,9 @@ if __name__ == "__main__":
     # Save the combined DataFrame as CSV files 
     create_table.save_table_csv()
     create_table.add_other_mtm_points()
+
+    # DEBUG
+    print("\n# Debug: All Unique Processed Piece Names. A common error is if they do not match the Actual piece name. \nCheck for extra spaces, incomplete names or unwanted extensions (e.g. .dxf)\n")
+    print(f"Processed Piece Names: {create_table.combined_entities_joined_df['piece_name'].unique()}\n")
+    print(f"Combined Entities (They should match): {create_table.alteration_joined_df['piece_name'].unique()}")
+    print("\nNOTE: If there are pieces in the Processed Piece Names that do not exist in the Combined entities or vice versa, then that table needs to be created")
