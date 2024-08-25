@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import numpy as np
 
 class CreateTable:
     def __init__(self, alteration_filepath, combined_entities_folder):
@@ -122,19 +123,25 @@ class CreateTable:
                 # Iterate over each unique piece_name in the DataFrame
                 unique_piece_names = df['piece_name'].unique()
 
-            for piece_name in unique_piece_names:
-                # Find matching rows in the combined_entities_joined_df for the current piece_name
-                matching_rows = self.combined_entities_joined_df[self.combined_entities_joined_df['piece_name'] == piece_name]
+                for piece_name in unique_piece_names:
+                    # Find matching rows in the combined_entities_joined_df for the current piece_name
+                    matching_rows = self.combined_entities_joined_df[self.combined_entities_joined_df['piece_name'] == piece_name]
 
-                # Concatenate the DataFrames
-                df = pd.concat([df, matching_rows], axis=0)
-                
-            # Ensure 'vertices' column is dropped
-            if 'vertices' in df.columns:
-                df.drop(columns=['vertices'], inplace=True)
+                    # Concatenate the DataFrames
+                    df = pd.concat([df, matching_rows], axis=0)
 
-            # Save the updated DataFrame back to CSV
-            df.to_csv(load_path, index=False)
+                # Ensure 'vertices' column is dropped
+                if 'vertices' in df.columns:
+                    df.drop(columns=['vertices'], inplace=True)
+
+                # Remove rows where all columns except for specific ones (like 'piece_name') are NaN
+                df.dropna(how='all', subset=[col for col in df.columns if col != 'piece_name'], inplace=True)
+
+                # Save the updated DataFrame back to CSV
+                df.to_csv(load_path, index=False)
+
+                print(f"Updated DataFrame saved to {load_path}")
+
 
     def create_vertices_df(self):
         # Base directory where all piece_name directories will be created

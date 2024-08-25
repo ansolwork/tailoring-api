@@ -265,6 +265,7 @@ class VisualizeAlteration:
 
         # Plot the combined plot (polylines + vertices)
         fig_combined, ax_combined = plt.subplots(figsize=(10, 6))
+        ax_combined.set_aspect('equal', 'box')  # Ensure equal aspect ratio for real scale
         for _, row in self.plot_df.iterrows():
             self.plot_combined(ax_combined, row)
             self.plot_all_mtm_points(ax_combined, self.plot_df)
@@ -282,7 +283,7 @@ class VisualizeAlteration:
         output_combined_path_svg = os.path.join(svg_dir, f"{combined_filename}.svg")
         output_combined_path_hpgl = os.path.join(hpgl_dir, f"{combined_filename}.hpgl")
 
-        plt.savefig(output_combined_path_png, dpi=300)
+        plt.savefig(output_combined_path_png, dpi=300, bbox_inches='tight')  # Use bbox_inches='tight'
         self.save_plot_as_svg(fig_combined, ax_combined, output_combined_path_svg)
         self.svg_to_hpgl(output_combined_path_svg, output_combined_path_hpgl)
         
@@ -291,6 +292,7 @@ class VisualizeAlteration:
 
         # Plot only the vertices
         fig_vertices, ax_vertices = plt.subplots(figsize=(10, 6))
+        ax_vertices.set_aspect('equal', 'box')  # Ensure equal aspect ratio
         for _, row in self.plot_df.iterrows():
             xs, ys = row['unique_vertices_x'], row['unique_vertices_y']
             ax_vertices.plot(xs, ys, marker='o', linewidth=0.5, markersize=5, color="#006400", label="Original")
@@ -308,7 +310,7 @@ class VisualizeAlteration:
         output_vertices_path_svg = os.path.join(svg_dir, f"{vertices_filename}.svg")
         output_vertices_path_hpgl = os.path.join(hpgl_dir, f"{vertices_filename}.hpgl")
 
-        plt.savefig(output_vertices_path_png, dpi=300)
+        plt.savefig(output_vertices_path_png, dpi=300, bbox_inches='tight')
         self.save_plot_as_svg(fig_vertices, ax_vertices, output_vertices_path_svg)
         self.svg_to_hpgl(output_vertices_path_svg, output_vertices_path_hpgl)
 
@@ -317,6 +319,7 @@ class VisualizeAlteration:
 
         # Plot the alteration table and save it
         fig_alteration, ax_alteration = plt.subplots(figsize=(10, 6))
+        ax_alteration.set_aspect('equal', 'box')  # Ensure equal aspect ratio
         self.plot_alteration_table(output_dir=output_dir, fig=fig_alteration, ax=ax_alteration)
 
         alteration_filename = f"alteration_table_plot_{self.piece_name}"
@@ -330,10 +333,12 @@ class VisualizeAlteration:
         plt.close(fig_alteration)
         print(f"Alteration Table Plot Saved To {output_alteration_path_png}, {output_alteration_path_svg}, {output_alteration_path_hpgl}")
 
+
     def plot_only_vertices(self, output_dir="../data/output_graphs/"):
         sns.set(style="whitegrid")
 
         fig, ax = plt.subplots(figsize=(10, 6))
+        ax.set_aspect('equal', 'box')  # Ensure equal aspect ratio
 
         for _, row in self.plot_df.iterrows():
             xs, ys = row['unique_vertices_x'], row['unique_vertices_y']
@@ -345,7 +350,7 @@ class VisualizeAlteration:
         plt.tight_layout()
 
         output_path = os.path.join(output_dir, "vertices_plot.png")
-        plt.savefig(output_path, dpi=300)
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')  # Use bbox_inches='tight'
         plt.close()
 
         print(f"Vertices Plot Saved To {output_path}")
@@ -423,6 +428,8 @@ class VisualizeAlteration:
 
         if fig is None or ax is None:
             fig, ax = plt.subplots(figsize=(10, 6))
+
+        ax.set_aspect('equal', 'box')
 
         plot_df = self.plot_df.copy()
 
@@ -607,7 +614,8 @@ class VisualizeAlteration:
 
 if __name__ == "__main__":
     #input_table_path = "../data/output_tables/processed_alterations/altered_LGFG-1648-FG-07S.xlsx"
-    input_table_path="../data/output_tables/processed_alterations/altered_SQUARE-12BY12-INCH.xlsx"
+    #input_table_path="../data/output_tables/processed_alterations/altered_SQUARE-12BY12-INCH.xlsx"
+    input_table_path="../data/output_tables/processed_alterations/altered_CIRCLE-12BY12-INCH.xlsx"
     input_vertices_path = "../data/output_tables/vertices_df.xlsx"
     visualize_alteration = VisualizeAlteration(input_table_path, input_vertices_path)
     visualize_alteration.prepare_plot_data()
