@@ -20,7 +20,7 @@ from data_processing_utils import DataProcessingUtils
 # TODO: Remove grid
 
 class VisualizeAlteration:
-    def __init__(self, input_table_path, input_vertices_path):
+    def __init__(self, input_table_path, input_vertices_path, grid=True, plot_actual_size=False):
         self.data_processing_utils = DataProcessingUtils()
         self.input_table_path = input_table_path
         self.piece_name = self.get_piece_name(self.input_table_path)
@@ -33,6 +33,10 @@ class VisualizeAlteration:
         self.scaled_unique_vertices = []
         self.scaled_altered_vertices = []
         self.scaled_altered_vertices_reduced = []
+        
+        # Plot parameters
+        self.grid = grid
+        self.plot_actual_size = plot_actual_size
 
     def initialize_plot_data(self):
         return {
@@ -263,6 +267,9 @@ class VisualizeAlteration:
         os.makedirs(hpgl_dir, exist_ok=True)
         os.makedirs(png_dir, exist_ok=True)
 
+        if self.grid:
+            sns.set(style="whitegrid")
+
         # Plot the combined plot (polylines + vertices)
         fig_combined, ax_combined = plt.subplots(figsize=(10, 6))
         ax_combined.set_aspect('equal', 'box')  # Ensure equal aspect ratio for real scale
@@ -333,7 +340,8 @@ class VisualizeAlteration:
 
 
     def plot_only_vertices(self, output_dir="../data/output_graphs/"):
-        #sns.set(style="whitegrid")
+        if self.grid:
+            sns.set(style="whitegrid")
 
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.set_aspect('equal', 'box')  # Ensure equal aspect ratio
@@ -343,7 +351,6 @@ class VisualizeAlteration:
             ax.plot(xs, ys, marker='o', linewidth=0.5, markersize=5, color="#006400", label="Original")
 
         ax.tick_params(axis='both', which='major', labelsize=12)
-        #ax.grid(True)
 
         plt.tight_layout()
 
@@ -397,7 +404,6 @@ class VisualizeAlteration:
 
         # Set tick parameters and grid for better visualization
         ax.tick_params(axis='both', which='major', labelsize=12)
-        #ax.grid(True)
 
         # Save the figure as an SVG file
         fig.savefig(output_svg_path, format='svg', bbox_inches='tight')
@@ -422,7 +428,8 @@ class VisualizeAlteration:
             print(f"An error occurred while converting SVG to HPGL: {e}")
 
     def plot_alteration_table(self, output_dir, fig=None, ax=None):
-        #sns.set(style="whitegrid")
+        if self.grid:
+            sns.set(style="whitegrid")
 
         if fig is None or ax is None:
             fig, ax = plt.subplots(figsize=(10, 6))
@@ -567,8 +574,6 @@ class VisualizeAlteration:
 
         ax.tick_params(axis='both', which='major', labelsize=12)
 
-        #ax.grid(True)
-
         # Save the plot in the correct directories
         png_dir = os.path.join(output_dir, "png")
         svg_dir = os.path.join(output_dir, "svg")
@@ -615,6 +620,6 @@ if __name__ == "__main__":
     input_table_path="../data/output_tables/processed_alterations/altered_SQUARE-12BY12-INCH.xlsx"
     #input_table_path="../data/output_tables/processed_alterations/altered_CIRCLE-12BY12-INCH.xlsx"
     input_vertices_path = "../data/output_tables/vertices_df.xlsx"
-    visualize_alteration = VisualizeAlteration(input_table_path, input_vertices_path)
+    visualize_alteration = VisualizeAlteration(input_table_path, input_vertices_path, grid=False, plot_actual_size=False)
     visualize_alteration.prepare_plot_data()
     visualize_alteration.plot_polylines_table()
