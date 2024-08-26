@@ -699,10 +699,10 @@ if __name__ == "__main__":
     #alteration_input = "combined_table_3-COLLAR.csv"
 
     # 1LTH-FULL
-    piece_name = "CIRCLE-12BY12-INCH" 
+    #piece_name = "CIRCLE-12BY12-INCH" 
     #piece_name = "LGFG-V2-SH-01-STBS-F" fail
     #piece_name = "LGFG-SH-01-CCB-FO"
-    #piece_name = "SQUARE-12BY12-INCH"
+    piece_name = "SQUARE-12BY12-INCH"
     #piece_name = "LGFG-V2-SH-01-STB-FO"
     alteration_input = "combined_table_1LTH-FULL.csv"
     ########

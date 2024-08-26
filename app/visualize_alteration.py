@@ -16,7 +16,8 @@ matplotlib.use('Agg')  # Use 'Agg' backend for non-GUI environments
 
 from data_processing_utils import DataProcessingUtils
 
-# TODO: Make input table path a directory
+# TODO: Make another parent directory under "plots" which is only the piece name
+# TODO: Remove grid
 
 class VisualizeAlteration:
     def __init__(self, input_table_path, input_vertices_path):
@@ -248,16 +249,15 @@ class VisualizeAlteration:
         self.plot_df = plot_df
         
     def plot_polylines_table(self, output_dir="../data/output_graphs/plots/"):
-        sns.set(style="whitegrid")
-
-        # Ensure the parent directory exists
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir, exist_ok=True)
+        # Create the piece name subdirectory
+        piece_dir = os.path.join(output_dir, self.piece_name)
+        if not os.path.exists(piece_dir):
+            os.makedirs(piece_dir, exist_ok=True)
 
         # Create output directories for each file type
-        svg_dir = os.path.join(output_dir, "svg")
-        hpgl_dir = os.path.join(output_dir, "hpgl")
-        png_dir = os.path.join(output_dir, "png")
+        svg_dir = os.path.join(piece_dir, "svg")
+        hpgl_dir = os.path.join(piece_dir, "hpgl")
+        png_dir = os.path.join(piece_dir, "png")
         
         os.makedirs(svg_dir, exist_ok=True)
         os.makedirs(hpgl_dir, exist_ok=True)
@@ -274,7 +274,6 @@ class VisualizeAlteration:
         ax_combined.set_xlabel('X Coordinate [in]', fontsize=14)
         ax_combined.set_ylabel('Y Coordinate [in]', fontsize=14)
         ax_combined.tick_params(axis='both', which='major', labelsize=12)
-        ax_combined.grid(True)
         plt.tight_layout()
         
         # Save combined plot in PNG, SVG, and HPGL formats
@@ -301,7 +300,6 @@ class VisualizeAlteration:
         ax_vertices.set_xlabel('X Coordinate [in]', fontsize=14)
         ax_vertices.set_ylabel('Y Coordinate [in]', fontsize=14)
         ax_vertices.tick_params(axis='both', which='major', labelsize=12)
-        ax_vertices.grid(True)
         plt.tight_layout()
 
         # Save vertices plot in PNG, SVG, and HPGL formats
@@ -320,7 +318,7 @@ class VisualizeAlteration:
         # Plot the alteration table and save it
         fig_alteration, ax_alteration = plt.subplots(figsize=(10, 6))
         ax_alteration.set_aspect('equal', 'box')  # Ensure equal aspect ratio
-        self.plot_alteration_table(output_dir=output_dir, fig=fig_alteration, ax=ax_alteration)
+        self.plot_alteration_table(output_dir=piece_dir, fig=fig_alteration, ax=ax_alteration)  # Pass piece_dir here
 
         alteration_filename = f"alteration_table_plot_{self.piece_name}"
         output_alteration_path_png = os.path.join(png_dir, f"{alteration_filename}.png")
@@ -335,7 +333,7 @@ class VisualizeAlteration:
 
 
     def plot_only_vertices(self, output_dir="../data/output_graphs/"):
-        sns.set(style="whitegrid")
+        #sns.set(style="whitegrid")
 
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.set_aspect('equal', 'box')  # Ensure equal aspect ratio
@@ -345,7 +343,7 @@ class VisualizeAlteration:
             ax.plot(xs, ys, marker='o', linewidth=0.5, markersize=5, color="#006400", label="Original")
 
         ax.tick_params(axis='both', which='major', labelsize=12)
-        ax.grid(True)
+        #ax.grid(True)
 
         plt.tight_layout()
 
@@ -399,7 +397,7 @@ class VisualizeAlteration:
 
         # Set tick parameters and grid for better visualization
         ax.tick_params(axis='both', which='major', labelsize=12)
-        ax.grid(True)
+        #ax.grid(True)
 
         # Save the figure as an SVG file
         fig.savefig(output_svg_path, format='svg', bbox_inches='tight')
@@ -424,7 +422,7 @@ class VisualizeAlteration:
             print(f"An error occurred while converting SVG to HPGL: {e}")
 
     def plot_alteration_table(self, output_dir, fig=None, ax=None):
-        sns.set(style="whitegrid")
+        #sns.set(style="whitegrid")
 
         if fig is None or ax is None:
             fig, ax = plt.subplots(figsize=(10, 6))
@@ -569,7 +567,7 @@ class VisualizeAlteration:
 
         ax.tick_params(axis='both', which='major', labelsize=12)
 
-        ax.grid(True)
+        #ax.grid(True)
 
         # Save the plot in the correct directories
         png_dir = os.path.join(output_dir, "png")
@@ -614,8 +612,8 @@ class VisualizeAlteration:
 
 if __name__ == "__main__":
     #input_table_path = "../data/output_tables/processed_alterations/altered_LGFG-1648-FG-07S.xlsx"
-    #input_table_path="../data/output_tables/processed_alterations/altered_SQUARE-12BY12-INCH.xlsx"
-    input_table_path="../data/output_tables/processed_alterations/altered_CIRCLE-12BY12-INCH.xlsx"
+    input_table_path="../data/output_tables/processed_alterations/altered_SQUARE-12BY12-INCH.xlsx"
+    #input_table_path="../data/output_tables/processed_alterations/altered_CIRCLE-12BY12-INCH.xlsx"
     input_vertices_path = "../data/output_tables/vertices_df.xlsx"
     visualize_alteration = VisualizeAlteration(input_table_path, input_vertices_path)
     visualize_alteration.prepare_plot_data()
