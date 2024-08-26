@@ -16,10 +16,10 @@ matplotlib.use('Agg')  # Use 'Agg' backend for non-GUI environments
 
 from data_processing_utils import DataProcessingUtils
 
-# Check if image size is same in hpgl and svg
-
 class VisualizeAlteration:
-    def __init__(self, input_table_path, input_vertices_path, grid=True, plot_actual_size=False):
+    def __init__(self, input_table_path, input_vertices_path, grid=True, plot_actual_size=False, 
+                 override_dpi=None, display_resolution_width=None, display_resolution_height=None):
+        
         self.data_processing_utils = DataProcessingUtils()
         self.input_table_path = input_table_path
         self.piece_name = self.get_piece_name(self.input_table_path)
@@ -27,8 +27,11 @@ class VisualizeAlteration:
         self.df = self.data_processing_utils.load_excel(self.input_table_path)
         self.vertices_df = self.data_processing_utils.load_excel(self.input_vertices_path)
         self.plot_df = ""
+        
+        # Scaling
         #self.scaling_factor = 25.4 # to mm
         self.scaling_factor = 1
+        self.multiplier = math.sqrt(self.scaling_factor)        
         self.scaled_unique_vertices = []
         self.scaled_altered_vertices = []
         self.scaled_altered_vertices_reduced = []
@@ -38,7 +41,14 @@ class VisualizeAlteration:
         self.plot_actual_size = plot_actual_size
         self.width = 10
         self.height = 6
-        self.dpi = 300
+
+        # Display settings
+        # DPI: Dots / Pixels per inch
+        # Needs to be calculated dynamically to fit image to screen
+        self.dpi = 300 # default value
+        self.override_dpi = override_dpi
+        self.display_resolution_width = display_resolution_width
+        self.display_resolution_height = display_resolution_height 
 
     def initialize_plot_data(self):
         return {
@@ -275,34 +285,67 @@ class VisualizeAlteration:
         if self.plot_actual_size:
             xs_all = [x for xs in self.plot_df['unique_vertices_x'].dropna() for x in xs]
             ys_all = [y for ys in self.plot_df['unique_vertices_y'].dropna() for y in ys]
-            width = max(xs_all) - min(xs_all)
-            height = max(ys_all) - min(ys_all)
-            print(f"Actual Size plot: {(width, height)}")
-        else:
-            width, height = self.width, self.height
+            self.width = max(xs_all) - min(xs_all)
+            self.height = max(ys_all) - min(ys_all)
+            print(f"Actual Size plot: {(self.width, self.height)}")
 
-        # 3. Create and configure figures
-        fig_combined, ax_combined = plt.subplots(figsize=(width, height))
-        fig_vertices, ax_vertices = plt.subplots(figsize=(width, height))
-        fig_alteration, ax_alteration = plt.subplots(figsize=(width, height))
+            # 3. Calculate DPI based on the display resolution and desired physical size
+            self.dpi = int(self.calculate_dpi(
+                self.display_resolution_width,
+                self.display_resolution_height,
+                self.width,
+                self.height
+            ))
+        else:
+
+            # 3. Else use override DPI if provided
+            if self.override_dpi:
+                self.dpi = self.override_dpi
+
+        print(f"Calculated DPI = {self.dpi}")
+
+        # 4. Determine the common axis limits
+        xs_all_combined = [x for xs in self.plot_df['unique_vertices_x'].dropna() for x in xs] + \
+                        [x for xs in self.plot_df['altered_vertices_x'].dropna() for x in xs] + \
+                        [x for xs in self.plot_df['altered_vertices_reduced_x'].dropna() for x in xs]
+        ys_all_combined = [y for ys in self.plot_df['unique_vertices_y'].dropna() for y in ys] + \
+                        [y for ys in self.plot_df['altered_vertices_y'].dropna() for y in ys] + \
+                        [y for ys in self.plot_df['altered_vertices_reduced_y'].dropna() for y in ys]
+
+        x_min, x_max = min(xs_all_combined), max(xs_all_combined)
+        y_min, y_max = min(ys_all_combined), max(ys_all_combined)
+
+        # 4. Create and configure figures
+        fig_combined, ax_combined = plt.subplots(figsize=(self.width, self.height))
+        fig_vertices, ax_vertices = plt.subplots(figsize=(self.width, self.height))
+        fig_alteration, ax_alteration = plt.subplots(figsize=(self.width, self.height))
 
         ax_combined.set_aspect('equal', 'box')
         ax_vertices.set_aspect('equal', 'box')
         ax_alteration.set_aspect('equal', 'box')
 
-        # 4. Plot the data by calling the modular methods
+        fig_combined.set_size_inches(self.width, self.height)
+        fig_vertices.set_size_inches(self.width, self.height)
+        fig_alteration.set_size_inches(self.width, self.height)
+
+        # Set the same x and y limits for all axes
+        for ax in [ax_combined, ax_vertices, ax_alteration]:
+            ax.set_xlim(x_min, x_max)
+            ax.set_ylim(y_min, y_max)
+
+        # 5. Plot the data by calling the modular methods
         self.plot_combined(ax_combined)
         self.plot_only_vertices(ax_vertices)
         self.plot_alteration_table(output_dir=piece_dir, fig=fig_alteration, ax=ax_alteration)
 
-        # 5. Save the combined plot
+        # 6. Save the combined plot
         combined_filename = f"combined_plot_{self.piece_name}"
         output_combined_path_png = os.path.join(png_dir, f"{combined_filename}.png")
         output_combined_path_svg = os.path.join(svg_dir, f"{combined_filename}.svg")
         output_combined_path_hpgl = os.path.join(hpgl_dir, f"{combined_filename}.hpgl")
 
-        plt.tight_layout()
-        fig_combined.savefig(output_combined_path_png, dpi=self.dpi, bbox_inches='tight')
+        #plt.tight_layout()
+        fig_combined.savefig(output_combined_path_png, dpi=self.dpi)
         self.save_plot_as_svg(fig_combined, ax_combined, output_combined_path_svg)
         self.svg_to_hpgl(output_combined_path_svg, output_combined_path_hpgl)
         print(f"Combined Plot Saved To {output_combined_path_png}, {output_combined_path_svg}, {output_combined_path_hpgl}")
@@ -313,8 +356,8 @@ class VisualizeAlteration:
         output_vertices_path_svg = os.path.join(svg_dir, f"{vertices_filename}.svg")
         output_vertices_path_hpgl = os.path.join(hpgl_dir, f"{vertices_filename}.hpgl")
 
-        plt.tight_layout()
-        fig_vertices.savefig(output_vertices_path_png, dpi=self.dpi, bbox_inches='tight')
+        #plt.tight_layout()
+        fig_vertices.savefig(output_vertices_path_png, dpi=self.dpi)
         self.save_plot_as_svg(fig_vertices, ax_vertices, output_vertices_path_svg)
         self.svg_to_hpgl(output_vertices_path_svg, output_vertices_path_hpgl)
         print(f"Vertices Plot Saved To {output_vertices_path_png}, {output_vertices_path_svg}, {output_vertices_path_hpgl}")
@@ -325,7 +368,8 @@ class VisualizeAlteration:
         output_alteration_path_svg = os.path.join(svg_dir, f"{alteration_filename}.svg")
         output_alteration_path_hpgl = os.path.join(hpgl_dir, f"{alteration_filename}.hpgl")
 
-        plt.tight_layout()
+        #plt.tight_layout()
+        plt.savefig(output_alteration_path_png, dpi=self.dpi)
         self.save_plot_as_svg(fig_alteration, ax_alteration, output_alteration_path_svg)
         self.svg_to_hpgl(output_alteration_path_svg, output_alteration_path_hpgl)
         print(f"Alteration Table Plot Saved To {output_alteration_path_png}, {output_alteration_path_svg}, {output_alteration_path_hpgl}")
@@ -341,6 +385,10 @@ class VisualizeAlteration:
                 xs, ys = row['unique_vertices_x'], row['unique_vertices_y']
                 ax.plot(xs, ys, marker='o', linewidth=0.5, markersize=5, color="#006400", label="Original")
         ax.tick_params(axis='both', which='major', labelsize=12)
+        
+        ax.set_title(f'Original Vertices Plot for {self.piece_name}', fontsize=16)
+        ax.set_xlabel('X Coordinate [in]', fontsize=14)
+        ax.set_ylabel('Y Coordinate [in]', fontsize=14)
 
     def plot_combined(self, ax):
         for _, row in self.plot_df.iterrows():
@@ -353,10 +401,13 @@ class VisualizeAlteration:
             ys_alt_reduced = self.data_processing_utils.filter_valid_coordinates(row['altered_vertices_reduced_y'])
 
             ax.plot(xs, ys, marker='o', linewidth=0.5, markersize=5, color="#006400", label="Original")
-
             ax.plot(xs_alt_reduced, ys_alt_reduced, marker='x', linestyle='-.', linewidth=1.5, markersize=8, color="#BA55D3", alpha=0.7, label="Altered Reduced")
-
             ax.plot(xs_alt, ys_alt, marker='o', linestyle='-', linewidth=1, markersize=3, color="#00CED1", alpha=0.85, label="Altered")
+            
+            ax.tick_params(axis='both', which='both', labelsize=12)
+            ax.set_title(f'Combined Vertices Plot for {self.piece_name}', fontsize=16)
+            ax.set_xlabel('X Coordinate [in]', fontsize=14)
+            ax.set_ylabel('Y Coordinate [in]', fontsize=14)
 
         ax.legend(handles=[
             Line2D([0], [0], color="#006400", marker='o', label="Original", linewidth=0.5, markersize=5),
@@ -364,16 +415,13 @@ class VisualizeAlteration:
             Line2D([0], [0], color="#BA55D3", linestyle='-.', marker='x', label="Altered Reduced", linewidth=1, markersize=8)
         ])
 
-
     def save_plot_as_svg(self, fig, ax, output_svg_path):
         """
         Saves the given plot to an SVG file.
         """
         # Set the figure size and adjust layout to ensure the plot fits well
         fig.set_size_inches(self.width, self.height)  # Adjust as needed
-        # Set the figure size to 12x12 inches to match the desired output size
-        #fig.set_size_inches(12, 12)
-        plt.tight_layout()
+        #plt.tight_layout()
 
         # Set titles and labels if needed
         ax.set_title(f'Alteration plot for {self.piece_name}', fontsize=16)
@@ -381,10 +429,10 @@ class VisualizeAlteration:
         ax.set_ylabel('Y Coordinate [in]', fontsize=14)
 
         # Set tick parameters and grid for better visualization
-        ax.tick_params(axis='both', which='major', labelsize=12)
+        ax.tick_params(axis='both', which='both', labelsize=12)
 
         # Save the figure as an SVG file
-        fig.savefig(output_svg_path, format='svg', bbox_inches='tight')
+        fig.savefig(output_svg_path, format='svg')
         plt.close(fig)  # Close the figure after saving
 
         print(f"SVG plot saved to {output_svg_path}")
@@ -411,18 +459,6 @@ class VisualizeAlteration:
 
         if fig is None or ax is None:
             fig, ax = plt.subplots(figsize=(self.width, self.height))
-
-        if self.plot_actual_size:
-            # Filter out NaN values and gather all x and y coordinates from the dataframe
-            xs_all = [x for xs in self.plot_df['unique_vertices_x'].dropna() for x in xs]
-            ys_all = [y for ys in self.plot_df['unique_vertices_y'].dropna() for y in ys]
-            
-            # Calculate width and height based on coordinate ranges
-            width = max(xs_all) - min(xs_all)
-            height = max(ys_all) - min(ys_all)
-            
-            # Adjust the figure size to match the actual dimensions
-            fig.set_size_inches(width, height)
 
         ax.set_aspect('equal', 'box')
 
@@ -553,7 +589,7 @@ class VisualizeAlteration:
         ax.set_aspect('equal', 'box')
 
         # Set the figure size and adjust layout to ensure the plot fits well
-        plt.tight_layout()
+        #plt.tight_layout()
         
         # Plot the altered segment
         ax.plot(xs_alt_list, ys_alt_list, marker='o', linestyle='-', linewidth=1, markersize=3, color="#00CED1", alpha=0.85, label="Altered")
@@ -562,27 +598,7 @@ class VisualizeAlteration:
         ax.set_xlabel('X Coordinate [in]', fontsize=14)
         ax.set_ylabel('Y Coordinate [in]', fontsize=14)
 
-        ax.tick_params(axis='both', which='major', labelsize=12)
-
-        # Save the plot in the correct directories
-        png_dir = os.path.join(output_dir, "png")
-        svg_dir = os.path.join(output_dir, "svg")
-        hpgl_dir = os.path.join(output_dir, "hpgl")
-
-        alteration_filename = f"altered_plot_{self.piece_name}"
-
-        output_path_png = os.path.join(png_dir, f"{alteration_filename}.png")
-        output_path_svg = os.path.join(svg_dir, f"{alteration_filename}.svg")
-        output_path_hpgl = os.path.join(hpgl_dir, f"{alteration_filename}.hpgl")
-
-        plt.savefig(output_path_png, dpi=self.dpi, bbox_inches='tight')
-        plt.close()
-
-        self.save_plot_as_svg(fig, ax, output_path_svg)
-        self.svg_to_hpgl(output_path_svg, output_path_hpgl)
-
-        print(f"Altered Plot Saved To {output_path_png}, {output_path_svg}, {output_path_hpgl}")
-
+        ax.tick_params(axis='both', which='both', labelsize=12)
 
     def plot_all_mtm_points(self, ax, row):
         for point in row['mtm_points']:
@@ -604,12 +620,39 @@ class VisualizeAlteration:
         piece_name = file_name_without_extension.split('_', 1)[-1]
 
         return piece_name
+    
+    def calculate_dpi(self, pixel_width, pixel_height, physical_width_in_inches, physical_height_in_inches):
+        """
+        Calculate DPI based on pixel resolution and physical dimensions.
+
+        Parameters:
+        pixel_width (int): The width in pixels of the image or screen.
+        pixel_height (int): The height in pixels of the image or screen.
+        physical_width_in_inches (float): The desired physical width in inches.
+        physical_height_in_inches (float): The desired physical height in inches.
+
+        Returns:
+        float: The DPI (dots per inch) required to match the given dimensions.
+        """
+        dpi_width = pixel_width / physical_width_in_inches
+        dpi_height = pixel_height / physical_height_in_inches
+
+        # Use the smaller DPI to ensure both dimensions fit within the desired physical size
+        dpi = min(dpi_width, dpi_height)
+
+        return dpi
+
 
 if __name__ == "__main__":
     #input_table_path = "../data/output_tables/processed_alterations/altered_LGFG-1648-FG-07S.xlsx"
     input_table_path="../data/output_tables/processed_alterations/altered_SQUARE-12BY12-INCH.xlsx"
     #input_table_path="../data/output_tables/processed_alterations/altered_CIRCLE-12BY12-INCH.xlsx"
     input_vertices_path = "../data/output_tables/vertices_df.xlsx"
-    visualize_alteration = VisualizeAlteration(input_table_path, input_vertices_path, grid=False, plot_actual_size=True)
+
+    # DPI can only be overriden if plot_actual_size = False
+    # Display resolution set for Macbook Pro m2 - change to whatever your screen res is
+    visualize_alteration = VisualizeAlteration(input_table_path, input_vertices_path, 
+                                               grid=False, plot_actual_size=True, override_dpi=300,
+                                               display_resolution_width=1728, display_resolution_height=1117)
     visualize_alteration.prepare_plot_data()
     visualize_alteration.plot_polylines_table()
