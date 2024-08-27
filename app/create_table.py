@@ -169,7 +169,7 @@ class CreateTable:
             vertices_df = vertices_df.dropna(subset=['vertices'])
             
             # Save the DataFrame to a CSV file in the corresponding directory
-            output_path = os.path.join(base_dir, f'{sanitized_piece_name}_vertices.csv')
+            output_path = os.path.join(base_dir, f'vertices_{sanitized_piece_name}.csv')
             vertices_df.to_csv(output_path, index=False)
             
             # Print the DataFrame (optional)

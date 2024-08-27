@@ -12,17 +12,19 @@ import os
 # Done: Fixed coordinates
 # Next -> ?
 
-# TODO: Optional, order columns
+# TODO: Debug why some files are not working
+# TODO: Add storing to AWS
 
 class MakeAlteration:
-    def __init__(self, input_table_path, input_vertices_path, 
-                 piece_name, save_folder, file_format):
+    def __init__(self, input_table_path, input_vertices_path, alteration_rule,
+                 piece_name, save_folder, save_folder_vertices, file_format):
         
         self.processing_utils = DataProcessingUtils()
 
         self.input_table_path = input_table_path
         self.input_vertices_path = input_vertices_path
 
+        self.alteration_rule = alteration_rule
         self.piece_name = piece_name
         self.start_df = self.processing_utils.load_csv(input_table_path)
         self.start_df = self.filter_by_piece_name()
@@ -35,6 +37,7 @@ class MakeAlteration:
         self.scaling_factor = 25.4 # to mm
 
         self.save_folder = save_folder
+        self.save_folder_vertices = save_folder_vertices
         self.file_format = file_format
 
     def filter_by_piece_name(self):
@@ -58,7 +61,9 @@ class MakeAlteration:
     def apply_alteration_rules(self, custom_alteration=False):
         alteration_df = self.prepare_dataframe(self.start_df.copy())
         self.vertices_df = self.vertices_df.copy().apply(self.reduce_original_vertices, axis=1)
-        self.vertices_df.to_excel("../data/output_tables/vertices_df.xlsx", index=False)
+        os.makedirs(self.save_folder_vertices, exist_ok=True)
+        save_filepath_vertices = f"{self.save_folder_vertices}/processed_vertices_{self.piece_name}{self.file_format}"
+        self.vertices_df.to_csv(save_filepath_vertices, index=False)
         
         # Extract vertices column from DataFrame as a list of strings
         vertices_string_list = self.vertices_df['vertices'].tolist()
@@ -72,8 +77,8 @@ class MakeAlteration:
         # Remove duplicates while preserving order
         self.vertices_list = self.processing_utils.remove_duplicates_preserve_order(flattened_vertices_list)
 
-        print("Start Alteration Data")
-        print(self.start_df)
+        #print("Start Alteration Data")
+        #print(self.start_df)
 
         # Apply alteration rules
         alteration_df = alteration_df.apply(self.process_alteration_rules, axis=1)
@@ -88,11 +93,8 @@ class MakeAlteration:
         # Save final table
         # Ensure the save folder exists
         os.makedirs(save_folder, exist_ok=True)
-        save_filepath = f"{self.save_folder}/altered_{self.piece_name}{self.file_format}"
-        if self.file_format == '.xlsx':
-            merged_df.to_excel(save_filepath, index=False)
-        elif self.file_format == '.csv':
-            merged_df.to_csv(save_filepath, index=False)
+        save_filepath = f"{self.save_folder}/{self.alteration_rule}_{self.piece_name}{self.file_format}"
+        merged_df.to_csv(save_filepath, index=False)
     
     def process_alteration_rules(self, row):
         if pd.isna(row['alteration_type']):
@@ -123,8 +125,6 @@ class MakeAlteration:
                     existing['mtm_points_in_altered_vertices'] = alt_set['mtm_points_in_altered_vertices'] + existing['mtm_points_in_altered_vertices']
 
                     # Don't forget to include all the altered vertices
-                    print("Altered Vertices Failure")
-                    print(altered_vertices)
                     altered_vertices_copy = altered_vertices.copy()
                     update_altered_vertices = altered_vertices_copy + existing['altered_vertices']
 
@@ -147,10 +147,10 @@ class MakeAlteration:
         
         # The issue is that it is not enough to filter by alteration_type, since it can have other mtm points
         if row['alteration_type'] == 'X Y MOVE' and pd.notna(row['mtm points']):
-            print("---------")
-            print("Alteration: ")
-            print(row['alteration_type'])
-            print("---------")
+            #print("---------")
+            #print("Alteration: ")
+            #print(row['alteration_type'])
+            #print("---------")
             row = self.apply_xy_move(row)
 
             alt_set = {"mtm_point": int(row['mtm points']),
@@ -174,19 +174,19 @@ class MakeAlteration:
             
         elif row['alteration_type'] in ['CW Ext', 'CCW Ext'] and pd.notna(row['mtm points']):
             if row['mtm points'] != row['mtm_dependent']:
-                print("")
-                print("---------")
-                print("Alteration Type (process rules): ")
-                print(row['alteration_type'])
-                print("---------")
-                print("")
-                print(f"Extension MTM {row['mtm points']}")
+                #print("")
+                #print("---------")
+                #print("Alteration Type (process rules): ")
+                #print(row['alteration_type'])
+                #print("---------")
+                #print("")
+                #print(f"Extension MTM {row['mtm points']}")
                 row = self.apply_xy_move(row)
 
                 # Apply smoothing after getting the new coordinates (i.e. if they aggregate)
                 altered_vertices, mtm_points_in_altered_vertices = self.apply_extension(row)
 
-                print(row['mtm points'])
+                #print(row['mtm points'])
                 
                 alt_set = {"mtm_point": int(row['mtm points']),
                            "mtm_dependant" : int(row['mtm_dependent']),
@@ -203,7 +203,7 @@ class MakeAlteration:
                         "mtm_points_in_altered_vertices" : mtm_points_in_altered_vertices,
                         }
                 alt_set = update_or_add_alt_set(alt_set)
-                print(f"Alteration Set Before Smoothing: {alt_set["altered_vertices"]}")
+                #print(f"Alteration Set Before Smoothing: {alt_set["altered_vertices"]}")
 
         return row
     
@@ -259,7 +259,7 @@ class MakeAlteration:
                         if None not in original and None not in altered:
                             distance = np.sqrt((altered[0] - original[0])**2 + (altered[1] - original[1])**2)
                             distances.append(distance)
-                            print(f"MTM Point {point_info['mtm_point']}, Distance: {distance:.2f} cm")
+                            #print(f"MTM Point {point_info['mtm_point']}, Distance: {distance:.2f} cm")
                 if distances:
                     max_distance = max(distances) * 100  # Convert to cm
                     self.df_alt.at[index, 'distance_euq'] = max_distance
@@ -271,7 +271,7 @@ class MakeAlteration:
                     if not pd.isna(mtm_x) and not pd.isna(mtm_y):
                         distance = np.sqrt((mtm_x - row['pl_point_x'])**2 + (mtm_y - row['pl_point_y'])**2) 
                         distances.append(distance)
-                        print(f"MTM Point {row['mtm points']}, Distance: {distance:.2f} cm")
+                        #print(f"MTM Point {row['mtm points']}, Distance: {distance:.2f} cm")
                     if distances:
                         max_distance = max(distances)  # Convert to cm
                         self.df_alt.at[index, 'distance_euq'] = max_distance
@@ -296,7 +296,7 @@ class MakeAlteration:
         else:
             try:
                 vertices_list = ast.literal_eval(row['vertices'])
-                print(f"Parsed vertices_list: {vertices_list}")
+                #print(f"Parsed vertices_list: {vertices_list}")
                 if isinstance(vertices_list, list) and all(isinstance(vertex, (list, tuple)) and len(vertex) == 2 for vertex in vertices_list):
                     #print(f"Original vertices length: {len(vertices_list)}")
                     reduced_vertices = self.processing_utils.reduce_points(vertices=vertices_list, threshold=0.1)
@@ -394,33 +394,33 @@ class MakeAlteration:
 
                     # Get the dependant point first (by index)
                     dependant_mtm = alt_set['mtm_dependant'][alt_index]
-                    print(f"Dependant MTM {dependant_mtm}")
+                    #print(f"Dependant MTM {dependant_mtm}")
 
                     first_point = self.get_pl_points(dependant_mtm)
                     second_point = self.get_pl_points(mtm_point)
 
                     # Get coordinates of First PT (e.g. 8015)
-                    print(f"First point {first_point}")
+                    #print(f"First point {first_point}")
 
                     # Get coordinates of Second PT (e.g. 8016)
-                    print(f"Second point {second_point}")
+                    #print(f"Second point {second_point}")
 
                     change_x = abs(new_coordinates[0] - second_point[0])
                     change_y = abs(new_coordinates[1] - second_point[1])
                     ascending = (new_coordinates[0] > first_point[0] and new_coordinates[1] > first_point[1]) or \
                                 (new_coordinates[0] < first_point[0] and new_coordinates[1] > first_point[1])
 
-                    print("Is it Ascending? " + str(ascending))
+                    #print("Is it Ascending? " + str(ascending))
 
                     if alteration_type == 'CW Ext':
 
                         # Get correct split vertices
                         vertices_to_mod = split_vertices[alteration_type]
 
-                        print("")
-                        print(f"Applying smoothing on {alteration_type}")
-                        print(f"Vertices to smooth before updating coordinates")
-                        print(vertices_to_mod)
+                        #print("")
+                        #print(f"Applying smoothing on {alteration_type}")
+                        #print(f"Vertices to smooth before updating coordinates")
+                        #print(vertices_to_mod)
 
                         # Update all occurrences of old_coordinates
                         for i, vertex in enumerate(altered_vertices):
@@ -431,14 +431,14 @@ class MakeAlteration:
                             if vertex in coord_mapping:
                                 vertices_to_mod[i] = coord_mapping[vertex]
 
-                        print(f"The coordinates {old_coordinates} have been replaced by {new_coordinates} in the lists.")
-                        print(f"Altered vertices after updating coordinates: {vertices_to_mod}")
+                        #print(f"The coordinates {old_coordinates} have been replaced by {new_coordinates} in the lists.")
+                        #print(f"Altered vertices after updating coordinates: {vertices_to_mod}")
 
                         # This shift should account for the double change?
                         shift = (new_coordinates_x - altered_vertices[-2][0],
                                 new_coordinates_y - altered_vertices[-2][1])
 
-                        print(f"Coordinate Shift {shift}")
+                        #print(f"Coordinate Shift {shift}")
 
                         # Run smoothing on a copy of the entry
                         vertices_to_mod_copy = vertices_to_mod.copy()
@@ -458,10 +458,10 @@ class MakeAlteration:
                         )
                         new_altered_vertices_tst = sorted(new_altered_vertices_tst)
                         
-                        print("Smoothened Vertices to mod")
-                        print(new_altered_vertices_tst)
+                        #print("Smoothened Vertices to mod")
+                        #print(new_altered_vertices_tst)
                         
-                        print(f"CW EXT Ascending: {ascending}")
+                        #print(f"CW EXT Ascending: {ascending}")
 
                         # Concatenate new vertices if exists, else create
                         if 'altered_vertices_smoothened' in alt_set:
@@ -471,26 +471,26 @@ class MakeAlteration:
 
                         # Adjust for possible MTM Points inbetween (smoothened)
                         altered_index_map = {i: coord for i, coord in enumerate(new_altered_vertices_tst)}
-                        print("Altered Index map")
-                        print(altered_index_map)
+                        #print("Altered Index map")
+                        #print(altered_index_map)
                         for point_info in alt_set['mtm_points_in_altered_vertices']:
                             original_index = point_info.get('original_index')
                             original_coordinates = point_info.get('original_coordinates')
                             if original_coordinates in vertices_to_mod:
                                 if original_index is not None:
                                     point_info['altered_coordinates'] = altered_index_map.get(original_index, (None, None))
-                                    print("New Point Info")
-                                    print(point_info)
+                                    #print("New Point Info")
+                                    #print(point_info)
 
                         alt_index += 1
 
                     elif alteration_type == 'CCW Ext':
                         vertices_to_mod = split_vertices[alteration_type]
 
-                        print("")
-                        print(f"Applying smoothing on {alteration_type}")
-                        print(f"Vertices to smooth")
-                        print(vertices_to_mod)
+                        #print("")
+                        #print(f"Applying smoothing on {alteration_type}")
+                        #print(f"Vertices to smooth")
+                        #print(vertices_to_mod)
 
                         # Update all occurrences of old_coordinates
                         for i, vertex in enumerate(altered_vertices):
@@ -501,14 +501,14 @@ class MakeAlteration:
                             if vertex in coord_mapping:
                                 vertices_to_mod[i] = coord_mapping[vertex]
 
-                        print(f"The coordinates {old_coordinates} have been replaced by {new_coordinates} in the lists.")
-                        print(f"Altered vertices after updating coordinates: {vertices_to_mod}")
+                        #print(f"The coordinates {old_coordinates} have been replaced by {new_coordinates} in the lists.")
+                        #print(f"Altered vertices after updating coordinates: {vertices_to_mod}")
 
                         shift = (new_coordinates_x - altered_vertices[1][0],
                                 new_coordinates_y - altered_vertices[1][1])
 
-                        print(f"Coordinate Shift for Alteration Type {shift}")
-                        print(f"CCW EXT Ascending: {ascending}")
+                        #print(f"Coordinate Shift for Alteration Type {shift}")
+                        #print(f"CCW EXT Ascending: {ascending}")
 
                         # Run smoothing on a copy of the entry
                         vertices_to_mod_copy = vertices_to_mod.copy()
@@ -526,8 +526,8 @@ class MakeAlteration:
                         )
                         new_altered_vertices_tst = sorted(new_altered_vertices_tst)
 
-                        print("Smoothened Vertices to mod")
-                        print(new_altered_vertices_tst)
+                        #print("Smoothened Vertices to mod")
+                        #print(new_altered_vertices_tst)
 
                         # Concatenate new vertices if exists, else create
                         if 'altered_vertices_smoothened' in alt_set:
@@ -540,41 +540,41 @@ class MakeAlteration:
 
                         # Adjust for possible MTM Points inbetween (smoothened)
                         altered_index_map = {i: coord for i, coord in enumerate(new_altered_vertices_tst)}
-                        print("Altered Index map")
-                        print(altered_index_map)
+                        #print("Altered Index map")
+                        #print(altered_index_map)
                         for point_info in alt_set['mtm_points_in_altered_vertices']:
                             original_index = point_info.get('original_index')
                             original_coordinates = point_info.get('original_coordinates')
                             if original_coordinates in vertices_to_mod:
                                 if original_index is not None:
                                     point_info['altered_coordinates'] = altered_index_map.get(original_index, (None, None))
-                                    print("New Point Info")
-                                    print(point_info)
+                                    #print("New Point Info")
+                                    #print(point_info)
 
                     alt_index += 1
             else:
-                print(f"Altering {alt_set['alteration']}")
+                #print(f"Altering {alt_set['alteration']}")
                 first_pt = alt_set["mtm_point"]
                 second_pt = alt_set["mtm_dependant"]
 
-                print("Alt Set")
-                print(alt_set)
+                #print("Alt Set")
+                #print(alt_set)
 
                 first_point = self.get_pl_points(first_pt)
                 second_point = self.get_pl_points(second_pt)
 
                 # Get coordinates of First PT (e.g. 8015)
-                print("MTM Point Coordinates")
-                print(first_pt)
-                print(first_point)
+                #print("MTM Point Coordinates")
+                #print(first_pt)
+                #print(first_point)
 
                 # Get coordinates of Second PT (e.g. 8016)
-                print("MTM Dependent Coordinates")
-                print(second_pt)
-                print(second_point)
+                #print("MTM Dependent Coordinates")
+                #print(second_pt)
+                #print(second_point)
 
-                print("Second Point Altered (New coordinates)")
-                print(new_coordinates)
+                #print("Second Point Altered (New coordinates)")
+                #print(new_coordinates)
 
                 change_x = abs(new_coordinates[0] - second_point[0])
                 change_y = abs(new_coordinates[1] - second_point[1])
@@ -638,12 +638,12 @@ class MakeAlteration:
         # Flatten and print mtm dependant values
         mtm_dependant_vals = df['mtm_dependant'].dropna().tolist()
         mtm_dependant_vals_flattened = self.processing_utils.flatten_if_needed(mtm_dependant_vals)
-        print("MTM Dependent:", mtm_dependant_vals)
+        #print("MTM Dependent:", mtm_dependant_vals)
 
         # Get matching rows based on mtm points
         matching_rows = df[df['mtm points'].isin(mtm_dependant_vals_flattened)]
         matching_mtm_labels = matching_rows['mtm points'].unique()
-        print("Matching mtm labels:", matching_mtm_labels)
+        #print("Matching mtm labels:", matching_mtm_labels)
 
         # Define a dictionary to keep track of unique (x, y) pairs
         unique_coords = {}
@@ -659,11 +659,11 @@ class MakeAlteration:
             "coords_y": [key[1] for key in unique_coords.keys()],
             "label": list(unique_coords.values())
         }
-        print("COORDS:", coords)
+        #print("COORDS:", coords)
 
         # Now that coords is defined, we can safely use it in the lambda function
         mtm_dependant_labels = df[df['mtm_dependant'].apply(lambda x: check_all_labels_in_list(x, coords["label"]))]
-        print("MTM Dependant labels:", mtm_dependant_labels)
+        #print("MTM Dependant labels:", mtm_dependant_labels)
 
         # Iterate over the rows in mtm_dependant_labels
         for _, row in mtm_dependant_labels.iterrows():
@@ -684,46 +684,52 @@ class MakeAlteration:
 
 if __name__ == "__main__":
 
-    ###### Piece names ####
-    # Chest 
-    #piece_name = "LGFG-SH-01-CCB-FO"
-    #alteration_input = "combined_table_4-WAIST.csv"
-
-    # Cuffs
-    #piece_name = "LGFG-FG-CUFF-S2"
-    #piece_name = "LGFG-SH-CUFF-D1"
-    #alteration_input = "combined_table_2SL-FCUFF.csv"
-
-    # Collar
-    #piece_name = "LGFG-1648-FG-07S"
-    #alteration_input = "combined_table_3-COLLAR.csv"
-
-    # 1LTH-FULL
-    #piece_name = "CIRCLE-12BY12-INCH" 
-    #piece_name = "LGFG-V2-SH-01-STBS-F" 
-    #piece_name = "LGFG-SH-01-CCB-FO"
-    #piece_name = "SQUARE-12BY12-INCH"
-    #piece_name = "LGFG-V2-SH-01-STB-FO"
-    alteration_input = "combined_table_1LTH-FULL.csv"
-    ########
-    
-    # Vertices Input
-    vertices_input = piece_name + "_vertices.csv"
-
-    # Set Table paths
-    input_table_path = "../data/output_tables/combined_alteration_tables/" + alteration_input
-    input_vertices_path = "../data/output_tables/vertices/" + vertices_input
-
-    # Specify save folder Dir
+    # Directory paths
+    alteration_input_dir = "../data/output_tables/combined_alteration_tables/"
+    vertices_input_dir = "../data/output_tables/vertices/"
     save_folder = "../data/output_tables/processed_alterations/"
-    file_format = '.xlsx' 
-    #file_format = '.csv'
-    
-    make_alteration = MakeAlteration(input_table_path, input_vertices_path, 
-                                     piece_name=piece_name, save_folder = save_folder, 
-                                     file_format=file_format) 
-    
-    processed_df = make_alteration.apply_alteration_rules(custom_alteration=False)
+    save_folder_vertices = "../data/output_tables/processed_vertices/"
+    file_format = '.csv'  # Or '.csv'
 
-    # Apply alteration for all, and save to separate directories
-    # for .. all files in folder
+    # Loop through all CSV files in the alteration_input_dir
+    for alteration_file in os.listdir(alteration_input_dir):
+        if alteration_file.endswith(".csv"):  # Ensure we're only processing CSV files
+                # Construct the full path for the current alteration table file
+                input_table_path = os.path.join(alteration_input_dir, alteration_file)
+                
+                # Read the alteration file to get the unique piece names
+                alteration_df = pd.read_csv(input_table_path)
+                unique_piece_names = alteration_df['piece_name'].unique()
+                alteration_rule = alteration_df['alteration_rule'].dropna().unique()[0]
+
+                # LOOK FOR CIRCLE AND SQUARE HERE
+                print("UNIQUE PIECE NAMES")
+                print(unique_piece_names)
+
+                for piece_name in unique_piece_names:
+                    # Construct the expected vertices file path
+                    vertices_input_file = f"vertices_{piece_name}.csv"
+                    input_vertices_path = os.path.join(vertices_input_dir, vertices_input_file)
+
+                    print("INPUT VERTICES PATH")
+                    print(input_vertices_path)
+
+                    if os.path.exists(input_vertices_path):
+                        print(f"Processing piece: {piece_name}, and entities file: {alteration_file}")
+
+                        try:
+                            # Create an instance of MakeAlteration for the current piece
+                            make_alteration = MakeAlteration(input_table_path, input_vertices_path, alteration_rule=alteration_rule, piece_name=piece_name, 
+                                                             save_folder=save_folder, save_folder_vertices=save_folder_vertices, file_format=file_format)
+                        
+                            # Apply the alteration rules and process the file
+                            make_alteration.apply_alteration_rules(custom_alteration=False)
+                            print(f"Processing complete for piece: {piece_name}")
+                        except Exception as e:
+                            print(f"Error processing file {alteration_file}, and {vertices_input_file}: {e}")
+                            # Optionally, you could log the error to a file instead of just printing it.
+                    else:
+                        print(f"Vertices file not found for piece: {piece_name}, moving to next...")
+                        continue
+        else:
+            print(f"Skipping non-CSV file: {alteration_file}")

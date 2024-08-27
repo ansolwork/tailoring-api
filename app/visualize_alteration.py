@@ -26,8 +26,8 @@ class VisualizeAlteration:
         self.input_table_path = input_table_path
         self.piece_name = self.get_piece_name(self.input_table_path)
         self.input_vertices_path = input_vertices_path
-        self.df = self.data_processing_utils.load_excel(self.input_table_path)
-        self.vertices_df = self.data_processing_utils.load_excel(self.input_vertices_path)
+        self.df = self.data_processing_utils.load_csv(self.input_table_path)
+        self.vertices_df = self.data_processing_utils.load_csv(self.input_vertices_path)
         self.plot_df = ""
         
         # Scaling
@@ -299,7 +299,7 @@ class VisualizeAlteration:
         - filename: The name of the file to save the grid image.
         - num_squares_x: Number of squares along the x-axis (default is 10).
         - num_squares_y: Number of squares along the y-axis (default is 10).
-        - dpi: The resolution in dots per inch for the saved image (default is 300, for PNG only).
+        - dpi: The resolution in dots per inch for the saved image (default is 300).
         - output_dir: The base directory where the file will be saved (default is "../data/output_graphs/plots/").
         """
 
@@ -336,6 +336,10 @@ class VisualizeAlteration:
         ax.set_xticklabels([])
         ax.set_yticklabels([])
 
+        # Save the plot as a PNG file
+        png_filename = full_filename
+        plt.savefig(png_filename, dpi=dpi, format='png')
+
         # Save the plot as a vector image file (SVG, HPGL, DXF)
         plt.savefig(svg_filename, format='svg')
         plt.close(fig)
@@ -344,7 +348,7 @@ class VisualizeAlteration:
         self.svg_to_hpgl(svg_filename, hpgl_filename)
         self.svg_to_dxf(svg_filename, dxf_filename)
 
-        print(f"Grid saved as {svg_filename}, {hpgl_filename}, and {dxf_filename}")
+        print(f"Grid saved as {png_filename}, {svg_filename}, {hpgl_filename}, and {dxf_filename}")
     
     def prepare_plot_data(self, output_dir="../data/output_tables/"):
         plot_data = self.initialize_plot_data()
@@ -724,10 +728,8 @@ class VisualizeAlteration:
             #    plt.text(point['x'], point['y'], (point['movement_x'], point['movement_y']), color='black', ha='right', va='center', fontsize=10)  # Moves text slightly to the right
 
 if __name__ == "__main__":
-    #input_table_path = "../data/output_tables/processed_alterations/altered_LGFG-1648-FG-07S.xlsx"
-    input_table_path="../data/output_tables/processed_alterations/altered_SQUARE-12BY12-INCH.xlsx"
-    #input_table_path="../data/output_tables/processed_alterations/altered_CIRCLE-12BY12-INCH.xlsx"
-    input_vertices_path = "../data/output_tables/vertices_df.xlsx"
+    input_table_path="../data/output_tables/processed_alterations/1LTH-FULL_SQUARE-12BY12-INCH.csv"
+    input_vertices_path = "../data/output_tables/processed_vertices/processed_vertices_SQUARE-12BY12-INCH.csv"
 
     # DPI can only be overriden if plot_actual_size = False
     # Display resolution set for Macbook Pro m2 - change to whatever your screen res is
