@@ -7,6 +7,7 @@ flagged/
 persistent_output/
 test/
 archive/
+app/templates/
 
 # Don't include documents
 technical_book.*

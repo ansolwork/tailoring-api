@@ -16,6 +16,8 @@ matplotlib.use('Agg')  # Use 'Agg' backend for non-GUI environments
 
 from data_processing_utils import DataProcessingUtils
 
+# Next make a grid 1 inch per square - length/width. Square grid?
+
 class VisualizeAlteration:
     def __init__(self, input_table_path, input_vertices_path, grid=True, plot_actual_size=False, 
                  override_dpi=None, display_resolution_width=None, display_resolution_height=None):
@@ -63,6 +65,78 @@ class VisualizeAlteration:
             'altered_vertices_reduced_ys': [],
             'mtm_points': []
         }
+
+    def create_and_save_grid(self, filename, 
+                            num_squares_x=10, 
+                            num_squares_y=10, 
+                            dpi=300, 
+                            output_dir="../data/output_graphs/plots/"):
+        """
+        Creates a grid with 1x1 inch squares and saves it to a file.
+        
+        Parameters:
+        - filename: The name of the file to save the grid image.
+        - num_squares_x: Number of squares along the x-axis (default is 10).
+        - num_squares_y: Number of squares along the y-axis (default is 10).
+        - dpi: The resolution in dots per inch for the saved image (default is 300, for PNG only).
+        - output_dir: The base directory where the file will be saved (default is "../data/output_graphs/plots/").
+        """
+
+        # Ensure the calibration directory exists
+        calibration_dir = os.path.join(output_dir, "calibration")
+        os.makedirs(calibration_dir, exist_ok=True)
+
+        # Construct the full paths for each file format
+        full_filename = os.path.join(calibration_dir, filename)
+        svg_filename = full_filename.replace('.png', '.svg')
+        hpgl_filename = full_filename.replace('.png', '.hpgl')
+        dxf_filename = full_filename.replace('.png', '.dxf')
+
+        # Set the figure size to match the number of squares in inches
+        fig_width_inch = num_squares_x
+        fig_height_inch = num_squares_y
+        fig, ax = plt.subplots(figsize=(fig_width_inch, fig_height_inch))
+
+        # Set the limits of the plot to match the number of squares
+        ax.set_xlim(0, num_squares_x)
+        ax.set_ylim(0, num_squares_y)
+
+        # Set the aspect of the plot to be equal
+        ax.set_aspect('equal')
+
+        # Enable grid
+        ax.grid(True)
+
+        # Customize the grid to have 1-inch spacing
+        ax.set_xticks(np.arange(0, num_squares_x + 1, 1))  # 1-inch spacing on the x-axis
+        ax.set_yticks(np.arange(0, num_squares_y + 1, 1))  # 1-inch spacing on the y-axis
+
+        # Optional: Hide tick labels for a clean grid
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+
+        # Save the plot as a vector image file (SVG, HPGL, DXF)
+        plt.savefig(svg_filename, format='svg')
+        plt.close(fig)
+
+        # Convert the SVG to HPGL and DXF
+        self.svg_to_hpgl(svg_filename, hpgl_filename)
+        self.svg_to_dxf(svg_filename, dxf_filename)
+
+        print(f"Grid saved as {svg_filename}, {hpgl_filename}, and {dxf_filename}")
+
+    def svg_to_dxf(self, svg_path, output_dxf_path):
+        try:
+            command = [
+                "inkscape", 
+                svg_path, 
+                "--export-type=dxf", 
+                f"--export-filename={output_dxf_path}"
+            ]
+            subprocess.run(command, check=True)
+            print(f"DXF file saved to {output_dxf_path}")
+        except subprocess.CalledProcessError as e:
+            print(f"An error occurred while converting SVG to DXF: {e}")
 
     def scale_coordinates(self, xs, ys):
         xs = tuple(x * self.scaling_factor for x in xs)
@@ -287,7 +361,6 @@ class VisualizeAlteration:
             ys_all = [y for ys in self.plot_df['unique_vertices_y'].dropna() for y in ys]
             self.width = max(xs_all) - min(xs_all)
             self.height = max(ys_all) - min(ys_all)
-            print(f"Actual Size plot: {(self.width, self.height)}")
 
             # 3. Calculate DPI based on the display resolution and desired physical size
             self.dpi = int(self.calculate_dpi(
@@ -319,6 +392,14 @@ class VisualizeAlteration:
         fig_combined, ax_combined = plt.subplots(figsize=(self.width, self.height))
         fig_vertices, ax_vertices = plt.subplots(figsize=(self.width, self.height))
         fig_alteration, ax_alteration = plt.subplots(figsize=(self.width, self.height))
+
+        # Figure Size (in pixels)
+        figsize = fig_vertices.get_size_inches() * self.dpi
+        width_inch = figsize[0] / self.dpi
+        height_inch = figsize[1] / self.dpi
+        print(f"Figure size in Pixels (Width, Height) = {figsize}")
+        print(f"Figure Dimensions in Inches = {(width_inch, height_inch)}")
+        
 
         ax_combined.set_aspect('equal', 'box')
         ax_vertices.set_aspect('equal', 'box')
@@ -654,5 +735,8 @@ if __name__ == "__main__":
     visualize_alteration = VisualizeAlteration(input_table_path, input_vertices_path, 
                                                grid=False, plot_actual_size=True, override_dpi=300,
                                                display_resolution_width=1728, display_resolution_height=1117)
+    
+    visualize_alteration.create_and_save_grid('10x10_grid.png')
+
     visualize_alteration.prepare_plot_data()
     visualize_alteration.plot_polylines_table()
