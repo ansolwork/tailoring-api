@@ -52,6 +52,39 @@ class VisualizeAlteration:
         self.display_resolution_width = display_resolution_width
         self.display_resolution_height = display_resolution_height 
 
+    def get_piece_name(self, input_table_path):
+        # Get the base name of the file (e.g., "altered_LGFG-1648-FG-07S.xlsx")
+        file_name = os.path.basename(input_table_path)
+
+        # Remove the extension (e.g., ".xlsx") to get "altered_LGFG-1648-FG-07S"
+        file_name_without_extension = os.path.splitext(file_name)[0]
+
+        # Split the string by "_" and get the last part
+        piece_name = file_name_without_extension.split('_', 1)[-1]
+
+        return piece_name
+    
+    def calculate_dpi(self, pixel_width, pixel_height, physical_width_in_inches, physical_height_in_inches):
+        """
+        Calculate DPI based on pixel resolution and physical dimensions.
+
+        Parameters:
+        pixel_width (int): The width in pixels of the image or screen.
+        pixel_height (int): The height in pixels of the image or screen.
+        physical_width_in_inches (float): The desired physical width in inches.
+        physical_height_in_inches (float): The desired physical height in inches.
+
+        Returns:
+        float: The DPI (dots per inch) required to match the given dimensions.
+        """
+        dpi_width = pixel_width / physical_width_in_inches
+        dpi_height = pixel_height / physical_height_in_inches
+
+        # Use the smaller DPI to ensure both dimensions fit within the desired physical size
+        dpi = min(dpi_width, dpi_height)
+
+        return dpi
+
     def initialize_plot_data(self):
         return {
             'unique_vertices': [],
@@ -65,65 +98,44 @@ class VisualizeAlteration:
             'altered_vertices_reduced_ys': [],
             'mtm_points': []
         }
-
-    def create_and_save_grid(self, filename, 
-                            num_squares_x=10, 
-                            num_squares_y=10, 
-                            dpi=300, 
-                            output_dir="../data/output_graphs/plots/"):
+    
+    def save_plot_as_svg(self, fig, ax, output_svg_path):
         """
-        Creates a grid with 1x1 inch squares and saves it to a file.
-        
-        Parameters:
-        - filename: The name of the file to save the grid image.
-        - num_squares_x: Number of squares along the x-axis (default is 10).
-        - num_squares_y: Number of squares along the y-axis (default is 10).
-        - dpi: The resolution in dots per inch for the saved image (default is 300, for PNG only).
-        - output_dir: The base directory where the file will be saved (default is "../data/output_graphs/plots/").
+        Saves the given plot to an SVG file.
         """
+        # Set the figure size and adjust layout to ensure the plot fits well
+        fig.set_size_inches(self.width, self.height)  # Adjust as needed
+        #plt.tight_layout()
 
-        # Ensure the calibration directory exists
-        calibration_dir = os.path.join(output_dir, "calibration")
-        os.makedirs(calibration_dir, exist_ok=True)
+        # Set titles and labels if needed
+        ax.set_title(f'Alteration plot for {self.piece_name}', fontsize=16)
+        ax.set_xlabel('X Coordinate [in]', fontsize=14)
+        ax.set_ylabel('Y Coordinate [in]', fontsize=14)
 
-        # Construct the full paths for each file format
-        full_filename = os.path.join(calibration_dir, filename)
-        svg_filename = full_filename.replace('.png', '.svg')
-        hpgl_filename = full_filename.replace('.png', '.hpgl')
-        dxf_filename = full_filename.replace('.png', '.dxf')
+        # Set tick parameters and grid for better visualization
+        ax.tick_params(axis='both', which='both', labelsize=12)
 
-        # Set the figure size to match the number of squares in inches
-        fig_width_inch = num_squares_x
-        fig_height_inch = num_squares_y
-        fig, ax = plt.subplots(figsize=(fig_width_inch, fig_height_inch))
+        # Save the figure as an SVG file
+        fig.savefig(output_svg_path, format='svg')
+        plt.close(fig)  # Close the figure after saving
 
-        # Set the limits of the plot to match the number of squares
-        ax.set_xlim(0, num_squares_x)
-        ax.set_ylim(0, num_squares_y)
+        print(f"SVG plot saved to {output_svg_path}")
 
-        # Set the aspect of the plot to be equal
-        ax.set_aspect('equal')
-
-        # Enable grid
-        ax.grid(True)
-
-        # Customize the grid to have 1-inch spacing
-        ax.set_xticks(np.arange(0, num_squares_x + 1, 1))  # 1-inch spacing on the x-axis
-        ax.set_yticks(np.arange(0, num_squares_y + 1, 1))  # 1-inch spacing on the y-axis
-
-        # Optional: Hide tick labels for a clean grid
-        ax.set_xticklabels([])
-        ax.set_yticklabels([])
-
-        # Save the plot as a vector image file (SVG, HPGL, DXF)
-        plt.savefig(svg_filename, format='svg')
-        plt.close(fig)
-
-        # Convert the SVG to HPGL and DXF
-        self.svg_to_hpgl(svg_filename, hpgl_filename)
-        self.svg_to_dxf(svg_filename, dxf_filename)
-
-        print(f"Grid saved as {svg_filename}, {hpgl_filename}, and {dxf_filename}")
+    def svg_to_hpgl(self, svg_path, output_hpgl_path):
+        """
+        Converts an SVG file to HPGL format using Inkscape.
+        """
+        try:
+            command = [
+                "inkscape", 
+                svg_path, 
+                "--export-type=hpgl", 
+                f"--export-filename={output_hpgl_path}"
+            ]
+            subprocess.run(command, check=True)
+            print(f"HPGL file saved to {output_hpgl_path}")
+        except subprocess.CalledProcessError as e:
+            print(f"An error occurred while converting SVG to HPGL: {e}")
 
     def svg_to_dxf(self, svg_path, output_dxf_path):
         try:
@@ -160,7 +172,7 @@ class VisualizeAlteration:
                 plot_data['unique_vertices_xs'].append(xs)
                 plot_data['unique_vertices_ys'].append(ys)
                 scaled_vertices.append(scaled_vertex_tuple)
-    
+
     def process_altered_vertices(self, row, plot_data, scaled_vertices):
         raw_altered = row['altered_vertices']
         if pd.notna(raw_altered):
@@ -274,6 +286,65 @@ class VisualizeAlteration:
                             original_coords[0], original_coords[1], 
                             mtm_label, row['mtm_dependant'], mtm_dependent_x=row['mtm_dependant_x'], mtm_dependent_y=row['mtm_dependant_y'], 
                             color='blue', movement_x=row['movement_x'], movement_y=row['movement_y'])
+
+    def create_and_save_grid(self, filename, 
+                            num_squares_x=10, 
+                            num_squares_y=10, 
+                            dpi=300, 
+                            output_dir="../data/output_graphs/plots/"):
+        """
+        Creates a grid with 1x1 inch squares and saves it to a file.
+        
+        Parameters:
+        - filename: The name of the file to save the grid image.
+        - num_squares_x: Number of squares along the x-axis (default is 10).
+        - num_squares_y: Number of squares along the y-axis (default is 10).
+        - dpi: The resolution in dots per inch for the saved image (default is 300, for PNG only).
+        - output_dir: The base directory where the file will be saved (default is "../data/output_graphs/plots/").
+        """
+
+        # Ensure the calibration directory exists
+        calibration_dir = os.path.join(output_dir, "calibration")
+        os.makedirs(calibration_dir, exist_ok=True)
+
+        # Construct the full paths for each file format
+        full_filename = os.path.join(calibration_dir, filename)
+        svg_filename = full_filename.replace('.png', '.svg')
+        hpgl_filename = full_filename.replace('.png', '.hpgl')
+        dxf_filename = full_filename.replace('.png', '.dxf')
+
+        # Set the figure size to match the number of squares in inches
+        fig_width_inch = num_squares_x
+        fig_height_inch = num_squares_y
+        fig, ax = plt.subplots(figsize=(fig_width_inch, fig_height_inch))
+
+        # Set the limits of the plot to match the number of squares
+        ax.set_xlim(0, num_squares_x)
+        ax.set_ylim(0, num_squares_y)
+
+        # Set the aspect of the plot to be equal
+        ax.set_aspect('equal')
+
+        # Enable grid
+        ax.grid(True)
+
+        # Customize the grid to have 1-inch spacing
+        ax.set_xticks(np.arange(0, num_squares_x + 1, 1))  # 1-inch spacing on the x-axis
+        ax.set_yticks(np.arange(0, num_squares_y + 1, 1))  # 1-inch spacing on the y-axis
+
+        # Optional: Hide tick labels for a clean grid
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+
+        # Save the plot as a vector image file (SVG, HPGL, DXF)
+        plt.savefig(svg_filename, format='svg')
+        plt.close(fig)
+
+        # Convert the SVG to HPGL and DXF
+        self.svg_to_hpgl(svg_filename, hpgl_filename)
+        self.svg_to_dxf(svg_filename, dxf_filename)
+
+        print(f"Grid saved as {svg_filename}, {hpgl_filename}, and {dxf_filename}")
     
     def prepare_plot_data(self, output_dir="../data/output_tables/"):
         plot_data = self.initialize_plot_data()
@@ -496,44 +567,6 @@ class VisualizeAlteration:
             Line2D([0], [0], color="#BA55D3", linestyle='-.', marker='x', label="Altered Reduced", linewidth=1, markersize=8)
         ])
 
-    def save_plot_as_svg(self, fig, ax, output_svg_path):
-        """
-        Saves the given plot to an SVG file.
-        """
-        # Set the figure size and adjust layout to ensure the plot fits well
-        fig.set_size_inches(self.width, self.height)  # Adjust as needed
-        #plt.tight_layout()
-
-        # Set titles and labels if needed
-        ax.set_title(f'Alteration plot for {self.piece_name}', fontsize=16)
-        ax.set_xlabel('X Coordinate [in]', fontsize=14)
-        ax.set_ylabel('Y Coordinate [in]', fontsize=14)
-
-        # Set tick parameters and grid for better visualization
-        ax.tick_params(axis='both', which='both', labelsize=12)
-
-        # Save the figure as an SVG file
-        fig.savefig(output_svg_path, format='svg')
-        plt.close(fig)  # Close the figure after saving
-
-        print(f"SVG plot saved to {output_svg_path}")
-
-    def svg_to_hpgl(self, svg_path, output_hpgl_path):
-        """
-        Converts an SVG file to HPGL format using Inkscape.
-        """
-        try:
-            command = [
-                "inkscape", 
-                svg_path, 
-                "--export-type=hpgl", 
-                f"--export-filename={output_hpgl_path}"
-            ]
-            subprocess.run(command, check=True)
-            print(f"HPGL file saved to {output_hpgl_path}")
-        except subprocess.CalledProcessError as e:
-            print(f"An error occurred while converting SVG to HPGL: {e}")
-
     def plot_alteration_table(self, output_dir, fig=None, ax=None):
         if self.grid:
             sns.set(style="whitegrid")
@@ -689,40 +722,6 @@ class VisualizeAlteration:
             # Plot movement for altered points
             #if point['color'] == 'blue':
             #    plt.text(point['x'], point['y'], (point['movement_x'], point['movement_y']), color='black', ha='right', va='center', fontsize=10)  # Moves text slightly to the right
-
-    def get_piece_name(self, input_table_path):
-        # Get the base name of the file (e.g., "altered_LGFG-1648-FG-07S.xlsx")
-        file_name = os.path.basename(input_table_path)
-
-        # Remove the extension (e.g., ".xlsx") to get "altered_LGFG-1648-FG-07S"
-        file_name_without_extension = os.path.splitext(file_name)[0]
-
-        # Split the string by "_" and get the last part
-        piece_name = file_name_without_extension.split('_', 1)[-1]
-
-        return piece_name
-    
-    def calculate_dpi(self, pixel_width, pixel_height, physical_width_in_inches, physical_height_in_inches):
-        """
-        Calculate DPI based on pixel resolution and physical dimensions.
-
-        Parameters:
-        pixel_width (int): The width in pixels of the image or screen.
-        pixel_height (int): The height in pixels of the image or screen.
-        physical_width_in_inches (float): The desired physical width in inches.
-        physical_height_in_inches (float): The desired physical height in inches.
-
-        Returns:
-        float: The DPI (dots per inch) required to match the given dimensions.
-        """
-        dpi_width = pixel_width / physical_width_in_inches
-        dpi_height = pixel_height / physical_height_in_inches
-
-        # Use the smaller DPI to ensure both dimensions fit within the desired physical size
-        dpi = min(dpi_width, dpi_height)
-
-        return dpi
-
 
 if __name__ == "__main__":
     #input_table_path = "../data/output_tables/processed_alterations/altered_LGFG-1648-FG-07S.xlsx"
