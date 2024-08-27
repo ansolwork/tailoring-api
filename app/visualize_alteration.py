@@ -307,11 +307,15 @@ class VisualizeAlteration:
         calibration_dir = os.path.join(output_dir, "calibration")
         os.makedirs(calibration_dir, exist_ok=True)
 
+        # Remove special characters from the filename
+        filename = filename.replace('#', '').replace(' ', '_')
+
         # Construct the full paths for each file format
         full_filename = os.path.join(calibration_dir, filename)
-        svg_filename = full_filename.replace('.png', '.svg')
-        hpgl_filename = full_filename.replace('.png', '.hpgl')
-        dxf_filename = full_filename.replace('.png', '.dxf')
+        png_filename = f"{full_filename}.png"
+        svg_filename = f"{full_filename}.svg"
+        hpgl_filename = f"{full_filename}.hpgl"
+        dxf_filename = f"{full_filename}.dxf"
 
         # Set the figure size to match the number of squares in inches
         fig_width_inch = num_squares_x
@@ -337,7 +341,6 @@ class VisualizeAlteration:
         ax.set_yticklabels([])
 
         # Save the plot as a PNG file
-        png_filename = full_filename
         plt.savefig(png_filename, dpi=dpi, format='png')
 
         # Save the plot as a vector image file (SVG, HPGL, DXF)
@@ -349,6 +352,7 @@ class VisualizeAlteration:
         self.svg_to_dxf(svg_filename, dxf_filename)
 
         print(f"Grid saved as {png_filename}, {svg_filename}, {hpgl_filename}, and {dxf_filename}")
+
     
     def prepare_plot_data(self, output_dir="../data/output_tables/"):
         plot_data = self.initialize_plot_data()
