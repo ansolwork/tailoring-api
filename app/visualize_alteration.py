@@ -336,15 +336,21 @@ class VisualizeAlteration:
         ax.set_xticks(np.arange(0, num_squares_x + 1, 1))  # 1-inch spacing on the x-axis
         ax.set_yticks(np.arange(0, num_squares_y + 1, 1))  # 1-inch spacing on the y-axis
 
-        # Optional: Hide tick labels for a clean grid
+        # Hide tick labels for a clean grid
         ax.set_xticklabels([])
         ax.set_yticklabels([])
 
+        # Remove the outer bounding box but keep the grid
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+
         # Save the plot as a PNG file
-        plt.savefig(png_filename, dpi=dpi, format='png')
+        plt.savefig(png_filename, dpi=dpi, format='png', bbox_inches='tight', pad_inches=0)
 
         # Save the plot as a vector image file (SVG, HPGL, DXF)
-        plt.savefig(svg_filename, format='svg')
+        plt.savefig(svg_filename, format='svg', bbox_inches='tight', pad_inches=0)
         plt.close(fig)
 
         # Convert the SVG to HPGL and DXF
@@ -352,7 +358,6 @@ class VisualizeAlteration:
         self.svg_to_dxf(svg_filename, dxf_filename)
 
         print(f"Grid saved as {png_filename}, {svg_filename}, {hpgl_filename}, and {dxf_filename}")
-
     
     def prepare_plot_data(self, output_dir="../data/output_tables/"):
         plot_data = self.initialize_plot_data()
@@ -741,7 +746,7 @@ if __name__ == "__main__":
                                                grid=False, plot_actual_size=True, override_dpi=300,
                                                display_resolution_width=1728, display_resolution_height=1117)
     
-    visualize_alteration.create_and_save_grid('10x10_grid.png')
+    visualize_alteration.create_and_save_grid('10x10_grid')
 
     visualize_alteration.prepare_plot_data()
     visualize_alteration.plot_polylines_table()
