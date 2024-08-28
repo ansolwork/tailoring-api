@@ -1,32 +1,18 @@
-import boto3
 from flask import Flask, request, jsonify, render_template
 import os
+
+from app.aws_utils import AwsUtils
 from main import Main
 
 app = Flask(__name__)
-# TODO: Keep config outside the code,for now hardcoded
-ALLOWED_EXTENSIONS = {'xlsx', 'csv'}
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 megabytes
+
+ALLOWED_EXTENSIONS = ['xlsx', 'csv', 'text']
+ALLOWED_MIME_TYPES = ['application/vnd.ms -excel']
 AWS_S3_BUCKET_NAME = 'lgfgbucket'
-AWS_ACCESS_KEY = ''
-AWS_SECRET_KEY = ''
 AWS_INPUT_DIR_PATH = "data/input/mtm-combined-entites/"
 
-
-# Validation to check file extensions
-def allowed_file(filename):
-    return '.' in filename and \
-        filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
-# Method to upload file to S3 bucket
-def upload_file_to_s3(file, s3_bucket_name, file_path):
-    s3_client = boto3.client(
-        service_name='s3',
-        aws_access_key_id=AWS_ACCESS_KEY,
-        aws_secret_access_key=AWS_SECRET_KEY
-    )
-    response = s3_client.upload_fileobj(file, s3_bucket_name, file_path)
-    print(f'upload_log_to_aws response: {response}')
+aws_utils = AwsUtils(ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, AWS_S3_BUCKET_NAME)
 
 
 @app.route("/")
@@ -40,12 +26,12 @@ def upload_file():
     if "file-to-s3" not in request.files:
         return "No files key in request.files"
     file = request.files["file-to-s3"]
-    if not allowed_file(file.filename):
+    if not aws_utils.allowed_file(file.filename) or aws_utils.allowed_mime(file):
         return "FILE FORMAT NOT ALLOWED"
     if file.filename == "":
         return "Please select a file"
     if file:
-        upload_file_to_s3(file,AWS_S3_BUCKET_NAME,AWS_INPUT_DIR_PATH)
+        aws_utils.upload_file_to_s3(file, AWS_INPUT_DIR_PATH)
         return render_template("Ack.html")
     else:
         return "File not uploaded successfully"
