@@ -204,7 +204,6 @@ class VisualizeAlteration:
 
         print(f"SVG dimensions updated to {desired_width_in_inches}x{desired_height_in_inches} inches in {svg_path}")
 
-
     def svg_to_hpgl(self, svg_path, output_hpgl_path):
         """
         Converts an SVG file to HPGL format using Inkscape.
@@ -214,7 +213,8 @@ class VisualizeAlteration:
                 "inkscape", 
                 svg_path, 
                 "--export-type=hpgl", 
-                f"--export-filename={output_hpgl_path}"
+                f"--export-filename={output_hpgl_path}",
+                "--export-dpi=72"  # Explicitly set DPI to 72
             ]
             subprocess.run(command, check=True)
             print(f"HPGL file saved to {output_hpgl_path}")
@@ -500,9 +500,11 @@ class VisualizeAlteration:
             os.makedirs(piece_dir, exist_ok=True)
         svg_dir = os.path.join(piece_dir, "svg")
         hpgl_dir = os.path.join(piece_dir, "hpgl")
+        dxf_dir = os.path.join(piece_dir, "dxf")
         png_dir = os.path.join(piece_dir, "png")
         os.makedirs(svg_dir, exist_ok=True)
         os.makedirs(hpgl_dir, exist_ok=True)
+        os.makedirs(dxf_dir, exist_ok=True)
         os.makedirs(png_dir, exist_ok=True)
         
         if self.grid:
@@ -532,12 +534,6 @@ class VisualizeAlteration:
             print(f"Width Alt: {width_alt}")
             print(f"Height Alt: {height_alt}")
 
-            # Do we need this?
-            #xs_alt_reduced = [x for xs in self.plot_df['altered_vertices_reduced_x'].dropna() for x in xs]
-            #ys_alt_reduced = [y for ys in self.plot_df['altered_vertices_reduced_y'].dropna() for y in ys]
-            #width_alt_reduced = max(xs_alt_reduced) - min(xs_alt_reduced)
-            #height_alt_reduced = max(ys_alt_reduced) - min(ys_alt_reduced)
-
             if self.override_dpi:
                 self.dpi = self.override_dpi
             else:
@@ -565,35 +561,42 @@ class VisualizeAlteration:
         output_combined_path_png = os.path.join(png_dir, f"{combined_filename}.png")
         output_combined_path_svg = os.path.join(svg_dir, f"{combined_filename}.svg")
         output_combined_path_hpgl = os.path.join(hpgl_dir, f"{combined_filename}.hpgl")
+        output_combined_path_dxf = os.path.join(dxf_dir, f"{combined_filename}.dxf")
 
         fig_combined.savefig(output_combined_path_png, dpi=self.dpi, bbox_inches='tight')
         self.save_plot_as_svg(fig_combined, ax_combined, width_alt, height_alt, output_combined_path_svg, add_labels=False)
         self.svg_to_hpgl(output_combined_path_svg, output_combined_path_hpgl)
-        print(f"Combined Plot Saved To {output_combined_path_png}, {output_combined_path_svg}, {output_combined_path_hpgl}")
+        self.svg_to_dxf(output_combined_path_svg, output_combined_path_dxf)
+        print(f"Combined Plot Saved To {output_combined_path_png}, {output_combined_path_svg}, {output_combined_path_hpgl}, {output_combined_path_dxf}")
 
         vertices_filename = f"vertices_plot_{self.piece_name}"
         output_vertices_path_png = os.path.join(png_dir, f"{vertices_filename}.png")
         output_vertices_path_svg = os.path.join(svg_dir, f"{vertices_filename}.svg")
         output_vertices_path_hpgl = os.path.join(hpgl_dir, f"{vertices_filename}.hpgl")
+        output_vertices_path_dxf = os.path.join(dxf_dir, f"{vertices_filename}.dxf")
 
         fig_vertices.savefig(output_vertices_path_png, dpi=self.dpi, bbox_inches='tight')
         self.save_plot_as_svg(fig_vertices, ax_vertices, self.width, self.height, output_vertices_path_svg, add_labels=False)
         self.svg_to_hpgl(output_vertices_path_svg, output_vertices_path_hpgl)
-        print(f"Vertices Plot Saved To {output_vertices_path_png}, {output_vertices_path_svg}, {output_vertices_path_hpgl}")
+        self.svg_to_dxf(output_vertices_path_svg, output_vertices_path_dxf)
+        print(f"Vertices Plot Saved To {output_vertices_path_png}, {output_vertices_path_svg}, {output_vertices_path_hpgl}, {output_vertices_path_dxf}")
 
         alteration_filename = f"alteration_table_plot_{self.piece_name}"
         output_alteration_path_png = os.path.join(png_dir, f"{alteration_filename}.png")
         output_alteration_path_svg = os.path.join(svg_dir, f"{alteration_filename}.svg")
         output_alteration_path_hpgl = os.path.join(hpgl_dir, f"{alteration_filename}.hpgl")
+        output_alteration_path_dxf = os.path.join(dxf_dir, f"{alteration_filename}.dxf")
 
         fig_alteration.savefig(output_alteration_path_png, dpi=self.dpi, bbox_inches='tight')
         self.save_plot_as_svg(fig_alteration, ax_alteration, width_alt, height_alt, output_alteration_path_svg, add_labels=False)
         self.svg_to_hpgl(output_alteration_path_svg, output_alteration_path_hpgl)
-        print(f"Alteration Table Plot Saved To {output_alteration_path_png}, {output_alteration_path_svg}, {output_alteration_path_hpgl}")
+        self.svg_to_dxf(output_alteration_path_svg, output_alteration_path_dxf)
+        print(f"Alteration Table Plot Saved To {output_alteration_path_png}, {output_alteration_path_svg}, {output_alteration_path_hpgl}, {output_alteration_path_dxf}")
 
         plt.close(fig_vertices)
         plt.close(fig_alteration)
         plt.close(fig_combined)
+
 
     def plot_only_vertices(self, ax):
         for _, row in self.plot_df.iterrows():
@@ -784,14 +787,14 @@ class VisualizeAlteration:
             #    plt.text(point['x'], point['y'], (point['movement_x'], point['movement_y']), color='black', ha='right', va='center', fontsize=10)  # Moves text slightly to the right
 
 if __name__ == "__main__":
-    #input_table_path="../data/output_tables/processed_alterations/1LTH-FULL_SQUARE-12BY12-INCH.csv"
-    #input_vertices_path = "../data/output_tables/processed_vertices/processed_vertices_SQUARE-12BY12-INCH.csv"
+    input_table_path="../data/output_tables/processed_alterations/1LTH-FULL_SQUARE-12BY12-INCH.csv"
+    input_vertices_path = "../data/output_tables/processed_vertices/processed_vertices_SQUARE-12BY12-INCH.csv"
 
     #input_table_path="../data/output_tables/processed_alterations/4-WAIST_LGFG-SH-01-CCB-FO.csv"
     #input_vertices_path = "../data/output_tables/processed_vertices/processed_vertices_LGFG-SH-01-CCB-FO.csv"
 
-    input_table_path="../data/output_tables/processed_alterations/1LTH-FULL_CIRCLE-12BY12-INCH.csv"
-    input_vertices_path = "../data/output_tables/processed_vertices/processed_vertices_CIRCLE-12BY12-INCH.csv"
+    #input_table_path="../data/output_tables/processed_alterations/1LTH-FULL_CIRCLE-12BY12-INCH.csv"
+    #input_vertices_path = "../data/output_tables/processed_vertices/processed_vertices_CIRCLE-12BY12-INCH.csv"
 
     # DPI can only be overriden if plot_actual_size = False
     # Display resolution set for Macbook Pro m2 - change to whatever your screen res is
