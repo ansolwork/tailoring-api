@@ -7,7 +7,7 @@ import math
 import hashlib
 from svgpathtools import svg2paths2
 import vpype
-import subprocess
+
 import xml.etree.ElementTree as ET
 
 import matplotlib
@@ -22,6 +22,7 @@ from data_processing_utils import DataProcessingUtils
 # TODO: Add some margin to the bounding box? So we can see the points
 # TODO: Show labels in SVG Plot?
 # TODO: Fix the other cases: Check why unique vertices has multiple columns in other files. Maybe thats where the error comes?
+# TODO: Move grid out of the class
 
 class VisualizeAlteration:
     def __init__(self, input_table_path, input_vertices_path, grid=True, plot_actual_size=False, 
@@ -104,147 +105,12 @@ class VisualizeAlteration:
             'mtm_points': []
         }
     
-    def save_plot_as_svg(self, fig, ax, svg_width, svg_height, output_svg_path, add_labels=False):
-        """
-        Saves the given plot to an SVG file.
-        """
-
-        # Ensure DPI is set to match the intended figure size
-        fig.set_size_inches(svg_width, svg_height)
-        fig.dpi = 72  # This ensures 1:1 inch scaling in the SVG
-
-        # Remove the legend if it exists
-        legend = ax.get_legend()
-        if legend:
-            legend.remove()
-
-        # Remove point labels (text annotations)
-        for text in ax.texts:
-            text.remove()
-
-        if not add_labels:
-            ax.set_title("")
-            ax.set_xlabel("")
-            ax.set_ylabel("")
-            
-            # Hide tick labels for a clean grid
-            ax.set_xticklabels([])
-            ax.set_yticklabels([])
-
-        # Set the aspect ratio to be equal and adjust ticks to represent inches
-        ax.set_aspect('equal')
-        ax.set_xticks(np.arange(0, svg_width + 1, 1))  # 1-inch spacing on the x-axis
-        ax.set_yticks(np.arange(0, svg_height + 1, 1))  # 1-inch spacing on the y-axis
-
-        svg_width = np.round(svg_width, 1)
-        svg_height = np.round(svg_height, 1)
-
-        print(f"SVG Dimensions: {svg_width, svg_height}")
-
-        # Adjust axes limits to match the SVG dimensions exactly
-        ax.set_xlim(0, svg_width)
-        ax.set_ylim(0, svg_height)
-
-        for spine in ax.spines.values():
-            spine.set_visible(False)
-
-        # Get x and y axis limits for debugging
-        xlim = ax.get_xlim()
-        ylim = ax.get_ylim()
-        print(f"XLIM and YLIM {(xlim, ylim)}")
-
-        # Remove any potential padding, or adjust as needed
-        plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
-
-        # Ensure no extra padding is added by ticks
-        ax.tick_params(which='both', width=0, length=0)
-
-        # Save the figure as an SVG file with the specified DPI
-        fig.savefig(output_svg_path, format='svg', bbox_inches='tight', pad_inches=0)
-        plt.close(fig)  # Close the figure after saving
-
-        print(f"SVG plot saved to {output_svg_path} with dimensions {svg_width}x{svg_height} inches")
-
-        # Modify the SVG file to ensure correct width and height in inches
-        self.modify_svg_dimensions(output_svg_path, svg_width, svg_height)
-
-    def modify_svg_dimensions(self, svg_path, desired_width_in_inches, desired_height_in_inches):
-        """
-        Modifies the width, height, and viewBox attributes of the saved SVG to reflect real-world inches.
-        Ensures correct scaling of the SVG content to match the desired dimensions.
-        """
-        # Parse the SVG file
-        tree = ET.parse(svg_path)
-        root = tree.getroot()
-
-        # Set the new width and height attributes in inches
-        root.set('width', f'{desired_width_in_inches}in')
-        root.set('height', f'{desired_height_in_inches}in')
-
-        # Extract original dimensions from the viewBox if available
-        viewBox = root.get('viewBox')
-        if viewBox:
-            original_dimensions = list(map(float, viewBox.split()[2:]))
-            original_width, original_height = original_dimensions
-        else:
-            # If viewBox is not present, fallback to width and height attributes in points or pixels
-            original_width = float(root.get('width').replace('pt', '').replace('px', ''))
-            original_height = float(root.get('height').replace('pt', '').replace('px', ''))
-
-        # Set the viewBox to match the desired dimensions
-        root.set('viewBox', f'0 0 {original_width} {original_height}')
-
-        # Remove any scaling applied to individual elements
-        for element in root.findall(".//{http://www.w3.org/2000/svg}g"):
-            if "transform" in element.attrib:
-                del element.attrib["transform"]
-
-        # Save the modified SVG back to disk
-        tree.write(svg_path)
-
-        print(f"SVG dimensions updated to {desired_width_in_inches}x{desired_height_in_inches} inches in {svg_path}")
-
-    def svg_to_hpgl(self, svg_path, output_hpgl_path):
-        """
-        Converts an SVG file to HPGL format using Inkscape.
-        """
-        try:
-            command = [
-                "inkscape", 
-                svg_path, 
-                "--export-type=hpgl", 
-                f"--export-filename={output_hpgl_path}",
-                "--export-dpi=72"  # Explicitly set DPI to 72
-            ]
-            subprocess.run(command, check=True)
-            print(f"HPGL file saved to {output_hpgl_path}")
-        except subprocess.CalledProcessError as e:
-            print(f"An error occurred while converting SVG to HPGL: {e}")
-
-    def svg_to_dxf(self, svg_path, output_dxf_path):
-        try:
-            command = [
-                "inkscape", 
-                svg_path, 
-                "--export-type=dxf", 
-                f"--export-filename={output_dxf_path}"
-            ]
-            subprocess.run(command, check=True)
-            print(f"DXF file saved to {output_dxf_path}")
-        except subprocess.CalledProcessError as e:
-            print(f"An error occurred while converting SVG to DXF: {e}")
-
-    def scale_coordinates(self, xs, ys):
-        xs = tuple(x * self.scaling_factor for x in xs)
-        ys = tuple(y * self.scaling_factor for y in ys)
-        return xs, ys
-    
     def process_vertices(self, row, plot_data, scaled_vertices):
         vertices_list = ast.literal_eval(row['original_vertices_reduced'])
         
         if vertices_list:
             xs, ys = zip(*vertices_list)
-            xs, ys = self.scale_coordinates(xs, ys)
+            xs, ys = self.data_processing_utils.scale_coordinates(xs, ys, self.scaling_factor)
 
             # Convert the scaled vertices to a tuple and create a unique identifier
             scaled_vertex_tuple = tuple(zip(xs, ys))
@@ -264,7 +130,7 @@ class VisualizeAlteration:
             if altered_vertices_list and altered_vertices_list not in plot_data['altered_vertices']:
                 plot_data['altered_vertices'].append(altered_vertices_list)
                 xs, ys = zip(*altered_vertices_list)
-                xs, ys = self.scale_coordinates(xs, ys)
+                xs, ys = self.data_processing_utils.scale_coordinates(xs, ys, self.scaling_factor)
                 plot_data['altered_vertices_xs'].append(xs)
                 plot_data['altered_vertices_ys'].append(ys)
                 scaled_vertices.append(tuple(zip(xs, ys)))
@@ -276,7 +142,7 @@ class VisualizeAlteration:
             if altered_vertices_list_reduced and altered_vertices_list_reduced not in plot_data['altered_vertices_reduced']:
                 plot_data['altered_vertices_reduced'].append(altered_vertices_list_reduced)
                 xs, ys = zip(*altered_vertices_list_reduced)
-                xs, ys = self.scale_coordinates(xs, ys)
+                xs, ys = self.data_processing_utils.scale_coordinates(xs, ys, self.scaling_factor)
                 plot_data['altered_vertices_reduced_xs'].append(xs)
                 plot_data['altered_vertices_reduced_ys'].append(ys)
                 scaled_vertices.append(tuple(zip(xs, ys)))
@@ -423,11 +289,11 @@ class VisualizeAlteration:
         plt.savefig(png_filename, dpi=self.dpi, format='png', bbox_inches='tight', pad_inches=0)
 
         # Save the plot as an SVG file using the modified save_plot_as_svg method
-        self.save_plot_as_svg(fig, ax, svg_width=fig_width_inch, svg_height=fig_height_inch, output_svg_path=svg_filename)
+        self.data_processing_utils.save_plot_as_svg(fig, ax, svg_width=fig_width_inch, svg_height=fig_height_inch, output_svg_path=svg_filename)
 
         # Convert the SVG to HPGL and DXF if needed
-        self.svg_to_hpgl(svg_filename, hpgl_filename)
-        self.svg_to_dxf(svg_filename, dxf_filename)
+        self.data_processing_utils.svg_to_hpgl(svg_filename, hpgl_filename)
+        self.data_processing_utils.svg_to_dxf(svg_filename, dxf_filename)
 
         print(f"Grid saved as {png_filename}, {svg_filename}, {hpgl_filename}, and {dxf_filename}")
     
@@ -564,9 +430,9 @@ class VisualizeAlteration:
         output_combined_path_dxf = os.path.join(dxf_dir, f"{combined_filename}.dxf")
 
         fig_combined.savefig(output_combined_path_png, dpi=self.dpi, bbox_inches='tight')
-        self.save_plot_as_svg(fig_combined, ax_combined, width_alt, height_alt, output_combined_path_svg, add_labels=False)
-        self.svg_to_hpgl(output_combined_path_svg, output_combined_path_hpgl)
-        self.svg_to_dxf(output_combined_path_svg, output_combined_path_dxf)
+        self.data_processing_utils.save_plot_as_svg(fig_combined, ax_combined, width_alt, height_alt, output_combined_path_svg, add_labels=False)
+        self.data_processing_utils.svg_to_hpgl(output_combined_path_svg, output_combined_path_hpgl)
+        self.data_processing_utils.svg_to_dxf(output_combined_path_svg, output_combined_path_dxf)
         print(f"Combined Plot Saved To {output_combined_path_png}, {output_combined_path_svg}, {output_combined_path_hpgl}, {output_combined_path_dxf}")
 
         vertices_filename = f"vertices_plot_{self.piece_name}"
@@ -576,9 +442,9 @@ class VisualizeAlteration:
         output_vertices_path_dxf = os.path.join(dxf_dir, f"{vertices_filename}.dxf")
 
         fig_vertices.savefig(output_vertices_path_png, dpi=self.dpi, bbox_inches='tight')
-        self.save_plot_as_svg(fig_vertices, ax_vertices, self.width, self.height, output_vertices_path_svg, add_labels=False)
-        self.svg_to_hpgl(output_vertices_path_svg, output_vertices_path_hpgl)
-        self.svg_to_dxf(output_vertices_path_svg, output_vertices_path_dxf)
+        self.data_processing_utils.save_plot_as_svg(fig_vertices, ax_vertices, self.width, self.height, output_vertices_path_svg, add_labels=False)
+        self.data_processing_utils.svg_to_hpgl(output_vertices_path_svg, output_vertices_path_hpgl)
+        self.data_processing_utils.svg_to_dxf(output_vertices_path_svg, output_vertices_path_dxf)
         print(f"Vertices Plot Saved To {output_vertices_path_png}, {output_vertices_path_svg}, {output_vertices_path_hpgl}, {output_vertices_path_dxf}")
 
         alteration_filename = f"alteration_table_plot_{self.piece_name}"
@@ -588,15 +454,14 @@ class VisualizeAlteration:
         output_alteration_path_dxf = os.path.join(dxf_dir, f"{alteration_filename}.dxf")
 
         fig_alteration.savefig(output_alteration_path_png, dpi=self.dpi, bbox_inches='tight')
-        self.save_plot_as_svg(fig_alteration, ax_alteration, width_alt, height_alt, output_alteration_path_svg, add_labels=False)
-        self.svg_to_hpgl(output_alteration_path_svg, output_alteration_path_hpgl)
-        self.svg_to_dxf(output_alteration_path_svg, output_alteration_path_dxf)
+        self.data_processing_utils.save_plot_as_svg(fig_alteration, ax_alteration, width_alt, height_alt, output_alteration_path_svg, add_labels=False)
+        self.data_processing_utils.svg_to_hpgl(output_alteration_path_svg, output_alteration_path_hpgl)
+        self.data_processing_utils.svg_to_dxf(output_alteration_path_svg, output_alteration_path_dxf)
         print(f"Alteration Table Plot Saved To {output_alteration_path_png}, {output_alteration_path_svg}, {output_alteration_path_hpgl}, {output_alteration_path_dxf}")
 
         plt.close(fig_vertices)
         plt.close(fig_alteration)
         plt.close(fig_combined)
-
 
     def plot_only_vertices(self, ax):
         for _, row in self.plot_df.iterrows():
@@ -802,7 +667,7 @@ if __name__ == "__main__":
                                                grid=False, plot_actual_size=True, override_dpi=600, display_size=16,
                                                display_resolution_width=3456, display_resolution_height=2234)
     
-    # Run this only once
+    # Run this only once (TEST)
     visualize_alteration.create_and_save_grid('10x10_grid')
 
     # Run these multiple times
