@@ -290,19 +290,12 @@ class DataProcessingUtils:
         svg_width = np.round(svg_width, 1)
         svg_height = np.round(svg_height, 1)
 
-        print(f"SVG Dimensions: {svg_width, svg_height}")
-
         # Adjust axes limits to match the SVG dimensions exactly
         ax.set_xlim(0, svg_width)
         ax.set_ylim(0, svg_height)
 
         for spine in ax.spines.values():
             spine.set_visible(False)
-
-        # Get x and y axis limits for debugging
-        xlim = ax.get_xlim()
-        ylim = ax.get_ylim()
-        print(f"XLIM and YLIM {(xlim, ylim)}")
 
         # Remove any potential padding, or adjust as needed
         plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
