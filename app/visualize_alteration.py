@@ -492,12 +492,21 @@ class VisualizeAlteration:
             xs_alt = [x for xs in self.plot_df['altered_vertices_x'].dropna() for x in xs]
             ys_alt = [y for ys in self.plot_df['altered_vertices_y'].dropna() for y in ys]
 
-            if len(xs_alt) > 1:
-                width_alt = max(xs_alt) - min(xs_alt)
-                height_alt = max(ys_alt) - min(ys_alt)
+            xs_alt_reduced = [x for xs in self.plot_df['altered_vertices_reduced_x'].dropna() for x in xs]
+            ys_alt_reduced = [y for ys in self.plot_df['altered_vertices_reduced_y'].dropna() for y in ys]
+
+            # Combine all xs and ys lists
+            all_xs = xs_all + xs_alt + xs_alt_reduced
+            all_ys = ys_all + ys_alt + ys_alt_reduced
+
+            if len(all_xs) > 1 and len(all_ys) > 1:
+                width_alt = max(all_xs) - min(all_xs)
+                height_alt = max(all_ys) - min(all_ys)
+
             else:
-                width_alt = xs_alt[0] if len(xs_alt) == 1 else self.width
-                height_alt = ys_alt[0] if len(ys_alt) == 1 else self.height
+                # Fallback to original logic if there's only one point or no points
+                width_alt = all_xs[0] if len(all_xs) == 1 else self.width
+                height_alt = all_ys[0] if len(all_ys) == 1 else self.height
 
             # Check if the altered dimensions are larger than the initial ones
             width_alt = max(self.width, width_alt)
@@ -793,6 +802,9 @@ if __name__ == "__main__":
 
     #input_table_path="../data/output_tables/processed_alterations/1LTH-FULL_CIRCLE-12BY12-INCH.csv"
     #input_vertices_path = "../data/output_tables/processed_vertices/processed_vertices_CIRCLE-12BY12-INCH.csv"
+
+    #input_table_path="../data/output_tables/processed_alterations/3-COLLAR_LGFG-1648-FG-07P.csv"
+    #input_vertices_path = "../data/output_tables/processed_vertices/processed_vertices_LGFG-V2-BC2-FG-08.csv"
 
     # DPI can only be overriden if plot_actual_size = False
     # Display resolution set for Macbook Pro m2 - change to whatever your screen res is
