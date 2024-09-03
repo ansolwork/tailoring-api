@@ -91,6 +91,112 @@ class VisualizeAlteration:
         
         return dpi
     
+    def get_font_size(self):
+        """Calculate font size based on the figure size."""
+        # Base size for a 10x6 inch plot
+        base_width = 10
+        base_height = 6
+        base_font_size = 14
+
+        # Calculate scaling factors based on the current width and height
+        width_scale = self.width / base_width
+        height_scale = self.height / base_height
+
+        # Use the smaller scale to ensure labels fit well
+        scale = min(width_scale, height_scale)
+
+        # Return the scaled font size
+        return base_font_size * scale
+    
+    def get_tick_size(self):
+        """Calculate tick size based on the figure size."""
+        # Base size for a 10x6 inch plot
+        base_width = 10
+        base_height = 6
+        base_tick_size = 12
+
+        # Calculate scaling factors based on the current width and height
+        width_scale = self.width / base_width
+        height_scale = self.height / base_height
+
+        # Use the smaller scale to ensure ticks fit well
+        scale = min(width_scale, height_scale)
+
+        # Return the scaled tick size
+        return base_tick_size * scale
+    
+    def apply_tick_size(self, ax):
+        """Apply the dynamically calculated tick size to the axis."""
+        tick_size = self.get_tick_size()
+        ax.tick_params(axis='x', labelsize=tick_size)
+        ax.tick_params(axis='y', labelsize=tick_size)
+
+    def get_line_width(self):
+        """Calculate line width based on the figure size."""
+        # Base line width for a 10x6 inch plot
+        base_width = 10
+        base_height = 6
+        base_line_width = 1
+
+        # Calculate scaling factors based on the current width and height
+        width_scale = self.width / base_width
+        height_scale = self.height / base_height
+
+        # Use the smaller scale to ensure line width fits well
+        scale = min(width_scale, height_scale)
+
+        # Return the scaled line width
+        return base_line_width * scale
+
+    def get_marker_size(self):
+        """Calculate marker size based on the figure size."""
+        # Base marker size for a 10x6 inch plot
+        base_width = 10
+        base_height = 6
+        base_marker_size = 5
+
+        # Calculate scaling factors based on the current width and height
+        width_scale = self.width / base_width
+        height_scale = self.height / base_height
+
+        # Use the smaller scale to ensure markers fit well
+        scale = min(width_scale, height_scale)
+
+        # Return the scaled marker size
+        return base_marker_size * scale
+
+    def get_point_label_size(self):
+        """Calculate point label size based on the figure size."""
+        # Base label size for a 10x6 inch plot
+        base_width = 10
+        base_height = 6
+        base_label_size = 12
+
+        # Calculate scaling factors based on the current width and height
+        width_scale = self.width / base_width
+        height_scale = self.height / base_height
+
+        # Use the smaller scale to ensure labels fit well
+        scale = min(width_scale, height_scale)
+
+        # Return the scaled label size
+        return base_label_size * scale
+
+    def apply_line_marker_and_label_size(self, ax):
+        """Apply the dynamically calculated line width, marker size, and label size to the axis."""
+        line_width = self.get_line_width()
+        marker_size = self.get_marker_size()
+        label_size = self.get_point_label_size()
+
+        # Example: Apply these settings to all lines and markers in the axis
+        for line in ax.get_lines():
+            line.set_linewidth(line_width)
+            line.set_markersize(marker_size)
+
+        # Apply label size to all text annotations
+        for text in ax.texts:
+            text.set_fontsize(label_size)
+    
     def initialize_plot_data(self):
         return {
             'unique_vertices': [],
@@ -397,9 +503,6 @@ class VisualizeAlteration:
             width_alt = max(self.width, width_alt)
             height_alt = max(self.height, height_alt)
 
-            print(f"Width Alt: {width_alt}")
-            print(f"Height Alt: {height_alt}")
-
             if self.override_dpi:
                 self.dpi = self.override_dpi
             else:
@@ -464,16 +567,27 @@ class VisualizeAlteration:
         plt.close(fig_combined)
 
     def plot_only_vertices(self, ax):
+        font_size = self.get_font_size()
+        marker_size = self.get_marker_size()
+        line_width = self.get_line_width()
+        label_size = self.get_point_label_size()
+        
         for _, row in self.plot_df.iterrows():
             if not pd.isna(row['unique_vertices_x']) and not pd.isna(row['unique_vertices_y']):
                 xs, ys = row['unique_vertices_x'], row['unique_vertices_y']
-                ax.plot(xs, ys, marker='o', linewidth=0.5, markersize=5, color="#006400", label="Original")
+                ax.plot(xs, ys, marker='o', linewidth=line_width, markersize=marker_size, color="#006400", label="Original")
         
-        ax.set_title(f'Original Vertices Plot for {self.piece_name}', fontsize=16)
-        ax.set_xlabel('X Coordinate [in]', fontsize=14)
-        ax.set_ylabel('Y Coordinate [in]', fontsize=14)
+        ax.set_title(f'Original Vertices Plot for {self.piece_name}', fontsize=font_size+2)
+        ax.set_xlabel('X Coordinate [in]', fontsize=font_size)
+        ax.set_ylabel('Y Coordinate [in]', fontsize=font_size)
+
+        self.apply_tick_size(ax)
 
     def plot_combined(self, ax):
+        font_size = self.get_font_size()
+        marker_size = self.get_marker_size()
+        line_width = self.get_line_width()
+
         for _, row in self.plot_df.iterrows():
             xs, ys = row['unique_vertices_x'], row['unique_vertices_y']
 
@@ -483,22 +597,29 @@ class VisualizeAlteration:
             xs_alt_reduced = self.data_processing_utils.filter_valid_coordinates(row['altered_vertices_reduced_x'])
             ys_alt_reduced = self.data_processing_utils.filter_valid_coordinates(row['altered_vertices_reduced_y'])
 
-            ax.plot(xs, ys, marker='o', linewidth=0.5, markersize=5, color="#006400", label="Original")
-            ax.plot(xs_alt_reduced, ys_alt_reduced, marker='x', linestyle='-.', linewidth=1.5, markersize=8, color="#BA55D3", alpha=0.7, label="Altered Reduced")
-            ax.plot(xs_alt, ys_alt, marker='o', linestyle='-', linewidth=1, markersize=3, color="#00CED1", alpha=0.85, label="Altered")
+            ax.plot(xs, ys, marker='o', linewidth=line_width, markersize=marker_size, color="#006400", label="Original")
+            ax.plot(xs_alt_reduced, ys_alt_reduced, marker='x', linestyle='-.', linewidth=line_width+0.5, markersize=marker_size+3, color="#BA55D3", alpha=0.7, label="Altered Reduced")
+            ax.plot(xs_alt, ys_alt, marker='o', linestyle='-', linewidth=line_width, markersize=marker_size, color="#00CED1", alpha=0.85, label="Altered")
             
-            ax.tick_params(axis='both', which='both', labelsize=12)
-            ax.set_title(f'Combined Vertices Plot for {self.piece_name}', fontsize=16)
-            ax.set_xlabel('X Coordinate [in]', fontsize=14)
-            ax.set_ylabel('Y Coordinate [in]', fontsize=14)
+            #ax.tick_params(axis='both', which='both', labelsize=12)
+            ax.set_title(f'Combined Vertices Plot for {self.piece_name}', fontsize=font_size+2)
+            ax.set_xlabel('X Coordinate [in]', fontsize=font_size)
+            ax.set_ylabel('Y Coordinate [in]', fontsize=font_size)
+
+            # Apply dynamic tick size
+            self.apply_tick_size(ax)
 
         ax.legend(handles=[
-            Line2D([0], [0], color="#006400", marker='o', label="Original", linewidth=0.5, markersize=5),
-            Line2D([0], [0], color="#00CED1", linestyle='-', marker='o', label="Altered", linewidth=0.5, markersize=3),
-            Line2D([0], [0], color="#BA55D3", linestyle='-.', marker='x', label="Altered Reduced", linewidth=1, markersize=8)
+            Line2D([0], [0], color="#006400", marker='o', label="Original", linewidth=line_width, markersize=marker_size),
+            Line2D([0], [0], color="#00CED1", linestyle='-', marker='o', label="Altered", linewidth=line_width, markersize=marker_size),
+            Line2D([0], [0], color="#BA55D3", linestyle='-.', marker='x', label="Altered Reduced", linewidth=line_width+0.5, markersize=marker_size+3)
         ])
 
     def plot_alteration_table(self, output_dir, fig=None, ax=None):
+        font_size = self.get_font_size()
+        marker_size = self.get_marker_size()
+        line_width = self.get_line_width()
+
         if self.grid:
             sns.set(style="whitegrid")
 
@@ -533,8 +654,6 @@ class VisualizeAlteration:
             nearby_coords_right = point['nearby_point_right_coords']
 
             if belongs_to == "altered":
-                ax.plot(point['x'], point['y'], 'o', color=point['color'], markersize=5)
-                ax.text(point['x'], point['y'], point['label'], color=point['color'], fontsize=12)
                 mtm_alt_labels.append(label)
 
                 coords["old_coords"].append(((point['x_old']), (point['y_old'])))
@@ -547,7 +666,11 @@ class VisualizeAlteration:
                 if isinstance(mdp_x, str) and isinstance(mdp_y, str):
                     mdp_x = ast.literal_eval(mdp_x) 
                     mdp_y = ast.literal_eval(mdp_y) 
-                    mtm_dependent_coords = list(zip(mdp_x, mdp_y))
+
+                    if isinstance(mdp_x, list) and isinstance(mdp_y, list):
+                        mtm_dependent_coords = list(zip(mdp_x, mdp_y))
+                    else: 
+                        mtm_dependent_coords = ((mdp_x), (mdp_y))
                 else:
                     mtm_dependent_coords = ((mdp_x), (mdp_y))
                 
@@ -562,18 +685,6 @@ class VisualizeAlteration:
         coords["mtm_dependent_coords"] = self.data_processing_utils.flatten_if_needed(coords["mtm_dependent_coords"])
         coords["mtm_dependent_coords"] = self.data_processing_utils.remove_duplicates(coords["mtm_dependent_coords"])
         coords["mtm_dependent_coords"] = self.data_processing_utils.sort_by_x(coords["mtm_dependent_coords"])
-            
-        for _, row in plot_df.iterrows():
-            point = row['mtm_points']
-            label = point['label']
-            belongs_to = point['belongs_to']
-
-            if belongs_to == "original":
-                if label in mtm_alt_labels:
-                    continue
-                else:
-                    ax.plot(point['x'], point['y'], 'o', color=point['color'], markersize=5)
-                    ax.text(point['x'], point['y'], point['label'], color=point['color'], fontsize=12)
 
         dependent_first = coords["mtm_dependent_coords"][0]
         dependent_last = coords["mtm_dependent_coords"][-1]
@@ -621,7 +732,7 @@ class VisualizeAlteration:
 
                     # Plot the segment
                     if x_coords and y_coords:  # Ensure that the segment is not empty
-                        ax.plot(x_coords, y_coords, marker='o', linestyle='-', linewidth=1, markersize=3, color="#00CED1", alpha=0.85, label="Altered")
+                        ax.plot(x_coords, y_coords, marker='o', linestyle='-', linewidth=line_width, markersize=marker_size, color="#00CED1", alpha=0.85, label="Altered")
 
                     if xs_alt and ys_alt:  # Check if xs_alt and ys_alt are not empty
                         xs_alt_list.append(xs_alt)
@@ -634,18 +745,40 @@ class VisualizeAlteration:
         ax.set_aspect('equal', 'box')
         
         # Plot the altered segment
-        ax.plot(xs_alt_list, ys_alt_list, marker='o', linestyle='-', linewidth=1, markersize=3, color="#00CED1", alpha=0.85, label="Altered")
+        ax.plot(xs_alt_list, ys_alt_list, marker='o', linestyle='-', linewidth=line_width, markersize=marker_size, color="#00CED1", alpha=0.85, label="Altered")
 
-        ax.set_title(f'Alteration plot for {self.piece_name}', fontsize=16)
-        ax.set_xlabel('X Coordinate [in]', fontsize=14)
-        ax.set_ylabel('Y Coordinate [in]', fontsize=14)
+        ax.set_title(f'Alteration plot for {self.piece_name}', fontsize=font_size+2)
+        ax.set_xlabel('X Coordinate [in]', fontsize=font_size)
+        ax.set_ylabel('Y Coordinate [in]', fontsize=font_size)
 
-        ax.tick_params(axis='both', which='both', labelsize=12)
+        #ax.tick_params(axis='both', which='both', labelsize=12)
+        # Apply dynamic tick size
+        self.apply_tick_size(ax)
+
+        # Plot MTM points
+        for _, row in plot_df.iterrows():
+            point = row['mtm_points']
+            label = point['label']
+            belongs_to = point['belongs_to']
+
+            if belongs_to == "original":
+                if label in mtm_alt_labels:
+                    continue
+                else:
+                    ax.plot(point['x'], point['y'], 'o', color=point['color'], markersize=marker_size)
+                    ax.text(point['x'], point['y'], point['label'], color=point['color'], fontsize=font_size)
+
+            if belongs_to == "altered":
+                ax.plot(point['x'], point['y'], 'o', color=point['color'], markersize=marker_size)
+                ax.text(point['x'], point['y'], point['label'], color=point['color'], fontsize=font_size)
 
     def plot_all_mtm_points(self, ax, row):
+        marker_size = self.get_marker_size()
+        label_size = self.get_point_label_size()
+
         for point in row['mtm_points']:
-            ax.plot(point['x'], point['y'], 'o', color=point['color'], markersize=5)
-            ax.text(point['x'], point['y'], point['label'], color=point['color'], fontsize=12)
+            ax.plot(point['x'], point['y'], 'o', color=point['color'], markersize=marker_size)
+            ax.text(point['x'], point['y'], point['label'], color=point['color'], fontsize=label_size)
 
             # Plot movement for altered points
             #if point['color'] == 'blue':
@@ -664,7 +797,7 @@ if __name__ == "__main__":
     # DPI can only be overriden if plot_actual_size = False
     # Display resolution set for Macbook Pro m2 - change to whatever your screen res is
     visualize_alteration = VisualizeAlteration(input_table_path, input_vertices_path, 
-                                               grid=False, plot_actual_size=True, override_dpi=600, display_size=16,
+                                               grid=False, plot_actual_size=True, override_dpi=None, display_size=16,
                                                display_resolution_width=3456, display_resolution_height=2234)
     
     # Run this only once (TEST)
