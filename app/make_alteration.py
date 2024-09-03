@@ -16,8 +16,15 @@ import os
 # TODO: Add storing to AWS
 
 class MakeAlteration:
-    def __init__(self, input_table_path, input_vertices_path, alteration_rule,
-                 piece_name, save_folder, save_folder_vertices, file_format):
+    def __init__(self, input_table_path=None, 
+                 input_vertices_path=None, 
+                 alteration_rule=None,
+                 piece_name=None,
+                 input_folder_alteration = None,
+                 input_folder_vertices = None, 
+                 save_folder="../data/staging_2/processed_alterations/", 
+                 save_folder_vertices="../data/staging_2/processed_vertices/", 
+                 file_format=".csv"):
         
         self.processing_utils = DataProcessingUtils()
 
@@ -26,10 +33,13 @@ class MakeAlteration:
 
         self.alteration_rule = alteration_rule
         self.piece_name = piece_name
-        self.start_df = self.processing_utils.load_csv(input_table_path)
-        self.start_df = self.filter_by_piece_name()
 
-        self.vertices_df = self.processing_utils.load_csv(input_vertices_path)
+        if input_table_path:
+            self.start_df = self.processing_utils.load_csv(input_table_path)
+            self.start_df = self.filter_by_piece_name()
+
+        if input_vertices_path:
+            self.vertices_df = self.processing_utils.load_csv(input_vertices_path)
 
         self.df_alt = ""
         self.total_alt = []
@@ -39,6 +49,11 @@ class MakeAlteration:
         self.save_folder = save_folder
         self.save_folder_vertices = save_folder_vertices
         self.file_format = file_format
+
+        self.alteration_input_dir = input_folder_alteration
+        self.vertices_input_dir = input_folder_vertices
+        self.save_folder = "../data/staging_2/processed_alterations/"
+        self.save_folder_vertices = "../data/staging_2/processed_vertices/"
 
     def filter_by_piece_name(self):
         return self.start_df[self.start_df['piece_name'] == self.piece_name]
@@ -92,7 +107,7 @@ class MakeAlteration:
 
         # Save final table
         # Ensure the save folder exists
-        os.makedirs(save_folder, exist_ok=True)
+        os.makedirs(self.save_folder, exist_ok=True)
         save_filepath = f"{self.save_folder}/{self.alteration_rule}_{self.piece_name}{self.file_format}"
         merged_df.to_csv(save_filepath, index=False)
     
@@ -681,21 +696,13 @@ class MakeAlteration:
             df.at[row.name, 'mtm_dependant_y'] = y_coords if len(y_coords) > 1 else y_coords[0]
 
         return df
-
-if __name__ == "__main__":
-
-    # Directory paths
-    alteration_input_dir = "../data/output_tables/combined_alteration_tables/"
-    vertices_input_dir = "../data/output_tables/vertices/"
-    save_folder = "../data/output_tables/processed_alterations/"
-    save_folder_vertices = "../data/output_tables/processed_vertices/"
-    file_format = '.csv'  # Or '.csv'
-
-    # Loop through all CSV files in the alteration_input_dir
-    for alteration_file in os.listdir(alteration_input_dir):
-        if alteration_file.endswith(".csv"):  # Ensure we're only processing CSV files
+    
+    def alter_all(self):
+        # Loop through all CSV files in the alteration_input_dir
+        for alteration_file in os.listdir(self.alteration_input_dir):
+            if alteration_file.endswith(".csv"):  # Ensure we're only processing CSV files
                 # Construct the full path for the current alteration table file
-                input_table_path = os.path.join(alteration_input_dir, alteration_file)
+                input_table_path = os.path.join(self.alteration_input_dir, alteration_file)
                 
                 # Read the alteration file to get the unique piece names
                 alteration_df = pd.read_csv(input_table_path)
@@ -709,7 +716,7 @@ if __name__ == "__main__":
                 for piece_name in unique_piece_names:
                     # Construct the expected vertices file path
                     vertices_input_file = f"vertices_{piece_name}.csv"
-                    input_vertices_path = os.path.join(vertices_input_dir, vertices_input_file)
+                    input_vertices_path = os.path.join(self.vertices_input_dir, vertices_input_file)
 
                     print("INPUT VERTICES PATH")
                     print(input_vertices_path)
@@ -720,7 +727,7 @@ if __name__ == "__main__":
                         try:
                             # Create an instance of MakeAlteration for the current piece
                             make_alteration = MakeAlteration(input_table_path, input_vertices_path, alteration_rule=alteration_rule, piece_name=piece_name, 
-                                                             save_folder=save_folder, save_folder_vertices=save_folder_vertices, file_format=file_format)
+                                                             save_folder=self.save_folder, save_folder_vertices=self.save_folder_vertices)
                         
                             # Apply the alteration rules and process the file
                             make_alteration.apply_alteration_rules(custom_alteration=False)
@@ -733,3 +740,15 @@ if __name__ == "__main__":
                         continue
         else:
             print(f"Skipping non-CSV file: {alteration_file}")
+
+if __name__ == "__main__":
+
+    # To run functions for single, specify input table and vertices 1-by-1
+    #make_alteration = MakeAlteration(input_table_path=..., input_vertices_path=..) 
+
+    alteration_staging_1 = "../data/staging_1/combined_alteration_tables/"
+    vertices_staging_2 = "../data/staging_1/vertices/"
+
+    # Way to call the function when running multiple
+    make_alteration = MakeAlteration(input_folder_alteration=alteration_staging_1, input_folder_vertices=vertices_staging_2)
+    make_alteration.alter_all()

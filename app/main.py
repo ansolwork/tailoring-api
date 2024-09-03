@@ -1,15 +1,17 @@
 from create_table import CreateTable
 from make_alteration import MakeAlteration  # Assuming this is in a separate file named 'make_alteration.py'
 from visualize_alteration import VisualizeAlteration  # Import the visualization class
+import os
+import pandas as pd
 
 class Main:
     def __init__(self, alteration_filepath, combined_entities_folder, 
-                 preprocessed_table_path, input_vertices_path,
-                 processed_alterations_path, processed_vertices_path
+                 staging_1_alteration, staging_1_vertices,
+                 staging_2_alteration, staging_2_vertices
                  ):
         self.create_table = CreateTable(alteration_filepath, combined_entities_folder)
-        self.make_alteration = MakeAlteration(preprocessed_table_path, input_vertices_path)
-        self.visualize_alteration = VisualizeAlteration(processed_alterations_path, processed_vertices_path)
+        self.make_alteration = MakeAlteration(input_folder_alteration=staging_1_alteration, input_folder_vertices=staging_1_vertices)
+        #self.visualize_alteration = VisualizeAlteration(processed_alterations_path, processed_vertices_path)
 
     def create_tables(self):
         # Process the sheets and get the combined DataFrame
@@ -27,8 +29,7 @@ class Main:
         self.create_table.add_other_mtm_points()
 
     def apply_alterations(self):
-        # Apply alteration rules
-        self.make_alteration.apply_alteration_rules(custom_alteration=False)
+        self.make_alteration.alter_all()
 
     def visualize_results(self):
         # Prepare plot data
@@ -46,24 +47,24 @@ class Main:
         self.apply_alterations()
 
         # Visualize the results after applying alterations
-        self.visualize_results()
+        #self.visualize_results()
 
 if __name__ == "__main__":
     # Input 1
-    alteration_filepath = "../data/input/MTM-POINTS.xlsx"
+    alteration_filepath = "../data/input/mtm_points.xlsx"
     combined_entities_folder = "../data/input/mtm-combined-entities/"
 
-    # Input 2 - After processing
-    preprocessed_table_path = "../data/output_tables/combined_alteration_tables/combined_table_4-WAIST.csv"
-    input_vertices_path = "../data/output_tables/vertices/LGFG-SH-01-CCB-FO_vertices.csv"
+    # Input 2 - After processing (Staging 1)
+    alteration_staging_1 = "../data/staging_1/combined_alteration_tables/"
+    vertices_staging_1 = "../data/staging_1/vertices/"
 
     # Input 3: Visualization
-    processed_alterations_path = "../data/output_tables/processed_alterations_2.xlsx"
-    processed_vertices_path = "../data/output_tables/vertices_df.xlsx"
+    processed_alterations_path = "../data/staging_2/processed_alterations/"
+    processed_vertices_path = "../data/staging_2/processed_vertices/"
 
     # Initialize the Main class with the required file paths
     main_process = Main(alteration_filepath, combined_entities_folder, 
-                        preprocessed_table_path, input_vertices_path,
+                        alteration_staging_1, vertices_staging_1,
                         processed_alterations_path, processed_vertices_path)
     
     # Execute the process

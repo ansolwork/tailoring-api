@@ -10,8 +10,8 @@ class CreateTable:
         self.alteration_joined_df = pd.DataFrame()
         self.combined_entities_joined_df = pd.DataFrame()
         self.merged_df = pd.DataFrame()
-        self.output_dir = "../data/output_tables"
-        self.output_table_path = "../data/output_tables/combined_alteration_tables"
+        self.output_dir = "../data/staging_1"
+        self.output_table_path = "../data/staging_1/combined_alteration_tables"
 
         # Add more sheets if necessary
         self.sheet_list = ["SHIRT-FRONT", "SHIRT-BACK", "SHIRT-YOKE", "SHIRT-SLEEVE", 
@@ -84,7 +84,7 @@ class CreateTable:
             how='right'
         )
 
-        self.merged_df.to_csv("../data/output_tables/merged_df.csv")
+        self.merged_df.to_csv("../data/staging_1/merged_df.csv")
 
     def save_table_csv(self, output_filename_prefix="combined_table"):
         

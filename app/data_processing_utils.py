@@ -321,8 +321,7 @@ class DataProcessingUtils:
                 "inkscape", 
                 svg_path, 
                 "--export-type=hpgl", 
-                f"--export-filename={output_hpgl_path}",
-                "--export-dpi=72"  # Explicitly set DPI to 72
+                f"--export-filename={output_hpgl_path}"
             ]
             subprocess.run(command, check=True)
             print(f"HPGL file saved to {output_hpgl_path}")
@@ -341,3 +340,19 @@ class DataProcessingUtils:
             print(f"DXF file saved to {output_dxf_path}")
         except subprocess.CalledProcessError as e:
             print(f"An error occurred while converting SVG to DXF: {e}")
+
+    def svg_to_pdf(self, svg_path, output_pdf_path):
+        """
+        Converts an SVG file to PDF format using Inkscape.
+        """
+        try:
+            command = [
+                "inkscape", 
+                svg_path, 
+                "--export-type=pdf", 
+                f"--export-filename={output_pdf_path}"
+            ]
+            subprocess.run(command, check=True)
+            print(f"PDF file saved to {output_pdf_path}")
+        except subprocess.CalledProcessError as e:
+            print(f"An error occurred while converting SVG to PDF: {e}")

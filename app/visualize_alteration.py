@@ -5,10 +5,6 @@ import numpy as np
 import seaborn as sns
 import math
 import hashlib
-from svgpathtools import svg2paths2
-import vpype
-
-import xml.etree.ElementTree as ET
 
 import matplotlib
 from matplotlib import pyplot as plt
@@ -21,7 +17,6 @@ from data_processing_utils import DataProcessingUtils
 
 # TODO: Add some margin to the bounding box? So we can see the points
 # TODO: Show labels in SVG Plot?
-# TODO: Fix the other cases: Check why unique vertices has multiple columns in other files. Maybe thats where the error comes?
 # TODO: Move grid out of the class
 
 class VisualizeAlteration:
@@ -474,10 +469,13 @@ class VisualizeAlteration:
         hpgl_dir = os.path.join(piece_dir, "hpgl")
         dxf_dir = os.path.join(piece_dir, "dxf")
         png_dir = os.path.join(piece_dir, "png")
+        pdf_dir = os.path.join(piece_dir, "pdf")
+
         os.makedirs(svg_dir, exist_ok=True)
         os.makedirs(hpgl_dir, exist_ok=True)
         os.makedirs(dxf_dir, exist_ok=True)
         os.makedirs(png_dir, exist_ok=True)
+        os.makedirs(pdf_dir, exist_ok=True)
         
         if self.grid:
             sns.set(style="whitegrid")
@@ -552,11 +550,13 @@ class VisualizeAlteration:
         output_vertices_path_svg = os.path.join(svg_dir, f"{vertices_filename}.svg")
         output_vertices_path_hpgl = os.path.join(hpgl_dir, f"{vertices_filename}.hpgl")
         output_vertices_path_dxf = os.path.join(dxf_dir, f"{vertices_filename}.dxf")
+        output_vertices_path_pdf = os.path.join(pdf_dir, f"{vertices_filename}.pdf")
 
         fig_vertices.savefig(output_vertices_path_png, dpi=self.dpi, bbox_inches='tight')
         self.data_processing_utils.save_plot_as_svg(fig_vertices, ax_vertices, self.width, self.height, output_vertices_path_svg, add_labels=False)
         self.data_processing_utils.svg_to_hpgl(output_vertices_path_svg, output_vertices_path_hpgl)
         self.data_processing_utils.svg_to_dxf(output_vertices_path_svg, output_vertices_path_dxf)
+        self.data_processing_utils.svg_to_pdf(output_vertices_path_svg, output_vertices_path_pdf)
         print(f"Vertices Plot Saved To {output_vertices_path_png}, {output_vertices_path_svg}, {output_vertices_path_hpgl}, {output_vertices_path_dxf}")
 
         alteration_filename = f"alteration_table_plot_{self.piece_name}"
