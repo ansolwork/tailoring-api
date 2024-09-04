@@ -1,9 +1,11 @@
 ALLOWED_EXTENSIONS :
   - 'xlsx'
   - 'csv'
+  - 'dxf'
 ALLOWED_MIME_TYPES :
   - 'application/vnd.ms -excel'
   - 'image/x-dxf'
+  - 'text/csv'
 AWS_S3_BUCKET_NAME : 'lgfgbucket'
 AWS_DXF_DIR_PATH : "data/input/recurrent/dxf_files/"
 AWS_MTM_DIR_PATH : "data/input/recurrent/mtm_combined_entites/"
