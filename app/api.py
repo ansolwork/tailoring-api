@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, render_template, redirect, send_from_directory
 import os
 import yaml
-from app.aws_utils import AwsUtils
+from aws_utils import AwsUtils
 from main import Main
 
 app = Flask(__name__)
