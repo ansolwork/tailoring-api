@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, send_file, redirect
+from flask import Flask, request, jsonify, render_template, redirect, send_from_directory
 import os
 import yaml
 from app.aws_utils import AwsUtils
@@ -19,18 +19,20 @@ AWS_S3_BUCKET_NAME = yaml_config['AWS_S3_BUCKET_NAME']
 AWS_DXF_DIR_PATH = yaml_config['AWS_DXF_DIR_PATH']
 AWS_MTM_DIR_PATH = yaml_config['AWS_MTM_DIR_PATH']
 AWS_OUTPUT_DIR_PATH = yaml_config['AWS_OUTPUT_DIR_PATH']
+AWS_S3_SIGNATURE_VERSION = yaml_config['AWS_S3_SIGNATURE_VERSION']
 
-aws_utils = AwsUtils(ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, AWS_S3_BUCKET_NAME)
+aws_utils = AwsUtils(ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, AWS_S3_BUCKET_NAME, AWS_S3_SIGNATURE_VERSION)
 
 
 @app.route("/home")
 def home():
     # return "Hello World!"
-    contents = aws_utils.list_all_s3_files(AWS_OUTPUT_DIR_PATH)
-    return render_template("Index.html", contents=contents)
+    contents_output = aws_utils.list_all_s3_files(AWS_OUTPUT_DIR_PATH)
+    contents_mtm = aws_utils.list_all_s3_files(AWS_MTM_DIR_PATH)
+    return render_template("Index.html", contents_output=contents_output, contents_mtm=contents_mtm)
 
 
-@app.route("/upload_file", methods=["POST","GET"])
+@app.route("/upload_file", methods=["POST", "GET"])
 def upload_file():
     if "file-to-s3" not in request.files:
         return "No files key in request.files"
@@ -41,7 +43,7 @@ def upload_file():
         return "Please select a file"
     if file:
         typeform = request.form['file_choice']
-        print("typeform"+typeform)
+        print("typeform" + typeform)
         if typeform.lower() == 'dxf_file':
             aws_utils.upload_file_to_s3(file, AWS_DXF_DIR_PATH)
         if typeform.lower() == 'mtm_points_file':
@@ -51,12 +53,18 @@ def upload_file():
         return "File not uploaded successfully"
 
 
-
-@app.route("/download_file/<path:filename>", methods=['GET'])
-def download_files(filename):
+@app.route("/download_file_to_dir/<path:filename>", methods=['GET'])
+def download_files(s3_filepath, local_filepath):
     if request.method == 'GET':
-        output = aws_utils.download_file_from_s3(filename)
-        return send_file(f"test_aws.xlsx", as_attachment=True)
+        output = aws_utils.download_file_from_s3(s3_filepath, local_filepath)
+        return output
+
+
+@app.route("/download_file_as_attachment/<path:s3_filename>", methods=['GET'])
+def download_files_as_attachment(s3_filename):
+    if request.method == 'GET':
+        presigned_url = aws_utils.download_file_as_attachment(s3_filename)
+        return redirect(presigned_url)
 
 
 @app.route("/upload_dxf")
