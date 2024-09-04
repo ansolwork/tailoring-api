@@ -1,149 +1,117 @@
-import gradio as gr
+from flask import Flask, request, jsonify, render_template, redirect, send_from_directory
 import os
-import shutil
-import tempfile
-import pandas as pd
-from matplotlib import pyplot as plt
-from dxf_loader import DXFLoader
-from apply_alteration import ApplyAlteration  # Ensure this import is correct
+import yaml
+from utils.aws_utils import AwsUtils
+from app.main import Main
 
-# Define process_dxf function
-def process_dxf(file):
-    if file is None:
-        return "No file uploaded. Please upload a DXF file.", []
+# Linux / Mac - Change if necessary
+config_filepath = "../tailoring_api_config.yml"
 
-    print(f"Processing DXF file: {file.name}")
+app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024  # 1 MB as per file upload limit
 
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_file_path = os.path.join(temp_dir, os.path.basename(file.name))
-        shutil.copy(file.name, temp_file_path)
+# Load config file
+with open(config_filepath) as f:
+    try:
+        yaml_config = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        print(e)
 
-        dxf_loader = DXFLoader()
-        try:
-            dxf_loader.load_dxf(temp_file_path)
-            df = dxf_loader.entities_to_dataframe(temp_file_path)
-        except RuntimeError as e:
-            return str(e), []
+ALLOWED_EXTENSIONS = yaml_config['ALLOWED_EXTENSIONS']
+ALLOWED_MIME_TYPES = yaml_config['ALLOWED_MIME_TYPES']
+AWS_S3_BUCKET_NAME = yaml_config['AWS_S3_BUCKET_NAME']
+AWS_DXF_DIR_PATH = yaml_config['AWS_DXF_DIR_PATH']
+AWS_MTM_DIR_PATH = yaml_config['AWS_MTM_DIR_PATH']
+AWS_OUTPUT_DIR_PATH = yaml_config['AWS_OUTPUT_DIR_PATH']
+AWS_S3_SIGNATURE_VERSION = yaml_config['AWS_S3_SIGNATURE_VERSION']
 
-        sorted_df = df.sort_values(by=['Filename', 'Type', 'Layer'])
+aws_utils = AwsUtils(ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, AWS_S3_BUCKET_NAME, AWS_S3_SIGNATURE_VERSION)
 
-        sorted_df['MTM Points'] = ''
-        base_filename = os.path.splitext(os.path.basename(temp_file_path))[0]
-        output_excel_path = os.path.join(temp_dir, f"{base_filename}_combined_entities.xlsx")
-        sorted_df.to_excel(output_excel_path, index=False)
 
-        print(f"Output Excel file generated: {output_excel_path}")
+@app.route("/home")
+def home():
+    # return "Hello World!"
+    contents_output = aws_utils.list_all_s3_files(AWS_OUTPUT_DIR_PATH)
+    contents_mtm = aws_utils.list_all_s3_files(AWS_MTM_DIR_PATH)
+    return render_template("Index.html", contents_output=contents_output, contents_mtm=contents_mtm)
 
-        persistent_output_dir = "./persistent_output"
-        os.makedirs(persistent_output_dir, exist_ok=True)
-        persistent_excel_path = os.path.join(persistent_output_dir, os.path.basename(output_excel_path))
-        shutil.copy(output_excel_path, persistent_excel_path)
 
-        plot_paths = generate_plots(persistent_excel_path)
-
-        return persistent_excel_path, plot_paths
-
-# Define generate_plots function
-def generate_plots(excel_file_path):
-    output_directory = "./persistent_output/plots"
-    os.makedirs(output_directory, exist_ok=True)
-
-    df = pd.read_excel(excel_file_path)
-
-    def draw_lines_and_polylines(group, name):
-        plt.figure(figsize=(16, 10))  # Increase figure size
-
-        # Draw lines
-        lines = group[group['Type'] == 'LINE']
-        for _, row in lines.iterrows():
-            if pd.notna(row['Line_Start_X']) and pd.notna(row['Line_End_X']) and pd.notna(row['Line_Start_Y']) and pd.notna(row['Line_End_Y']):
-                plt.plot([row['Line_Start_X'], row['Line_End_X']], [row['Line_Start_Y'], row['Line_End_Y']], marker='o', linewidth=0.5, markersize=5)
-                plt.text(row['Line_Start_X'], row['Line_Start_Y'], f"({row['Line_Start_X']}, {row['Line_Start_Y']})", fontsize=10, ha='right', va='bottom')
-                plt.text(row['Line_End_X'], row['Line_End_Y'], f"({row['Line_End_X']}, {row['Line_End_Y']})", fontsize=10, ha='right', va='bottom')
-
-        # Draw polylines
-        polylines = group[group['Type'].isin(['POLYLINE', 'LWPOLYLINE'])]
-        unique_points = polylines.drop_duplicates(subset=['PL_POINT_X', 'PL_POINT_Y'])
-        for vertex_label in polylines['Vertex Label'].unique():
-            vertex_group = polylines[polylines['Vertex Label'] == vertex_label]
-            xs = vertex_group['PL_POINT_X'].tolist()
-            ys = vertex_group['PL_POINT_Y'].tolist()
-            plt.plot(xs, ys, marker='o', linewidth=0.5, markersize=5)
-
-        # Annotate unique points
-        for x, y, point_label in zip(unique_points['PL_POINT_X'], unique_points['PL_POINT_Y'], unique_points['Point Label']):
-            plt.text(x, y, f'{point_label}', fontsize=10, ha='right', va='bottom')
-
-        plt.title(f'Polyline Plot for {name}', fontsize=16)
-        plt.xlabel('X Coordinate', fontsize=14)
-        plt.ylabel('Y Coordinate', fontsize=14)
-        plt.xticks(fontsize=12)
-        plt.yticks(fontsize=12)
-        plt.grid(True)
-        plt.tight_layout()  # Improve layout
-
-        output_path = os.path.join(output_directory, f"polyline_plot_{name}.png")
-        plt.savefig(output_path, dpi=300)  # Increase DPI for better quality
-        plt.close()
-
-        return output_path
-
-    grouped = df.groupby('Filename')
-    plot_paths = []
-    for name, group in grouped:
-        plot_path = draw_lines_and_polylines(group, name)
-        plot_paths.append(plot_path)
-
-    return plot_paths
-
-# Define process_mtm_points function
-def process_mtm_points(file):
-    if file is None:
-        return "No file uploaded. Please upload an Excel file or a zip file.", []
-
-    print(f"Processing MTM points file: {file.name}")
-
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_file_path = os.path.join(temp_dir, os.path.basename(file.name))
-        shutil.copy(file.name, temp_file_path)
-
-        apply_alteration = ApplyAlteration()
-        apply_alteration.load_coordinates_tables(temp_file_path)
-        apply_alteration.remove_nan_mtm_points()
-        apply_alteration.display_filtered_coordinates_tables()
-        output_path = apply_alteration.plot_points()
-
-        if output_path:
-            persistent_output_dir = "./persistent_output"
-            os.makedirs(persistent_output_dir, exist_ok=True)
-            persistent_file_path = os.path.join(persistent_output_dir, os.path.basename(output_path))
-            shutil.copy(output_path, persistent_file_path)
-            print(f"Output file generated: {persistent_file_path}")
-            return persistent_file_path, [persistent_file_path]
-        else:
-            print("No output file generated.")
-            return "No output file generated.", []
-
-# Define process_file function
-def process_file(file, file_type):
-    if file is None:
-        return "No file uploaded. Please upload a file.", []
-
-    if file_type == 'DXF':
-        return process_dxf(file)
-    elif file_type == 'MTM Points':
-        return process_mtm_points(file)
+@app.route("/upload_file", methods=["POST", "GET"])
+def upload_file():
+    if "file-to-s3" not in request.files:
+        return "No files key in request.files"
+    file = request.files["file-to-s3"]
+    if not aws_utils.allowed_file(file.filename) or aws_utils.allowed_mime(file):
+        return "FILE FORMAT NOT ALLOWED"
+    if file.filename == "":
+        return "Please select a file"
+    if file:
+        typeform = request.form['file_choice']
+        print("typeform" + typeform)
+        if typeform.lower() == 'dxf_file':
+            aws_utils.upload_file_to_s3(file, AWS_DXF_DIR_PATH)
+        if typeform.lower() == 'mtm_points_file':
+            aws_utils.upload_file_to_s3(file, AWS_MTM_DIR_PATH)
+        return redirect("/home")
     else:
-        return "Invalid file type", []
+        return "File not uploaded successfully"
 
-# Define Gradio interface
-iface = gr.Interface(
-    fn=process_file,
-    inputs=[gr.File(label="Upload File", type="filepath"), gr.Radio(["DXF", "MTM Points"], label="Select File Type")],
-    outputs=[gr.File(label="Processed Excel File"), gr.Gallery(label="Generated Plots")],
-    title="File Processor",
-    description="Upload a DXF file and get a processed Excel file with combined entities and plots. Also, upload an Excel file or a zip file with MTM points to generate output graphs.",
-    theme="default"
-)
 
-iface.launch(share=True)
+@app.route("/download_file_to_dir/<path:filename>", methods=['GET'])
+def download_files(s3_filepath, local_filepath):
+    if request.method == 'GET':
+        output = aws_utils.download_file_from_s3(s3_filepath, local_filepath)
+        return output
+
+
+@app.route("/download_file_as_attachment/<path:s3_filename>", methods=['GET'])
+def download_files_as_attachment(s3_filename):
+    if request.method == 'GET':
+        presigned_url = aws_utils.download_file_as_attachment(s3_filename)
+        return redirect(presigned_url)
+
+
+@app.route("/upload_dxf")
+def ui_upload_dxf():
+    return "Placeholder"
+
+
+@app.route("/process", methods=['POST'])
+def run_main_process():
+    # Get input data from the request
+    alteration_filepath = request.json.get('alteration_filepath')
+    combined_entities_folder = request.json.get('combined_entities_folder')
+    preprocessed_table_path = request.json.get('preprocessed_table_path')
+    input_vertices_path = request.json.get('input_vertices_path')
+    processed_alterations_path = request.json.get('processed_alterations_path')
+    processed_vertices_path = request.json.get('processed_vertices_path')
+
+    # Validate the provided paths
+    if not os.path.exists(alteration_filepath):
+        return jsonify({"error": "Alteration file path does not exist."}), 400
+    if not os.path.isdir(combined_entities_folder):
+        return jsonify({"error": "Combined entities folder does not exist."}), 400
+    if not os.path.exists(preprocessed_table_path):
+        return jsonify({"error": "Preprocessed table path does not exist."}), 400
+    if not os.path.exists(input_vertices_path):
+        return jsonify({"error": "Input vertices path does not exist."}), 400
+    if not os.path.exists(processed_alterations_path):
+        return jsonify({"error": "Processed alterations path does not exist."}), 400
+    if not os.path.exists(processed_vertices_path):
+        return jsonify({"error": "Processed vertices path does not exist."}), 400
+
+    try:
+        # Initialize the Main object and run the process
+        main_process = Main(alteration_filepath, combined_entities_folder,
+                            preprocessed_table_path, input_vertices_path,
+                            processed_alterations_path, processed_vertices_path)
+        main_process.run()
+
+        return jsonify({"message": "Processing completed successfully."})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
