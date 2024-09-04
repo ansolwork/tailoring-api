@@ -6,8 +6,9 @@ from app.main import Main
 
 # Run from project root (no relative path needed)
 config_filepath = "tailoring_api_config.yml"
+test_profile = "183295423477_PowerUserAccess"
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder="templates")
 app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024  # 1 MB as per file upload limit
 
 # Load config file
@@ -25,7 +26,7 @@ AWS_MTM_DIR_PATH = yaml_config['AWS_MTM_DIR_PATH']
 AWS_OUTPUT_DIR_PATH = yaml_config['AWS_OUTPUT_DIR_PATH']
 AWS_S3_SIGNATURE_VERSION = yaml_config['AWS_S3_SIGNATURE_VERSION']
 
-aws_utils = AwsUtils(ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, AWS_S3_BUCKET_NAME, AWS_S3_SIGNATURE_VERSION)
+aws_utils = AwsUtils(ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, AWS_S3_BUCKET_NAME, AWS_S3_SIGNATURE_VERSION, test_profile)
 
 
 @app.route("/home")
