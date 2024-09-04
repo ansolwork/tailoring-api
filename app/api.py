@@ -1,27 +1,36 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_file, redirect
 import os
-
+import yaml
 from app.aws_utils import AwsUtils
 from main import Main
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 megabytes
+app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024  # 1 MB as per file upload limit
+# Load config file
+with open("..\\tailoring_api_config.yml") as f:
+    try:
+        yaml_config = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        print(e)
 
-ALLOWED_EXTENSIONS = ['xlsx', 'csv', 'text']
-ALLOWED_MIME_TYPES = ['application/vnd.ms -excel']
-AWS_S3_BUCKET_NAME = 'lgfgbucket'
-AWS_INPUT_DIR_PATH = "data/input/mtm-combined-entites/"
+ALLOWED_EXTENSIONS = yaml_config['ALLOWED_EXTENSIONS']
+ALLOWED_MIME_TYPES = yaml_config['ALLOWED_MIME_TYPES']
+AWS_S3_BUCKET_NAME = yaml_config['AWS_S3_BUCKET_NAME']
+AWS_DXF_DIR_PATH = yaml_config['AWS_DXF_DIR_PATH']
+AWS_MTM_DIR_PATH = yaml_config['AWS_MTM_DIR_PATH']
+AWS_OUTPUT_DIR_PATH = yaml_config['AWS_OUTPUT_DIR_PATH']
 
 aws_utils = AwsUtils(ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, AWS_S3_BUCKET_NAME)
 
 
-@app.route("/")
-def hello():
+@app.route("/home")
+def home():
     # return "Hello World!"
-    return render_template("Index.html")
+    contents = aws_utils.list_all_s3_files(AWS_OUTPUT_DIR_PATH)
+    return render_template("Index.html", contents=contents)
 
 
-@app.route("/upload_file", methods=["POST"])
+@app.route("/upload_file", methods=["POST","GET"])
 def upload_file():
     if "file-to-s3" not in request.files:
         return "No files key in request.files"
@@ -31,10 +40,23 @@ def upload_file():
     if file.filename == "":
         return "Please select a file"
     if file:
-        aws_utils.upload_file_to_s3(file, AWS_INPUT_DIR_PATH)
-        return render_template("Ack.html")
+        typeform = request.form['file_choice']
+        print("typeform"+typeform)
+        if typeform.lower() == 'dxf_file':
+            aws_utils.upload_file_to_s3(file, AWS_DXF_DIR_PATH)
+        if typeform.lower() == 'mtm_points_file':
+            aws_utils.upload_file_to_s3(file, AWS_MTM_DIR_PATH)
+        return redirect("/home")
     else:
         return "File not uploaded successfully"
+
+
+
+@app.route("/download_file/<path:filename>", methods=['GET'])
+def download_files(filename):
+    if request.method == 'GET':
+        output = aws_utils.download_file_from_s3(filename)
+        return send_file(f"test_aws.xlsx", as_attachment=True)
 
 
 @app.route("/upload_dxf")
