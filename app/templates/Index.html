@@ -1,11 +1,47 @@
+<!DOCTYPE html>
 <html>
-<head>
-	<title>upload the file : GFG</title>
-</head>
-<body>
-	<form action = "/upload_file" method = "post" enctype="multipart/form-data">
-		<input type="file" name="file-to-s3" />
-		<input type = "submit" value="Upload">
-	</form>
-</body>
+  <head>
+    <title>UI for file Operations in S3</title>
+  </head>
+  <body>
+    <div class="content">
+        <h3 align ='center'>File Operations in S3</h3>
+
+        <div>
+          <h3>1. Please upload input file to S3 here </h3>
+          <p>IMPORTANT !!! KINDLY CHECK IF YOU ARE UPLOADING THE FILE WITH MTM POINTS USING OPTION 1.</p>
+          <form method="POST" action="/upload_file" enctype=multipart/form-data>
+            <input type=file name="file-to-s3">
+            <select id="file_choice" type="text" name="file_choice" placeholder="Select if DXF or MTM points" method="POST">
+              <option disabled selected>Select the type of File</option>
+              <option id="DXF_file" value="DXF_file">DXF File</option>
+              <option id="MTM_points_file" value="MTM_points_file">MTM points File</option>
+            </select>
+             <input type=submit value=Upload>
+          </form>
+        </div>
+      <div>
+          <h3>2. Processed Excel file from the above uploaded DXF</h3>
+          <p>Download it by clicking on the link and add the MTM points. Then,upload again using Option 1.</p>
+          <ul>
+            {% for item in contents_mtm %}
+              <li>
+                <a href="/download_file_as_attachment/{{ item }}"> {{ item }} </a>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div>
+          <h3>3. Output file</h3>
+          <p>Download it by clicking on the links.</p>
+          <ul>
+            {% for item in contents_output %}
+              <li>
+                <a href="/download_file_as_attachment/{{ item }}"> {{ item }} </a>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+    </div>
+  </body>
 </html>
