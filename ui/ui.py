@@ -4,8 +4,8 @@ import yaml
 from utils.aws_utils import AwsUtils
 from app.main import Main
 
-# Linux / Mac - Change if necessary
-config_filepath = "../tailoring_api_config.yml"
+# Run from project root (no relative path needed)
+config_filepath = "tailoring_api_config.yml"
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024  # 1 MB as per file upload limit

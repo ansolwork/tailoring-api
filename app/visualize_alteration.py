@@ -11,7 +11,7 @@ from matplotlib import pyplot as plt
 from matplotlib.lines import Line2D
 matplotlib.use('Agg')  # Use 'Agg' backend for non-GUI environments
 
-from data_processing_utils import DataProcessingUtils
+from utils.data_processing_utils import DataProcessingUtils
 
 # Next make a grid 1 inch per square - length/width. Square grid?
 

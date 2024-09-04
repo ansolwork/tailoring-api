@@ -1,6 +1,6 @@
-from create_table import CreateTable
-from make_alteration import MakeAlteration  # Assuming this is in a separate file named 'make_alteration.py'
-from visualize_alteration import VisualizeAlteration  # Import the visualization class
+from app.create_table import CreateTable
+from app.make_alteration import MakeAlteration  # Assuming this is in a separate file named 'make_alteration.py'
+from app.visualize_alteration import VisualizeAlteration  # Import the visualization class
 import os
 import pandas as pd
 
