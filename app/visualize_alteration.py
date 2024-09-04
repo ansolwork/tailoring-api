@@ -54,6 +54,8 @@ class VisualizeAlteration:
         self.display_resolution_width = display_resolution_width
         self.display_resolution_height = display_resolution_height 
 
+        self.hpgl_scale_factor = 1.297 # Magic Voodoo constant
+
     def get_piece_name(self, input_table_path):
         # Get the base name of the file (e.g., "altered_LGFG-1648-FG-07S.xlsx")
         file_name = os.path.basename(input_table_path)
@@ -338,7 +340,7 @@ class VisualizeAlteration:
                             mtm_label, row['mtm_dependant'], mtm_dependent_x=row['mtm_dependant_x'], mtm_dependent_y=row['mtm_dependant_y'], 
                             color='blue', movement_x=row['movement_x'], movement_y=row['movement_y'])
 
-    def create_and_save_grid(self, filename, num_squares_x=10, num_squares_y=10, output_dir="../data/output_graphs/plots/"):
+    def create_and_save_grid(self, filename, num_squares_x=10, num_squares_y=10, output_dir="../data/output/plots/"):
         """
         Creates a grid with 1x1 inch squares and saves it to a file.
         """
@@ -398,7 +400,7 @@ class VisualizeAlteration:
 
         print(f"Grid saved as {png_filename}, {svg_filename}, {hpgl_filename}, and {dxf_filename}")
     
-    def prepare_plot_data(self, output_dir="../data/output_tables/"):
+    def prepare_plot_data(self, output_dir="../data/staging_2/"):
         plot_data = self.initialize_plot_data()
         
         df = self.df.copy()
@@ -461,7 +463,7 @@ class VisualizeAlteration:
         print(f"Unique vertices saved to {output_path}")
         self.plot_df = plot_df
 
-    def plot_polylines_table(self, output_dir="../data/output_graphs/plots/"):
+    def plot_polylines_table(self, output_dir="../data/output/plots/"):
         piece_dir = os.path.join(output_dir, self.piece_name)
         if not os.path.exists(piece_dir):
             os.makedirs(piece_dir, exist_ok=True)
@@ -557,6 +559,7 @@ class VisualizeAlteration:
         self.data_processing_utils.svg_to_hpgl(output_vertices_path_svg, output_vertices_path_hpgl)
         self.data_processing_utils.svg_to_dxf(output_vertices_path_svg, output_vertices_path_dxf)
         self.data_processing_utils.svg_to_pdf(output_vertices_path_svg, output_vertices_path_pdf)
+        self.data_processing_utils.scale_hpgl(output_vertices_path_hpgl, os.path.join(hpgl_dir, "scaled_vertices.hpgl"), self.hpgl_scale_factor)
         print(f"Vertices Plot Saved To {output_vertices_path_png}, {output_vertices_path_svg}, {output_vertices_path_hpgl}, {output_vertices_path_dxf}")
 
         alteration_filename = f"alteration_table_plot_{self.piece_name}"
@@ -794,8 +797,11 @@ class VisualizeAlteration:
             #    plt.text(point['x'], point['y'], (point['movement_x'], point['movement_y']), color='black', ha='right', va='center', fontsize=10)  # Moves text slightly to the right
 
 if __name__ == "__main__":
-    input_table_path="../data/output_tables/processed_alterations/1LTH-FULL_SQUARE-12BY12-INCH.csv"
-    input_vertices_path = "../data/output_tables/processed_vertices/processed_vertices_SQUARE-12BY12-INCH.csv"
+    # TODO Make a loop that goes through all permutations and creates plots etc for each
+    # Include support for 1-by-1 as well
+
+    input_table_path="../data/staging_2/processed_alterations/1LTH-FULL_SQUARE-12BY12-INCH.csv"
+    input_vertices_path = "../data/staging_2/processed_vertices/processed_vertices_SQUARE-12BY12-INCH.csv"
 
     #input_table_path="../data/output_tables/processed_alterations/4-WAIST_LGFG-SH-01-CCB-FO.csv"
     #input_vertices_path = "../data/output_tables/processed_vertices/processed_vertices_LGFG-SH-01-CCB-FO.csv"
@@ -818,3 +824,13 @@ if __name__ == "__main__":
     # Run these multiple times
     visualize_alteration.prepare_plot_data()
     visualize_alteration.plot_polylines_table()
+
+    processed_alterations_dir = "../data/staging_2/processed_alterations/"
+    processed_vertices_dir = "../data/staging_2/processed_vertices/"
+
+    # Run for all
+    for altered_file in os.listdir(processed_alterations_dir):
+        if altered_file.endswith(".csv"):
+            input_table_path = os.path.join(processed_alterations_dir, altered_file)
+            print(input_table_path)
+

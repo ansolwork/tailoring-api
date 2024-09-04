@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import math
 import xml.etree.ElementTree as ET
+import re
 
 import subprocess
 import matplotlib
@@ -356,3 +357,38 @@ class DataProcessingUtils:
             print(f"PDF file saved to {output_pdf_path}")
         except subprocess.CalledProcessError as e:
             print(f"An error occurred while converting SVG to PDF: {e}")
+
+    def scale_hpgl(self, hpgl_path, output_hpgl_path, scale_factor):
+        """
+        Scales the coordinates in an HPGL file by the given scale factor.
+        This method will adjust the pen up (PU) and pen down (PD) commands.
+        
+        Parameters:
+        - hpgl_path (str): Path to the input HPGL file.
+        - output_hpgl_path (str): Path to save the scaled HPGL file.
+        - scale_factor (float): Factor by which to scale the coordinates.
+        """
+
+        with open(hpgl_path, 'r') as file:
+            hpgl_content = file.read()
+
+        # Regular expression to match PU and PD commands with coordinates
+        pattern = re.compile(r"(PU|PD)([\d,]+);")
+        
+        def scale_coordinates(match):
+            command = match.group(1)
+            coordinates = match.group(2)
+            
+            # Split the coordinates and scale each by the scale factor
+            scaled_coordinates = ",".join(
+                str(int(float(coord) * scale_factor)) for coord in coordinates.split(",")
+            )
+            
+            return f"{command}{scaled_coordinates};"
+        
+        # Apply the scaling to each PU/PD command
+        scaled_hpgl_content = re.sub(pattern, scale_coordinates, hpgl_content)
+
+        # Write the modified content back to a new file
+        with open(output_hpgl_path, 'w') as output_file:
+            output_file.write(scaled_hpgl_content)
