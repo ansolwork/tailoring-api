@@ -1,6 +1,14 @@
 import pandas as pd
 import numpy as np
 import math
+import xml.etree.ElementTree as ET
+import re
+
+import subprocess
+import matplotlib
+from matplotlib import pyplot as plt
+from matplotlib.lines import Line2D
+matplotlib.use('Agg')  # Use 'Agg' backend for non-GUI environments
 
 class DataProcessingUtils:
     """
@@ -93,6 +101,11 @@ class DataProcessingUtils:
         if isinstance(coords, (list, tuple)):
             return [coord for coord in coords if not pd.isna(coord)]
         return []
+    
+    def scale_coordinates(self, xs, ys, scaling_factor):
+        xs = tuple(x * scaling_factor for x in xs)
+        ys = tuple(y * scaling_factor for y in ys)
+        return xs, ys
 
     def remove_duplicates_preserve_order(self, flattened_list):
         """
@@ -206,3 +219,176 @@ class DataProcessingUtils:
         simplified_points = filter_points(points, threshold)
 
         return simplified_points
+    
+    def modify_svg_dimensions(self, svg_path, desired_width_in_inches, desired_height_in_inches):
+        """
+        Modifies the width, height, and viewBox attributes of the saved SVG to reflect real-world inches.
+        Ensures correct scaling of the SVG content to match the desired dimensions.
+        """
+        # Parse the SVG file
+        tree = ET.parse(svg_path)
+        root = tree.getroot()
+
+        # Set the new width and height attributes in inches
+        root.set('width', f'{desired_width_in_inches}in')
+        root.set('height', f'{desired_height_in_inches}in')
+
+        # Extract original dimensions from the viewBox if available
+        viewBox = root.get('viewBox')
+        if viewBox:
+            original_dimensions = list(map(float, viewBox.split()[2:]))
+            original_width, original_height = original_dimensions
+        else:
+            # If viewBox is not present, fallback to width and height attributes in points or pixels
+            original_width = float(root.get('width').replace('pt', '').replace('px', ''))
+            original_height = float(root.get('height').replace('pt', '').replace('px', ''))
+
+        # Set the viewBox to match the desired dimensions
+        root.set('viewBox', f'0 0 {original_width} {original_height}')
+
+        # Remove any scaling applied to individual elements
+        for element in root.findall(".//{http://www.w3.org/2000/svg}g"):
+            if "transform" in element.attrib:
+                del element.attrib["transform"]
+
+        # Save the modified SVG back to disk
+        tree.write(svg_path)
+
+        print(f"SVG dimensions updated to {desired_width_in_inches}x{desired_height_in_inches} inches in {svg_path}")
+
+    def save_plot_as_svg(self, fig, ax, svg_width, svg_height, output_svg_path, add_labels=False):
+        """
+        Saves the given plot to an SVG file.
+        """
+
+        # Ensure DPI is set to match the intended figure size
+        fig.set_size_inches(svg_width, svg_height)
+        fig.dpi = 72  # This ensures 1:1 inch scaling in the SVG
+
+        # Remove the legend if it exists
+        legend = ax.get_legend()
+        if legend:
+            legend.remove()
+
+        # Remove point labels (text annotations)
+        for text in ax.texts:
+            text.remove()
+
+        if not add_labels:
+            ax.set_title("")
+            ax.set_xlabel("")
+            ax.set_ylabel("")
+            
+            # Hide tick labels for a clean grid
+            ax.set_xticklabels([])
+            ax.set_yticklabels([])
+
+        # Set the aspect ratio to be equal and adjust ticks to represent inches
+        ax.set_aspect('equal')
+        ax.set_xticks(np.arange(0, svg_width + 1, 1))  # 1-inch spacing on the x-axis
+        ax.set_yticks(np.arange(0, svg_height + 1, 1))  # 1-inch spacing on the y-axis
+
+        svg_width = np.round(svg_width, 1)
+        svg_height = np.round(svg_height, 1)
+
+        # Adjust axes limits to match the SVG dimensions exactly
+        ax.set_xlim(0, svg_width)
+        ax.set_ylim(0, svg_height)
+
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+        # Remove any potential padding, or adjust as needed
+        plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+
+        # Ensure no extra padding is added by ticks
+        ax.tick_params(which='both', width=0, length=0)
+
+        # Save the figure as an SVG file with the specified DPI
+        fig.savefig(output_svg_path, format='svg', bbox_inches='tight', pad_inches=0)
+        plt.close(fig)  # Close the figure after saving
+
+        print(f"SVG plot saved to {output_svg_path} with dimensions {svg_width}x{svg_height} inches")
+
+        # Modify the SVG file to ensure correct width and height in inches
+        #self.modify_svg_dimensions(output_svg_path, svg_width, svg_height)
+
+    def svg_to_hpgl(self, svg_path, output_hpgl_path):
+        """
+        Converts an SVG file to HPGL format using Inkscape.
+        """
+        try:
+            command = [
+                "inkscape", 
+                svg_path, 
+                "--export-type=hpgl", 
+                f"--export-filename={output_hpgl_path}"
+            ]
+            subprocess.run(command, check=True)
+            print(f"HPGL file saved to {output_hpgl_path}")
+        except subprocess.CalledProcessError as e:
+            print(f"An error occurred while converting SVG to HPGL: {e}")
+
+    def svg_to_dxf(self, svg_path, output_dxf_path):
+        try:
+            command = [
+                "inkscape", 
+                svg_path, 
+                "--export-type=dxf", 
+                f"--export-filename={output_dxf_path}"
+            ]
+            subprocess.run(command, check=True)
+            print(f"DXF file saved to {output_dxf_path}")
+        except subprocess.CalledProcessError as e:
+            print(f"An error occurred while converting SVG to DXF: {e}")
+
+    def svg_to_pdf(self, svg_path, output_pdf_path):
+        """
+        Converts an SVG file to PDF format using Inkscape.
+        """
+        try:
+            command = [
+                "inkscape", 
+                svg_path, 
+                "--export-type=pdf", 
+                f"--export-filename={output_pdf_path}"
+            ]
+            subprocess.run(command, check=True)
+            print(f"PDF file saved to {output_pdf_path}")
+        except subprocess.CalledProcessError as e:
+            print(f"An error occurred while converting SVG to PDF: {e}")
+
+    def scale_hpgl(self, hpgl_path, output_hpgl_path, scale_factor):
+        """
+        Scales the coordinates in an HPGL file by the given scale factor.
+        This method will adjust the pen up (PU) and pen down (PD) commands.
+        
+        Parameters:
+        - hpgl_path (str): Path to the input HPGL file.
+        - output_hpgl_path (str): Path to save the scaled HPGL file.
+        - scale_factor (float): Factor by which to scale the coordinates.
+        """
+
+        with open(hpgl_path, 'r') as file:
+            hpgl_content = file.read()
+
+        # Regular expression to match PU and PD commands with coordinates
+        pattern = re.compile(r"(PU|PD)([\d,]+);")
+        
+        def scale_coordinates(match):
+            command = match.group(1)
+            coordinates = match.group(2)
+            
+            # Split the coordinates and scale each by the scale factor
+            scaled_coordinates = ",".join(
+                str(int(float(coord) * scale_factor)) for coord in coordinates.split(",")
+            )
+            
+            return f"{command}{scaled_coordinates};"
+        
+        # Apply the scaling to each PU/PD command
+        scaled_hpgl_content = re.sub(pattern, scale_coordinates, hpgl_content)
+
+        # Write the modified content back to a new file
+        with open(output_hpgl_path, 'w') as output_file:
+            output_file.write(scaled_hpgl_content)
