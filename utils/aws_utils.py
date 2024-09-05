@@ -35,6 +35,21 @@ class AwsUtils:
         response = s3_client.upload_fileobj(file, self.aws_s3_bucket_name, s3_file_path + file.filename)
         print(f'upload_log_to_aws response: {response}')
 
+    def upload_file_by_path_to_s3(self, file_path, s3_file_path):
+        s3_client = boto3.session.Session(profile_name=self.aws_profile_name).client(
+            service_name='s3'
+        )
+        # Use upload_file, which works with file paths directly
+        response = s3_client.upload_file(file_path, self.aws_s3_bucket_name, s3_file_path)
+        print(f'File {file_path} uploaded to {s3_file_path} in S3. Response: {response}')
+
+    def upload_buffer_to_s3(self, buffer, s3_file_path):
+        s3_client = boto3.session.Session(profile_name=self.aws_profile_name).client('s3')
+
+        # Upload the buffer to S3
+        response = s3_client.upload_fileobj(buffer, self.aws_s3_bucket_name, s3_file_path)
+        print(f'Upload to S3 completed. Response: {response}')
+
     def upload_dataframe_to_s3(self, dataframe, s3_file_path, file_format="csv"):
         # Create an in-memory buffer
         buffer = io.BytesIO()

@@ -17,26 +17,6 @@ class DXFLoader:
             self.msp = self.doc.modelspace()  # the common construction space
         except (IOError, ezdxf.DXFStructureError) as e:
             raise RuntimeError(f"Error loading DXF file '{self.file_path}': {e}")
-        
-
-    def load_dxf_flask(self, file):
-        """Load DXF from Flask file object"""
-        try:
-            # Read the file as binary data (Flask's file object is treated as binary)
-            file_binary_content = file.read()  # Reading file as binary
-
-            # Wrap the binary data in a BytesIO stream (this converts the binary content into a readable stream)
-            file_like_object = io.BytesIO(file_binary_content)
-
-            # Now use ezdxf's read() method to read from the BytesIO stream
-            self.doc = ezdxf.read(file_like_object)  # Using binary stream
-
-            # Access modelspace (common construction space)
-            self.msp = self.doc.modelspace()
-
-        except ezdxf.DXFStructureError as e:
-            raise RuntimeError(f"Error reading DXF file: {str(e)}")
-
 
     def extract_annotations(self):
         annotations = []

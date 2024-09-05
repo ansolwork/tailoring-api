@@ -64,7 +64,8 @@
 
         <div>
           <h3>Please upload input file to S3 here</h3>
-          <p>IMPORTANT!!! KINDLY CHECK IF YOU ARE UPLOADING THE FILE WITH MTM POINTS USING OPTION 1.</p>
+          <p>Option 1: Upload DXF File. Get MTM Combined entities (unlabeled)</p>
+          <p>Option 2: After adding labels to MTM points column, upload your CSV file here, and it will store it to the Database. Also visualizes the result.</p>
           <form method="POST" action="/upload_file" enctype="multipart/form-data" onsubmit="showLoadingSpinner()">
             <input type="file" name="file-to-s3">
             <select id="file_choice" name="file_choice" required>
