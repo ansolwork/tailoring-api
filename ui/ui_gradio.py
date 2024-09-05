@@ -21,7 +21,7 @@ def process_dxf(file):
         dxf_loader = DXFLoader()
         try:
             dxf_loader.load_dxf(temp_file_path)
-            df = dxf_loader.entities_to_dataframe(temp_file_path)
+            df = dxf_loader.entities_to_dataframe()
         except RuntimeError as e:
             return str(e), []
 

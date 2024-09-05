@@ -3,13 +3,17 @@ import os
 import yaml
 from utils.aws_utils import AwsUtils
 from app.main import Main
+from ui.dxf_loader import DXFLoader
+import tempfile
 
 # Run from project root (no relative path needed)
 config_filepath = "tailoring_api_config.yml"
-test_profile = "183295423477_PowerUserAccess"
+#test_profile = "183295423477_PowerUserAccess"
 
 app = Flask(__name__, template_folder="templates")
 app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024  # 1 MB as per file upload limit
+
+dxf_loader = DXFLoader()
 
 # Load config file
 with open(config_filepath) as f:
@@ -23,10 +27,11 @@ ALLOWED_MIME_TYPES = yaml_config['ALLOWED_MIME_TYPES']
 AWS_S3_BUCKET_NAME = yaml_config['AWS_S3_BUCKET_NAME']
 AWS_DXF_DIR_PATH = yaml_config['AWS_DXF_DIR_PATH']
 AWS_MTM_DIR_PATH = yaml_config['AWS_MTM_DIR_PATH']
+AWS_MTM_DIR_PATH_LABELED = yaml_config['AWS_MTM_DIR_PATH_LABELED']
 AWS_OUTPUT_DIR_PATH = yaml_config['AWS_OUTPUT_DIR_PATH']
 AWS_S3_SIGNATURE_VERSION = yaml_config['AWS_S3_SIGNATURE_VERSION']
 
-aws_utils = AwsUtils(ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, AWS_S3_BUCKET_NAME, AWS_S3_SIGNATURE_VERSION, test_profile)
+aws_utils = AwsUtils(ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, AWS_S3_BUCKET_NAME, AWS_S3_SIGNATURE_VERSION)
 
 
 @app.route("/home")
@@ -41,6 +46,7 @@ def home():
 def upload_file():
     if "file-to-s3" not in request.files:
         return "No files key in request.files"
+
     file = request.files["file-to-s3"]
     if not aws_utils.allowed_file(file.filename) or aws_utils.allowed_mime(file):
         return "FILE FORMAT NOT ALLOWED"
@@ -49,10 +55,40 @@ def upload_file():
     if file:
         typeform = request.form['file_choice']
         print("typeform" + typeform)
+
         if typeform.lower() == 'dxf_file':
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".dxf") as temp_file:
+                file.save(temp_file.name)  # Save the uploaded file to the temp file
+
+                # Load DXF using the file path
+                dxf_loader.load_dxf(temp_file.name)
+
+                # Convert DXF entities to a Pandas DataFrame
+                df = dxf_loader.entities_to_dataframe()
+
+                sorted_df = df.sort_values(by=['Filename', 'Type', 'Layer'])
+                sorted_df['MTM Points'] = ''
+
+                base_filename = os.path.splitext(os.path.basename(file.filename))[0]
+                aws_mtm_dir_path = os.path.join(AWS_MTM_DIR_PATH_LABELED, f"{base_filename}_combined_entities.csv")
+
+            # Delete the temp file after processing (optional)
+            os.remove(temp_file.name)
+
+            # This needs to happen after temp file is closed
             aws_utils.upload_file_to_s3(file, AWS_DXF_DIR_PATH)
+            aws_utils.upload_dataframe_to_s3(sorted_df, aws_mtm_dir_path, file_format="csv")
+        
+            # Generate a presigned URL for the CSV file
+            presigned_url = aws_utils.generate_presigned_url(aws_mtm_dir_path)
+
+            return render_template("download.html", download_url=presigned_url)
+
         if typeform.lower() == 'mtm_points_file':
+            # Do second part here
             aws_utils.upload_file_to_s3(file, AWS_MTM_DIR_PATH)
+
         return redirect("/home")
     else:
         return "File not uploaded successfully"

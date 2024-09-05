@@ -2,6 +2,7 @@
 FROM python:3.12-slim
 
 # Install system dependencies
+# UI
 RUN apt-get update && apt-get install -y \
     libmagic1 \
     libmagic-dev \
@@ -15,3 +16,5 @@ COPY . /app
 
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Add API Call method

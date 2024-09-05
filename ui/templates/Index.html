@@ -2,46 +2,92 @@
 <html>
   <head>
     <title>UI for file Operations in S3</title>
+    <style>
+        /* Centering the form */
+        .form-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Center items horizontally */
+            justify-content: center; /* Center items vertically */
+            height: 100vh; /* Full viewport height for centering */
+        }
+
+        /* Centering the input elements */
+        .form-container input, 
+        .form-container select {
+            margin: 10px 0;
+            padding: 10px;
+            width: 300px; /* You can adjust this width */
+            text-align: center;
+        }
+
+        /* Simple spinner CSS */
+        .spinner {
+            display: none; /* Initially hidden */
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(0,0,0,0.1);
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Overlay that covers the page when loading */
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            z-index: 9999;
+            text-align: center;
+        }
+
+        .loading-overlay h3 {
+            margin-top: 20px;
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+        }
+    </style>
   </head>
   <body>
-    <div class="content">
-        <h3 align ='center'>File Operations in S3</h3>
+    <div class="form-container">
+        <h3>File Operations in S3</h3>
 
         <div>
-          <h3>1. Please upload input file to S3 here </h3>
-          <p>IMPORTANT !!! KINDLY CHECK IF YOU ARE UPLOADING THE FILE WITH MTM POINTS USING OPTION 1.</p>
-          <form method="POST" action="/upload_file" enctype=multipart/form-data>
-            <input type=file name="file-to-s3">
-            <select id="file_choice" type="text" name="file_choice" placeholder="Select if DXF or MTM points" method="POST">
+          <h3>Please upload input file to S3 here</h3>
+          <p>IMPORTANT!!! KINDLY CHECK IF YOU ARE UPLOADING THE FILE WITH MTM POINTS USING OPTION 1.</p>
+          <form method="POST" action="/upload_file" enctype="multipart/form-data" onsubmit="showLoadingSpinner()">
+            <input type="file" name="file-to-s3">
+            <select id="file_choice" name="file_choice" required>
               <option disabled selected>Select the type of File</option>
               <option id="DXF_file" value="DXF_file">DXF File</option>
               <option id="MTM_points_file" value="MTM_points_file">MTM points File</option>
             </select>
-             <input type=submit value=Upload>
+            <input type="submit" value="Upload">
           </form>
         </div>
-      <div>
-          <h3>2. Processed Excel file from the above uploaded DXF</h3>
-          <p>Download it by clicking on the link and add the MTM points. Then,upload again using Option 1.</p>
-          <ul>
-            {% for item in contents_mtm %}
-              <li>
-                <a href="/download_file_as_attachment/{{ item }}"> {{ item }} </a>
-              </li>
-            {% endfor %}
-          </ul>
-        </div>
-        <div>
-          <h3>3. Output file</h3>
-          <p>Download it by clicking on the links.</p>
-          <ul>
-            {% for item in contents_output %}
-              <li>
-                <a href="/download_file_as_attachment/{{ item }}"> {{ item }} </a>
-              </li>
-            {% endfor %}
-          </ul>
+
+        <!-- Loading spinner that shows when form is submitted -->
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="spinner"></div>
+            <h3>Please wait... Uploading and processing your file.</h3>
         </div>
     </div>
+
+    <!-- JavaScript to show the spinner on form submission -->
+    <script>
+        function showLoadingSpinner() {
+            document.getElementById('loadingOverlay').style.display = 'block';
+        }
+    </script>
   </body>
 </html>
