@@ -12,15 +12,10 @@ from matplotlib.lines import Line2D
 matplotlib.use('Agg')  # Use 'Agg' backend for non-GUI environments
 
 from utils.data_processing_utils import DataProcessingUtils
-
-# Next make a grid 1 inch per square - length/width. Square grid?
-
-# TODO: Add some margin to the bounding box? So we can see the points
-# TODO: Show labels in SVG Plot?
-# TODO: Move grid out of the class
+from app.plot_config import PlotConfig
 
 class VisualizeAlteration:
-    def __init__(self, input_table_path, input_vertices_path, grid=True, plot_actual_size=False, 
+    def __init__(self, input_table_path, input_vertices_path, grid=True, plot_actual_size=False, dpi=300,
                  override_dpi=None, display_size=None, display_resolution_width=None, display_resolution_height=None):
         
         self.data_processing_utils = DataProcessingUtils()
@@ -39,7 +34,7 @@ class VisualizeAlteration:
         self.scaled_altered_vertices = []
         self.scaled_altered_vertices_reduced = []
         
-        # Plot parameters
+        # Default Plot parameters
         self.grid = grid
         self.plot_actual_size = plot_actual_size
         self.width = 10
@@ -48,13 +43,19 @@ class VisualizeAlteration:
         # Display settings
         # DPI: Dots / Pixels per inch
         # Needs to be calculated dynamically to fit image to screen
-        self.dpi = 300 # default value
+        self.dpi = dpi 
         self.override_dpi = override_dpi
         self.display_size = display_size
         self.display_resolution_width = display_resolution_width
         self.display_resolution_height = display_resolution_height 
 
         self.hpgl_scale_factor = 1.297 # Magic Voodoo constant
+
+        self.plot_config = PlotConfig(width=self.width, height=self.height, 
+                                      dpi=self.dpi, override_dpi=self.override_dpi,
+                                      display_size=self.display_size, 
+                                      display_resolution_width=self.display_resolution_width, 
+                                      display_resolution_height=self.display_resolution_height)
 
     def get_piece_name(self, input_table_path):
         # Get the base name of the file (e.g., "altered_LGFG-1648-FG-07S.xlsx")
@@ -67,132 +68,6 @@ class VisualizeAlteration:
         piece_name = file_name_without_extension.split('_', 1)[-1]
 
         return piece_name
-    
-    def calculate_dpi(self, pixel_width, pixel_height, diagonal_size):
-        """
-        Calculate DPI based on pixel resolution and physical screen diagonal size.
-        """
-        # Calculate the aspect ratio
-        aspect_ratio = pixel_width / pixel_height
-        
-        # Calculate the physical width and height using the diagonal and aspect ratio
-        physical_width = diagonal_size / math.sqrt(1 + (1 / aspect_ratio) ** 2)
-        physical_height = physical_width / aspect_ratio
-        
-        # Calculate DPI using the physical width and height
-        dpi_width = pixel_width / physical_width
-        dpi_height = pixel_height / physical_height
-        
-        # Use the smaller DPI to ensure both dimensions fit within the desired physical size
-        dpi = min(dpi_width, dpi_height)
-        
-        return dpi
-    
-    def get_font_size(self):
-        """Calculate font size based on the figure size."""
-        # Base size for a 10x6 inch plot
-        base_width = 10
-        base_height = 6
-        base_font_size = 14
-
-        # Calculate scaling factors based on the current width and height
-        width_scale = self.width / base_width
-        height_scale = self.height / base_height
-
-        # Use the smaller scale to ensure labels fit well
-        scale = min(width_scale, height_scale)
-
-        # Return the scaled font size
-        return base_font_size * scale
-    
-    def get_tick_size(self):
-        """Calculate tick size based on the figure size."""
-        # Base size for a 10x6 inch plot
-        base_width = 10
-        base_height = 6
-        base_tick_size = 12
-
-        # Calculate scaling factors based on the current width and height
-        width_scale = self.width / base_width
-        height_scale = self.height / base_height
-
-        # Use the smaller scale to ensure ticks fit well
-        scale = min(width_scale, height_scale)
-
-        # Return the scaled tick size
-        return base_tick_size * scale
-    
-    def apply_tick_size(self, ax):
-        """Apply the dynamically calculated tick size to the axis."""
-        tick_size = self.get_tick_size()
-        ax.tick_params(axis='x', labelsize=tick_size)
-        ax.tick_params(axis='y', labelsize=tick_size)
-
-    def get_line_width(self):
-        """Calculate line width based on the figure size."""
-        # Base line width for a 10x6 inch plot
-        base_width = 10
-        base_height = 6
-        base_line_width = 1
-
-        # Calculate scaling factors based on the current width and height
-        width_scale = self.width / base_width
-        height_scale = self.height / base_height
-
-        # Use the smaller scale to ensure line width fits well
-        scale = min(width_scale, height_scale)
-
-        # Return the scaled line width
-        return base_line_width * scale
-
-    def get_marker_size(self):
-        """Calculate marker size based on the figure size."""
-        # Base marker size for a 10x6 inch plot
-        base_width = 10
-        base_height = 6
-        base_marker_size = 5
-
-        # Calculate scaling factors based on the current width and height
-        width_scale = self.width / base_width
-        height_scale = self.height / base_height
-
-        # Use the smaller scale to ensure markers fit well
-        scale = min(width_scale, height_scale)
-
-        # Return the scaled marker size
-        return base_marker_size * scale
-
-    def get_point_label_size(self):
-        """Calculate point label size based on the figure size."""
-        # Base label size for a 10x6 inch plot
-        base_width = 10
-        base_height = 6
-        base_label_size = 12
-
-        # Calculate scaling factors based on the current width and height
-        width_scale = self.width / base_width
-        height_scale = self.height / base_height
-
-        # Use the smaller scale to ensure labels fit well
-        scale = min(width_scale, height_scale)
-
-        # Return the scaled label size
-        return base_label_size * scale
-
-    def apply_line_marker_and_label_size(self, ax):
-        """Apply the dynamically calculated line width, marker size, and label size to the axis."""
-        line_width = self.get_line_width()
-        marker_size = self.get_marker_size()
-        label_size = self.get_point_label_size()
-
-        # Example: Apply these settings to all lines and markers in the axis
-        for line in ax.get_lines():
-            line.set_linewidth(line_width)
-            line.set_markersize(marker_size)
-
-        # Apply label size to all text annotations
-        for text in ax.texts:
-            text.set_fontsize(label_size)
     
     def initialize_plot_data(self):
         return {
@@ -515,7 +390,7 @@ class VisualizeAlteration:
             if self.override_dpi:
                 self.dpi = self.override_dpi
             else:
-                self.dpi = self.calculate_dpi(
+                self.dpi = self.plot_config.calculate_dpi(
                     self.display_resolution_width, 
                     self.display_resolution_height, 
                     self.display_size
@@ -579,10 +454,10 @@ class VisualizeAlteration:
         plt.close(fig_combined)
 
     def plot_only_vertices(self, ax):
-        font_size = self.get_font_size()
-        marker_size = self.get_marker_size()
-        line_width = self.get_line_width()
-        label_size = self.get_point_label_size()
+        font_size = self.plot_config.get_font_size()
+        marker_size = self.plot_config.get_marker_size()
+        line_width = self.plot_config.get_line_width()
+        label_size = self.plot_config.get_point_label_size()
         
         for _, row in self.plot_df.iterrows():
             if not pd.isna(row['unique_vertices_x']) and not pd.isna(row['unique_vertices_y']):
@@ -593,12 +468,12 @@ class VisualizeAlteration:
         ax.set_xlabel('X Coordinate [in]', fontsize=font_size)
         ax.set_ylabel('Y Coordinate [in]', fontsize=font_size)
 
-        self.apply_tick_size(ax)
+        self.plot_config.apply_tick_size(ax)
 
     def plot_combined(self, ax):
-        font_size = self.get_font_size()
-        marker_size = self.get_marker_size()
-        line_width = self.get_line_width()
+        font_size = self.plot_config.get_font_size()
+        marker_size = self.plot_config.get_marker_size()
+        line_width = self.plot_config.get_line_width()
 
         for _, row in self.plot_df.iterrows():
             xs, ys = row['unique_vertices_x'], row['unique_vertices_y']
@@ -619,7 +494,7 @@ class VisualizeAlteration:
             ax.set_ylabel('Y Coordinate [in]', fontsize=font_size)
 
             # Apply dynamic tick size
-            self.apply_tick_size(ax)
+            self.plot_config.apply_tick_size(ax)
 
         ax.legend(handles=[
             Line2D([0], [0], color="#006400", marker='o', label="Original", linewidth=line_width, markersize=marker_size),
@@ -628,9 +503,9 @@ class VisualizeAlteration:
         ])
 
     def plot_alteration_table(self, output_dir, fig=None, ax=None):
-        font_size = self.get_font_size()
-        marker_size = self.get_marker_size()
-        line_width = self.get_line_width()
+        font_size = self.plot_config.get_font_size()
+        marker_size = self.plot_config.get_marker_size()
+        line_width = self.plot_config.get_line_width()
 
         if self.grid:
             sns.set(style="whitegrid")
@@ -765,7 +640,7 @@ class VisualizeAlteration:
 
         #ax.tick_params(axis='both', which='both', labelsize=12)
         # Apply dynamic tick size
-        self.apply_tick_size(ax)
+        self.plot_config.apply_tick_size(ax)
 
         # Plot MTM points
         for _, row in plot_df.iterrows():
@@ -784,18 +659,6 @@ class VisualizeAlteration:
                 ax.plot(point['x'], point['y'], 'o', color=point['color'], markersize=marker_size)
                 ax.text(point['x'], point['y'], point['label'], color=point['color'], fontsize=font_size)
 
-    def plot_all_mtm_points(self, ax, row):
-        marker_size = self.get_marker_size()
-        label_size = self.get_point_label_size()
-
-        for point in row['mtm_points']:
-            ax.plot(point['x'], point['y'], 'o', color=point['color'], markersize=marker_size)
-            ax.text(point['x'], point['y'], point['label'], color=point['color'], fontsize=label_size)
-
-            # Plot movement for altered points
-            #if point['color'] == 'blue':
-            #    plt.text(point['x'], point['y'], (point['movement_x'], point['movement_y']), color='black', ha='right', va='center', fontsize=10)  # Moves text slightly to the right
-
 if __name__ == "__main__":
     # TODO Make a loop that goes through all permutations and creates plots etc for each
     # Include support for 1-by-1 as well
@@ -805,7 +668,7 @@ if __name__ == "__main__":
 
     # DPI can only be overriden if plot_actual_size = False
     # Display resolution set for Macbook Pro m2 - change to whatever your screen res is
-    visualize_alteration = VisualizeAlteration(input_table_path, input_vertices_path, 
+    visualize_alteration = VisualizeAlteration(input_table_path=input_table_path, input_vertices_path=input_vertices_path, 
                                                grid=False, plot_actual_size=True, override_dpi=None, display_size=16,
                                                display_resolution_width=3456, display_resolution_height=2234)
     
