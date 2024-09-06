@@ -2,6 +2,7 @@ import os
 import ezdxf
 import pandas as pd
 from shapely.geometry import Point, Polygon
+import io
 
 class DXFLoader:
     def __init__(self):
@@ -63,7 +64,7 @@ class DXFLoader:
                         entity_data[key].append(annotation["Text"])
         return entity_data
 
-    def entities_to_dataframe(self, file_path):
+    def entities_to_dataframe(self):
         data = []
         annotations = self.extract_annotations()
         classified_annotations = self.classify_annotations(annotations)
@@ -78,7 +79,7 @@ class DXFLoader:
                     continue
                 for block_entity in block:
                     block_entity_data = {
-                        "Filename": os.path.basename(file_path),
+                        "Filename": os.path.basename(self.file_path),
                         "Type": block_entity.dxftype(),
                         "Layer": block_entity.dxf.layer,
                         "Color": block_entity.dxf.color,
@@ -121,7 +122,7 @@ class DXFLoader:
                         data.append(block_entity_data)
             else:
                 entity_data = {
-                    "Filename": os.path.basename(file_path),
+                    "Filename": os.path.basename(self.file_path),
                     "Type": entity.dxftype(),
                     "Layer": entity.dxf.layer,
                     "Color": entity.dxf.color,
@@ -265,7 +266,7 @@ if __name__ == "__main__":
         if os.path.isfile(file_path) and filename.lower().endswith(('.dxf', '.DXF')):  # Handle both .dxf and .DXF
             dxf_loader.load_dxf(file_path)
             dxf_loader.print_all_entities()  # Print all entity types found in the current DXF file
-            df = dxf_loader.entities_to_dataframe(file_path)
+            df = dxf_loader.entities_to_dataframe()
             all_data.append(df)
 
     combined_df = pd.concat(all_data, ignore_index=True)

@@ -1,8 +1,8 @@
 import pandas as pd
 import ast
 import numpy as np
-from smoothing import SmoothingFunctions  # Import the SmoothingFunctions class
-from data_processing_utils import DataProcessingUtils
+from app.smoothing import SmoothingFunctions  # Import the SmoothingFunctions class
+from utils.data_processing_utils import DataProcessingUtils
 import os
 
 # Further notes:
