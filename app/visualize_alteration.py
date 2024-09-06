@@ -340,7 +340,7 @@ class VisualizeAlteration:
                             mtm_label, row['mtm_dependant'], mtm_dependent_x=row['mtm_dependant_x'], mtm_dependent_y=row['mtm_dependant_y'], 
                             color='blue', movement_x=row['movement_x'], movement_y=row['movement_y'])
 
-    def create_and_save_grid(self, filename, num_squares_x=10, num_squares_y=10, output_dir="../data/output/plots/"):
+    def create_and_save_grid(self, filename, num_squares_x=10, num_squares_y=10, output_dir="data/output/plots/"):
         """
         Creates a grid with 1x1 inch squares and saves it to a file.
         """
@@ -400,7 +400,7 @@ class VisualizeAlteration:
 
         print(f"Grid saved as {png_filename}, {svg_filename}, {hpgl_filename}, and {dxf_filename}")
     
-    def prepare_plot_data(self, output_dir="../data/staging_2/"):
+    def prepare_plot_data(self, output_dir="data/staging_processed/"):
         plot_data = self.initialize_plot_data()
         
         df = self.df.copy()
@@ -463,7 +463,7 @@ class VisualizeAlteration:
         print(f"Unique vertices saved to {output_path}")
         self.plot_df = plot_df
 
-    def plot_polylines_table(self, output_dir="../data/output/plots/"):
+    def plot_polylines_table(self, output_dir="data/output/plots/"):
         piece_dir = os.path.join(output_dir, self.piece_name)
         if not os.path.exists(piece_dir):
             os.makedirs(piece_dir, exist_ok=True)
@@ -800,17 +800,8 @@ if __name__ == "__main__":
     # TODO Make a loop that goes through all permutations and creates plots etc for each
     # Include support for 1-by-1 as well
 
-    input_table_path="../data/staging_2/processed_alterations/1LTH-FULL_SQUARE-12BY12-INCH.csv"
-    input_vertices_path = "../data/staging_2/processed_vertices/processed_vertices_SQUARE-12BY12-INCH.csv"
-
-    #input_table_path="../data/output_tables/processed_alterations/4-WAIST_LGFG-SH-01-CCB-FO.csv"
-    #input_vertices_path = "../data/output_tables/processed_vertices/processed_vertices_LGFG-SH-01-CCB-FO.csv"
-
-    #input_table_path="../data/output_tables/processed_alterations/1LTH-FULL_CIRCLE-12BY12-INCH.csv"
-    #input_vertices_path = "../data/output_tables/processed_vertices/processed_vertices_CIRCLE-12BY12-INCH.csv"
-
-    #input_table_path="../data/output_tables/processed_alterations/3-COLLAR_LGFG-1648-FG-07P.csv"
-    #input_vertices_path = "../data/output_tables/processed_vertices/processed_vertices_LGFG-V2-BC2-FG-08.csv"
+    input_table_path="data/staging_processed/processed_alterations/1LTH-FULL_SQUARE-12BY12-INCH.csv"
+    input_vertices_path = "data/staging_processed/processed_vertices/processed_vertices_SQUARE-12BY12-INCH.csv"
 
     # DPI can only be overriden if plot_actual_size = False
     # Display resolution set for Macbook Pro m2 - change to whatever your screen res is
@@ -825,8 +816,8 @@ if __name__ == "__main__":
     visualize_alteration.prepare_plot_data()
     visualize_alteration.plot_polylines_table()
 
-    processed_alterations_dir = "../data/staging_2/processed_alterations/"
-    processed_vertices_dir = "../data/staging_2/processed_vertices/"
+    processed_alterations_dir = "data/staging_processed/processed_alterations/"
+    processed_vertices_dir = "data/staging_processed/processed_vertices/"
 
     # Run for all
     for altered_file in os.listdir(processed_alterations_dir):

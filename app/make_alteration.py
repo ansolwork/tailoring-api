@@ -22,8 +22,8 @@ class MakeAlteration:
                  piece_name=None,
                  input_folder_alteration = None,
                  input_folder_vertices = None, 
-                 save_folder="../data/staging_2/processed_alterations/", 
-                 save_folder_vertices="../data/staging_2/processed_vertices/", 
+                 save_folder="data/staging_processed/processed_alterations/", 
+                 save_folder_vertices="data/staging_processed/processed_vertices/", 
                  file_format=".csv"):
         
         self.processing_utils = DataProcessingUtils()
@@ -52,8 +52,8 @@ class MakeAlteration:
 
         self.alteration_input_dir = input_folder_alteration
         self.vertices_input_dir = input_folder_vertices
-        self.save_folder = "../data/staging_2/processed_alterations/"
-        self.save_folder_vertices = "../data/staging_2/processed_vertices/"
+        self.save_folder = "data/staging_processed/processed_alterations/"
+        self.save_folder_vertices = "data/staging_processed/processed_vertices/"
 
     def filter_by_piece_name(self):
         return self.start_df[self.start_df['piece_name'] == self.piece_name]
@@ -746,9 +746,9 @@ if __name__ == "__main__":
     # To run functions for single, specify input table and vertices 1-by-1
     #make_alteration = MakeAlteration(input_table_path=..., input_vertices_path=..) 
 
-    alteration_staging_1 = "../data/staging_1/combined_alteration_tables/"
-    vertices_staging_2 = "../data/staging_1/vertices/"
+    alteration_staging = "data/staging/combined_alteration_tables/"
+    vertices_processed = "data/staging/vertices/"
 
     # Way to call the function when running multiple
-    make_alteration = MakeAlteration(input_folder_alteration=alteration_staging_1, input_folder_vertices=vertices_staging_2)
+    make_alteration = MakeAlteration(input_folder_alteration=alteration_staging, input_folder_vertices=vertices_processed)
     make_alteration.alter_all()
