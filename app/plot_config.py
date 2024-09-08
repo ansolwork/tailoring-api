@@ -35,9 +35,20 @@ class PlotConfig:
         Returns:
             float: Calculated DPI value.
         """
+        # Calculate the aspect ratio
         aspect_ratio = pixel_width / pixel_height
+        
+        # Calculate the physical width and height using the diagonal and aspect ratio
         physical_width = diagonal_size / math.sqrt(1 + (1 / aspect_ratio) ** 2)
-        dpi = min(pixel_width / physical_width, pixel_height / physical_width)
+        physical_height = physical_width / aspect_ratio
+        
+        # Calculate DPI using the physical width and height
+        dpi_width = pixel_width / physical_width
+        dpi_height = pixel_height / physical_height
+        
+        # Use the smaller DPI to ensure both dimensions fit within the desired physical size
+        dpi = min(dpi_width, dpi_height)
+        
         return dpi
 
     def get_font_size(self, base_size=14):

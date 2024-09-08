@@ -311,7 +311,7 @@ class DataProcessingUtils:
         print(f"SVG plot saved to {output_svg_path} with dimensions {svg_width}x{svg_height} inches")
 
         # Modify the SVG file to ensure correct width and height in inches
-        #self.modify_svg_dimensions(output_svg_path, svg_width, svg_height)
+        self.modify_svg_dimensions(output_svg_path, svg_width, svg_height)
 
     def svg_to_hpgl(self, svg_path, output_hpgl_path):
         """
