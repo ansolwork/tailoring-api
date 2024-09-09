@@ -12,6 +12,7 @@ class CreateTable:
         self.merged_df = pd.DataFrame()
         self.output_dir = "data/staging"
         self.output_table_path = "data/staging/combined_alteration_tables"
+        self.output_table_path_by_piece = "data/staging/alteration_by_piece"
 
         # Add more sheets if necessary
         self.sheet_list = ["SHIRT-FRONT", "SHIRT-BACK", "SHIRT-YOKE", "SHIRT-SLEEVE", 
@@ -84,9 +85,9 @@ class CreateTable:
             how='right'
         )
 
-        self.merged_df.to_csv("data/staging/merged_df.csv")
+        #self.merged_df.to_csv("data/staging/all_combined_tables.csv")
 
-    def save_table_csv(self, output_filename_prefix="combined_table"):
+    def save_table_csv_by_alteration_rule(self, output_filename_prefix="combined_table"):
         
         output_table_path = self.output_table_path
 
@@ -101,17 +102,39 @@ class CreateTable:
         for alteration_rule, group_df in grouped:
             # Convert all column headers to lowercase
             group_df.columns = group_df.columns.str.lower()
-            
-            #print(f"Piece Names:\n{self.merged_df['piece_name'].unique()}")
-            
+                        
             # Create a sanitized file name for each alteration_rule
             safe_alteration_rule = str(alteration_rule).replace(" ", "_").replace("/", "_")  # Ensure no illegal filename characters
             output_file_path = os.path.join(output_table_path, f"{output_filename_prefix}_{safe_alteration_rule}.csv")
             
             # Save the group as a CSV file
             group_df.to_csv(output_file_path, index=False)
-        
-        print(f"CSV files saved to {output_table_path}")
+
+            print(f"CSV files saved to {output_table_path}")
+
+    def save_table_csv_by_piece_name(self, output_filename_prefix="combined_table"):
+
+        output_table_path = self.output_table_path_by_piece
+
+        # Ensure the output directory exists
+        os.makedirs(output_table_path, exist_ok=True)
+
+        self.merged_df['piece_name'] = self.merged_df['piece_name'].str.replace(".dxf", "", regex=False)
+
+        # Group the DataFrame by 'alteration_rule'
+        grouped = self.merged_df.groupby('piece_name')
+
+        for piece_name, group_df in grouped:
+            # Convert all column headers to lowercase
+            group_df.columns = group_df.columns.str.lower()
+
+            safe_piece_name = str(piece_name).replace(" ", "_").replace("/", "_")  # Ensure no illegal filename characters
+            output_file_path = os.path.join(output_table_path, f"{output_filename_prefix}_{safe_piece_name}.csv")
+            
+            # Save the group as a CSV file
+            group_df.to_csv(output_file_path, index=False)
+
+            print(f"CSV files saved to {output_table_path}")        
 
     def add_other_mtm_points(self):
         for filename in os.listdir(self.output_table_path):
@@ -191,11 +214,12 @@ if __name__ == "__main__":
     create_table.merge_tables()
     
     # Save the combined DataFrame as CSV files 
-    create_table.save_table_csv()
+    create_table.save_table_csv_by_alteration_rule()
+    create_table.save_table_csv_by_piece_name()
     create_table.add_other_mtm_points()
 
     # DEBUG
-    print("\n# Debug: All Unique Processed Piece Names. A common error is if they do not match the Actual piece name. \nCheck for extra spaces, incomplete names or unwanted extensions (e.g. .dxf)\n")
-    print(f"Processed Piece Names: {create_table.combined_entities_joined_df['piece_name'].unique()}\n")
-    print(f"Combined Entities (They should match): {create_table.alteration_joined_df['piece_name'].unique()}")
-    print("\nNOTE: If there are pieces in the Processed Piece Names that do not exist in the Combined entities or vice versa, then that table needs to be created")
+    #print("\n# Debug: All Unique Processed Piece Names. A common error is if they do not match the Actual piece name. \nCheck for extra spaces, incomplete names or unwanted extensions (e.g. .dxf)\n")
+    #print(f"Processed Piece Names: {create_table.combined_entities_joined_df['piece_name'].unique()}\n")
+    #print(f"Combined Entities (They should match): {create_table.alteration_joined_df['piece_name'].unique()}")
+    #print("\nNOTE: If there are pieces in the Processed Piece Names that do not exist in the Combined entities or vice versa, then that table needs to be created")

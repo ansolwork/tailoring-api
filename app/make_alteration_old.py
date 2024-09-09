@@ -12,12 +12,34 @@ import os
 # Done: Fixed coordinates
 # Next -> ?
 
-# TODO: Debug why some files are not working
-# TODO: Add storing to AWS
+# TODO: Figure out Which Have CCW NO EXT -> Try printing
+# TODO: MISSING TO IMPLEMENT: CCW NO EXT
+# TODO: Todo: Implement CCW No EXT
+# Any order is ok. Apply multiple alterations on same. Take all alteration rules together.
+# Take one alteration -> then apply to all pieces. Then apply next alteration, etc. Apply all alterations, output in one shot. 
+#1. Apply alteration, then re-apply new alteration
+
+#New Structure:
+#* Alteration/Piece/Plots or Piece/Alterations/Plots
+#* Front/Piece/ , Back/Piece/Alteration
+
+# TODO: Debug why this happens
+# Error processing file combined_table_1LTH-FRONT.csv, and vertices_LGFG-V2-SH-01-STB-FO.csv: cannot access free variable 'altered_vertices' where it is not associated with a value in enclosing scope
+# INPUT VERTICES PATH: data/staging/vertices/vertices_LGFG-SH-01-CCB-FO.csv
 
 class MakeAlteration:
-    def __init__(self, input_table_path=None, 
+    """
+    Handles the processing of alteration rules.
+
+    :param alteration_df: DataFrame containing the alteration data.
+    :param piece_name: Name of the piece being processed.
+    :param alteration_rule: Rule for applying alterations.
+    """
+    def __init__(self, 
+                 input_table_path=None, 
+                 input_table_df = None,
                  input_vertices_path=None, 
+                 input_vertices_df = None,
                  alteration_rule=None,
                  piece_name=None,
                  input_folder_alteration = None,
@@ -28,18 +50,25 @@ class MakeAlteration:
         
         self.processing_utils = DataProcessingUtils()
 
-        self.input_table_path = input_table_path
-        self.input_vertices_path = input_vertices_path
-
         self.alteration_rule = alteration_rule
         self.piece_name = piece_name
 
         if input_table_path:
+            self.input_table_path = input_table_path
             self.start_df = self.processing_utils.load_csv(input_table_path)
             self.start_df = self.filter_by_piece_name()
 
         if input_vertices_path:
+            self.input_vertices_path = input_vertices_path
             self.vertices_df = self.processing_utils.load_csv(input_vertices_path)
+
+        if isinstance(input_table_df, pd.DataFrame):
+            self.start_df = input_table_df
+            self.start_df = self.filter_by_piece_name()
+            self.alteration_rule = self.start_df['alteration_rule'].dropna().unique()[0]
+        
+        if isinstance(input_vertices_df, pd.DataFrame):
+            self.vertices_df = input_vertices_df
 
         self.df_alt = ""
         self.total_alt = []
@@ -59,6 +88,7 @@ class MakeAlteration:
         return self.start_df[self.start_df['piece_name'] == self.piece_name]
 
     def prepare_dataframe(self, df):
+        """Prepares the DataFrame by converting columns to the correct types and adding necessary columns."""
         df['pl_point_x'] = pd.to_numeric(df['pl_point_x'], errors='coerce').fillna(0)
         df['pl_point_y'] = pd.to_numeric(df['pl_point_y'], errors='coerce').fillna(0)
         df['maximum_movement_inches_positive'] = pd.to_numeric(df['maximum_movement_inches_positive'], errors='coerce').fillna(0)
@@ -70,10 +100,10 @@ class MakeAlteration:
         df['pl_point_x_modified'] = ""
         df['pl_point_y_modified'] = ""
         df['altered_vertices'] = ""
-        df['distance_euq'] = ""
         return df
     
-    def apply_alteration_rules(self, custom_alteration=False):
+    def apply_alteration_rules(self):
+        """Apply the alteration rules on the DataFrame."""
         alteration_df = self.prepare_dataframe(self.start_df.copy())
         self.vertices_df = self.vertices_df.copy().apply(self.reduce_original_vertices, axis=1)
         os.makedirs(self.save_folder_vertices, exist_ok=True)
@@ -92,11 +122,14 @@ class MakeAlteration:
         # Remove duplicates while preserving order
         self.vertices_list = self.processing_utils.remove_duplicates_preserve_order(flattened_vertices_list)
 
-        #print("Start Alteration Data")
-        #print(self.start_df)
+        print("Start Alteration Data")
+        print(self.start_df)
 
         # Apply alteration rules
         alteration_df = alteration_df.apply(self.process_alteration_rules, axis=1)
+
+        print("Alteration DF")
+        print(alteration_df)
         self.vertex_smoothing()
         self.reduce_and_smooth_vertices()
 
@@ -112,6 +145,10 @@ class MakeAlteration:
         merged_df.to_csv(save_filepath, index=False)
     
     def process_alteration_rules(self, row):
+        """
+        Process each row of the alteration table according to the rule.
+        :param row: DataFrame row.
+        """
         if pd.isna(row['alteration_type']):
             return row
         
@@ -190,10 +227,10 @@ class MakeAlteration:
         elif row['alteration_type'] in ['CW Ext', 'CCW Ext'] and pd.notna(row['mtm points']):
             if row['mtm points'] != row['mtm_dependent']:
                 #print("")
-                #print("---------")
-                #print("Alteration Type (process rules): ")
-                #print(row['alteration_type'])
-                #print("---------")
+                print("---------")
+                print("Alteration Type (process rules): ")
+                print(row['alteration_type'])
+                print("---------")
                 #print("")
                 #print(f"Extension MTM {row['mtm points']}")
                 row = self.apply_xy_move(row)
@@ -219,6 +256,17 @@ class MakeAlteration:
                         }
                 alt_set = update_or_add_alt_set(alt_set)
                 #print(f"Alteration Set Before Smoothing: {alt_set["altered_vertices"]}")
+
+        elif row['alteration_type'] in ['CCW No Ext'] and pd.notna(row['mtm points']):
+            print("here")
+            #print("")
+            print("---------")
+            print("Alteration Type (process rules): ")
+            print(row['alteration_type'])
+            print("---------")
+            #print("")
+            print(f"Extension MTM {row['mtm points']}")
+            row = self.apply_xy_move(row)
 
         return row
     
@@ -329,6 +377,8 @@ class MakeAlteration:
 
     def find_closest_points(self, mtm_point, current_x, current_y):
         df_existing_mtm = self.start_df.dropna(subset=['mtm points'])
+        print("Existing MTM DF")
+        print(df_existing_mtm)
         df_existing_mtm['distance'] = np.sqrt((df_existing_mtm['pl_point_x'] - current_x)**2 + (df_existing_mtm['pl_point_y'] - current_y)**2)
         df_sorted = df_existing_mtm[df_existing_mtm['mtm points'] != mtm_point].sort_values(by='distance')
         prev_point = df_sorted.iloc[0] if not df_sorted.empty else None
@@ -336,15 +386,15 @@ class MakeAlteration:
         return prev_point, next_point
 
     def apply_xy_move(self, row):
-        # Old version - multiply as a base percentage
-        #row['pl_point_x_modified'] = row['pl_point_x'] * (1 + row['movement_x'])
-        #row['pl_point_y_modified'] = row['pl_point_y'] * (1 + row['movement_y'])
-
+        """Applies the XY movement alteration."""
+        
         row['pl_point_x_modified'] = row['pl_point_x'] * (1 + row['movement_x'])
         row['pl_point_y_modified'] = row['pl_point_y'] * (1 + row['movement_y'])
         
         mtm_point = row['mtm points']
         prev_point, next_point = self.find_closest_points(mtm_point, row['pl_point_x'], row['pl_point_y'])
+        print("\nPrev Point")
+        print(prev_point)
         prev_coordinates = (prev_point['pl_point_x'], prev_point['pl_point_y']) if prev_point is not None else (None, None)
         next_coordinates = (next_point['pl_point_x'], next_point['pl_point_y']) if next_point is not None else (None, None)
         altered_coordinates = (row['pl_point_x_modified'], row['pl_point_y_modified'])
@@ -619,6 +669,8 @@ class MakeAlteration:
         original_df.rename(columns={'mtm_points_in_altered_vertices': 'mtm_points_in_altered_vertices_ref'}, inplace=True)
 
         # Assuming 'mtm_point' is the key to merge on
+        print("Total Alt DF")
+        print(total_alt_df)
         merged_df = original_df.merge(total_alt_df, left_on='mtm points', right_on='mtm_point', how='left')
 
         # Drop the original 'mtm points' column
@@ -697,7 +749,7 @@ class MakeAlteration:
 
         return df
     
-    def alter_all(self):
+    def alter_all(self, debug):
         # Loop through all CSV files in the alteration_input_dir
         for alteration_file in os.listdir(self.alteration_input_dir):
             if alteration_file.endswith(".csv"):  # Ensure we're only processing CSV files
@@ -710,19 +762,17 @@ class MakeAlteration:
                 alteration_rule = alteration_df['alteration_rule'].dropna().unique()[0]
 
                 # LOOK FOR CIRCLE AND SQUARE HERE
-                print("UNIQUE PIECE NAMES")
-                print(unique_piece_names)
+                print(f"\nUNIQUE PIECE NAMES: {unique_piece_names}\n")
 
                 for piece_name in unique_piece_names:
                     # Construct the expected vertices file path
                     vertices_input_file = f"vertices_{piece_name}.csv"
                     input_vertices_path = os.path.join(self.vertices_input_dir, vertices_input_file)
 
-                    print("INPUT VERTICES PATH")
-                    print(input_vertices_path)
+                    print(f"INPUT VERTICES PATH: {input_vertices_path}\n")
 
                     if os.path.exists(input_vertices_path):
-                        print(f"Processing piece: {piece_name}, and entities file: {alteration_file}")
+                        print(f"Processing piece: {piece_name}, and entities file: {alteration_file}\n")
 
                         try:
                             # Create an instance of MakeAlteration for the current piece
@@ -730,16 +780,72 @@ class MakeAlteration:
                                                              save_folder=self.save_folder, save_folder_vertices=self.save_folder_vertices)
                         
                             # Apply the alteration rules and process the file
-                            make_alteration.apply_alteration_rules(custom_alteration=False)
+                            make_alteration.apply_alteration_rules()
                             print(f"Processing complete for piece: {piece_name}")
+
+                            if debug:
+                                break
+
                         except Exception as e:
                             print(f"Error processing file {alteration_file}, and {vertices_input_file}: {e}")
                             # Optionally, you could log the error to a file instead of just printing it.
                     else:
                         print(f"Vertices file not found for piece: {piece_name}, moving to next...")
                         continue
+            if debug:
+                break
+            print(f"------------------------------------")
         else:
             print(f"Skipping non-CSV file: {alteration_file}")
+
+    def alter_by_piece_name(self, piece_name):
+        
+        vertices_filepath = os.path.join(self.vertices_input_dir, "vertices_" + piece_name + ".csv")
+
+        matching_dfs = []
+        
+        alteration_files = os.listdir(self.alteration_input_dir)
+        for alteration_file in alteration_files:
+            alteration_filepath = os.path.join(self.alteration_input_dir, alteration_file)
+            alteration_df = self.processing_utils.load_csv(alteration_filepath)
+            
+            # Check if the piece_name exists in the "piece_name" column
+            if alteration_df["piece_name"].isin([piece_name]).any():
+                    matching_dfs.append(alteration_df)
+            
+        # If there are any matching DataFrames, concatenate them into one DataFrame
+        #if matching_dfs:
+        #    final_df = pd.concat(matching_dfs, ignore_index=True)
+        #    print(f"Appended DataFrame for {piece_name}:\n", final_df)
+        #    return final_df
+        #else:
+        #    print(f"No matching data found for piece_name: {piece_name}")
+        #    return None
+
+        # OR for each dataframe in list, do a Make alteration
+        #for alteration_df in matching_dfs:
+        #    # Create an instance of MakeAlteration for the current piece
+        #    make_alteration = MakeAlteration(input_table_df=alteration_df, input_vertices_path=vertices_filepath, 
+        #                                     piece_name=piece_name, 
+        #                                     save_folder=self.save_folder, save_folder_vertices=self.save_folder_vertices)
+        #    
+        #
+        #
+        #    make_alteration.apply_alteration_rules()
+        #    print(f"Processing complete for piece: {piece_name}")    
+
+        # OR for each dataframe in list, do a Make alteration
+
+        alteration_df = matching_dfs[18] # 7F-SHPOINT: Contains CCW No Ext
+
+        make_alteration = MakeAlteration(input_table_df=alteration_df, input_vertices_path=vertices_filepath, 
+                                            piece_name=piece_name, 
+                                            save_folder=self.save_folder, save_folder_vertices=self.save_folder_vertices)
+        
+
+
+        make_alteration.apply_alteration_rules()
+        print(f"Processing complete for piece: {piece_name}")   
 
 if __name__ == "__main__":
 
@@ -751,4 +857,7 @@ if __name__ == "__main__":
 
     # Way to call the function when running multiple
     make_alteration = MakeAlteration(input_folder_alteration=alteration_staging, input_folder_vertices=vertices_processed)
-    make_alteration.alter_all()
+    #make_alteration.alter_all(debug=True)
+
+    piece_name = "LGFG-SH-01-CCB-FO"
+    make_alteration.alter_by_piece_name(piece_name)

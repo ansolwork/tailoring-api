@@ -20,7 +20,7 @@ HPGL_SCALE_FACTOR = 1.297  # Magic constant for scaling HPGL files
 GRID_SIZE = 10
 OUTPUT_DIR = "data/output/plots/"
 
-class VisualizeAlteration:
+class GeneratePlots:
     def __init__(self, input_table_path: str, input_vertices_path: str, grid: bool = True, 
                  plot_actual_size: bool = False, dpi: int = DEFAULT_DPI,
                  override_dpi: int = None, display_size: int = None, 
@@ -39,14 +39,15 @@ class VisualizeAlteration:
         :param display_resolution_height: Display resolution height in pixels.
         """
         self.data_processing_utils = DataProcessingUtils()
-        self.piece_name = self.get_piece_name(input_table_path)
 
         # Load data
-        self.df = self.data_processing_utils.load_csv(input_table_path)
-        self.vertices_df = self.data_processing_utils.load_csv(input_vertices_path)
-
-        # Instantiate VertexPlotDataProcessor to handle vertex scaling and processing
-        self.vertex_processor = VertexPlotDataProcessor(self.data_processing_utils)
+        if input_table_path and input_vertices_path:
+            self.df = self.data_processing_utils.load_csv(input_table_path)
+            self.vertices_df = self.data_processing_utils.load_csv(input_vertices_path)
+            self.piece_name = self.get_piece_name(self.df)
+        
+            # Instantiate VertexPlotDataProcessor to handle vertex scaling and processing
+            self.vertex_processor = VertexPlotDataProcessor(self.data_processing_utils)
 
         # Plot configuration
         self.grid = grid
@@ -67,14 +68,21 @@ class VisualizeAlteration:
         self.plot_df = self.vertex_processor.plot_df
 
     @staticmethod
-    def get_piece_name(input_table_path: str) -> str:
+    def get_piece_name(df: pd.DataFrame) -> str:
         """
-        Extracts and returns the piece name from the provided file path.
+        Extracts and returns the piece name from the 'piece_name' column in the dataframe.
 
-        :param input_table_path: File path of the input data.
-        :return: Extracted piece name from the file name.
+        Raises an exception if more than one unique piece name is found.
+
+        :param df: DataFrame containing the data.
+        :return: Extracted piece name from the dataframe.
         """
-        return os.path.splitext(os.path.basename(input_table_path))[0].split('_', 1)[-1]
+        unique_pieces = df['piece_name'].unique()
+
+        if len(unique_pieces) > 1:
+            raise ValueError(f"More than one unique piece name found: {unique_pieces}")
+        
+        return unique_pieces[0]
 
     @staticmethod
     def ensure_directory(dir_path: str):
@@ -459,30 +467,94 @@ class VisualizeAlteration:
                 ax.plot(point['x'], point['y'], 'o', color=point['color'], markersize=marker_size)
                 ax.text(point['x'], point['y'], point['label'], color=point['color'], fontsize=font_size)
 
+
+def process_files():
+    """
+    Process alterations and vertices files by matching their `piece_name` and creating visualizations.
+    """
+    processed_alterations_dir = "data/staging_processed/processed_alterations/"
+    processed_vertices_dir = "data/staging_processed/processed_vertices/"
+    
+    for altered_file in os.listdir(processed_alterations_dir):
+        if altered_file.endswith(".csv"):
+            input_altered_table_path = os.path.join(processed_alterations_dir, altered_file)
+            
+            # Load the alterations dataframe
+            alteration_df = pd.read_csv(input_altered_table_path)
+            
+            try:
+                altered_piece_name = GeneratePlots.get_piece_name(alteration_df)
+            except ValueError as e:
+                logging.error(f"Error with alteration file {altered_file}: {e}")
+                continue  # Skip to the next file if there's an issue with the piece name
+            
+            # Now loop through the vertices directory to find the matching file
+            matching_vertices_file = None
+            for vertices_file in os.listdir(processed_vertices_dir):
+                if vertices_file.endswith(".csv"):
+                    input_vertices_table_path = os.path.join(processed_vertices_dir, vertices_file)
+                    
+                    # Load the vertices dataframe
+                    vertices_df = pd.read_csv(input_vertices_table_path)
+                    
+                    try:
+                        vertices_piece_name = GeneratePlots.get_piece_name(vertices_df)
+                    except ValueError as e:
+                        logging.error(f"Error with vertices file {vertices_file}: {e}")
+                        continue  # Skip to the next vertices file
+                    
+                    # Check if the `piece_name` matches
+                    if altered_piece_name == vertices_piece_name:
+                        matching_vertices_file = input_vertices_table_path
+                        break  # We found a match, stop looking further
+            
+            if matching_vertices_file:
+                # Proceed with visualization using the matched files
+                # NOTE: DPI can only be overridden if plot_actual_size = False
+                try:
+                    visualize_alteration = GeneratePlots(
+                        input_table_path=input_altered_table_path,
+                        input_vertices_path=matching_vertices_file, 
+                        grid=False, plot_actual_size=True, 
+                        display_size=16, # inches
+                        display_resolution_width=3456, 
+                        display_resolution_height=2234
+                    )
+                    visualize_alteration.prepare_plot_data()
+                    visualize_alteration.plot_polylines_table()
+                except Exception as e:
+                    logging.error(f"Error processing {altered_file} and {matching_vertices_file}: {e}")
+            else:
+                logging.warning(f"No matching vertices file found for {altered_piece_name}")
+
 if __name__ == "__main__":
-    # DPI can only be overridden if plot_actual_size = False
+    # Display resolution set for Macbook Pro m2 - change to whatever your screen res is
+    display_resolution_width = 3456
+    display_resolution_height = 2234
+    display_size = 16  
+
+    # Create and save the grid once
+    visualize_alteration = GeneratePlots(
+        input_table_path="",  # Temporary placeholder
+        input_vertices_path="",  # Temporary placeholder
+        grid=False, 
+        plot_actual_size=True, 
+        display_size=display_size,
+        display_resolution_width=display_resolution_width, 
+        display_resolution_height=display_resolution_height
+    )
+
+    # Create and save grid only once
+    grid_filename = '10x10_grid'
+    logging.info(f"Creating grid: {grid_filename}")
+    visualize_alteration.create_and_save_grid(grid_filename)
+
+    # Process all files
+    process_files()
+
+    # Or process one at a time (DEBUGGING)
     input_table_path = "data/staging_processed/processed_alterations/1LTH-FULL_SQUARE-12BY12-INCH.csv"
     input_vertices_path = "data/staging_processed/processed_vertices/processed_vertices_SQUARE-12BY12-INCH.csv"
-
-    visualize_alteration = VisualizeAlteration(
-        input_table_path=input_table_path, input_vertices_path=input_vertices_path,
-        grid=False, plot_actual_size=True, display_size=16,
-        display_resolution_width=3456, display_resolution_height=2234
-    )
     
-    # Create and save grid
-    visualize_alteration.create_and_save_grid('10x10_grid')
-
-    # Prepare plot data
-    visualize_alteration.prepare_plot_data()
-
-    # Generate polyline plots
-    visualize_alteration.plot_polylines_table()
-
-    # Uncomment the block below to process all files in the directory
-    # processed_alterations_dir = "data/staging_processed/processed_alterations/"
-    # for altered_file in os.listdir(processed_alterations_dir):
-    #    if altered_file.endswith(".csv"):
-    #        input_table_path = os.path.join(processed_alterations_dir, altered_file)
-    #        print(input_table_path)
+    # Call Generate Plots
 
