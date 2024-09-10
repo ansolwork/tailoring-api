@@ -136,6 +136,7 @@ class MakeAlteration:
         # Merge and save
         total_alt_df = pd.DataFrame(self.total_alt)
         merged_df = self.merge_with_original_df(alteration_df, total_alt_df)
+        print(merged_df)
         merged_df = self.get_mtm_dependent_coords(merged_df)
 
         # Save final table
@@ -143,6 +144,7 @@ class MakeAlteration:
         os.makedirs(self.save_folder, exist_ok=True)
         save_filepath = f"{self.save_folder}/{self.alteration_rule}_{self.piece_name}{self.file_format}"
         merged_df.to_csv(save_filepath, index=False)
+        print(f"Saved Merged DF to {save_filepath}")
     
     def process_alteration_rules(self, row):
         """
@@ -205,20 +207,21 @@ class MakeAlteration:
             #print("---------")
             row = self.apply_xy_move(row)
 
-            alt_set = {"mtm_point": int(row['mtm points']),
-                       "mtm_dependant" : int(row['mtm_dependent']),
-                    "alteration": row['alteration_type'],
-                    "movement_x": row['movement_x'],
-                    "movement_y": row['movement_y'],
-                    "old_coordinates": (row['pl_point_x'], row['pl_point_y']),
-                    "new_coordinates": (
-                        row['pl_point_x_modified'],
-                        row['pl_point_y_modified']
-                    ), 
-                    "altered_vertices" : [(row['pl_point_x'], row['pl_point_y'])],
-                        # TODO: If this is more than one point, may need to be handled
-                        "mtm_points_in_altered_vertices" : row['mtm_points_in_altered_vertices']
-                        }
+            alt_set = {
+                "mtm_point": int(row['mtm points']),
+                "mtm_dependant" : int(row['mtm_dependent']),
+                "alteration": row['alteration_type'],
+                "movement_x": row['movement_x'],
+                "movement_y": row['movement_y'],
+                "old_coordinates": (row['pl_point_x'], row['pl_point_y']),
+                "new_coordinates": (
+                    row['pl_point_x_modified'],
+                    row['pl_point_y_modified']
+                ), 
+                "altered_vertices" : [(row['pl_point_x'], row['pl_point_y'])],
+                # TODO: If this is more than one point, may need to be handled
+                "mtm_points_in_altered_vertices" : row['mtm_points_in_altered_vertices']
+            }
             
             update_or_add_alt_set(alt_set)
             alt_set["altered_vertices_smoothened"] = row["altered_vertices"]
@@ -678,7 +681,7 @@ class MakeAlteration:
         
         # Optionally, rename 'mtm_point' to 'mtm points' if you need to keep the same column name
         merged_df.rename(columns={'mtm_point': 'mtm_points_alteration'}, inplace=True)
-        merged_df.rename(columns={'vertices': 'original_vertices'}, inplace=True)
+        #merged_df.rename(columns={'vertices': 'original_vertices'}, inplace=True)
 
         # Sort columns by X-Coordinate (again)
         merged_df['alteration_set'] = merged_df['altered_vertices'].apply(self.processing_utils.sort_by_x)
@@ -836,7 +839,7 @@ class MakeAlteration:
 
         # OR for each dataframe in list, do a Make alteration
 
-        alteration_df = matching_dfs[18] # 7F-SHPOINT: Contains CCW No Ext
+        alteration_df = matching_dfs[15] # 7F-SHPOINT: Contains CCW No Ext
 
         make_alteration = MakeAlteration(input_table_df=alteration_df, input_vertices_path=vertices_filepath, 
                                             piece_name=piece_name, 

@@ -265,7 +265,7 @@ class GeneratePlots:
             if pd.notna(row['unique_vertices_x']) and pd.notna(row['unique_vertices_y']):
                 xs, ys = row['unique_vertices_x'], row['unique_vertices_y']
                 ax.plot(xs, ys, marker='o', linewidth=line_width, markersize=marker_size, color="#006400", label="Original")
-
+        
         ax.set_title(f'Original Vertices Plot for {self.piece_name}', fontsize=font_size+2)
         ax.set_xlabel('X Coordinate [in]', fontsize=font_size)
         ax.set_ylabel('Y Coordinate [in]', fontsize=font_size)
@@ -293,6 +293,8 @@ class GeneratePlots:
             ax.plot(xs_alt_reduced, ys_alt_reduced, marker='x', linestyle='-.', linewidth=line_width+0.5, markersize=marker_size+3, color="#BA55D3", alpha=0.7, label="Altered Reduced")
             ax.plot(xs_alt, ys_alt, marker='o', linestyle='-', linewidth=line_width, markersize=marker_size, color="#00CED1", alpha=0.85, label="Altered")
 
+        self.plot_mtm_points(ax)
+        
         ax.set_title(f'Combined Vertices Plot for {self.piece_name}', fontsize=font_size+2)
         ax.set_xlabel('X Coordinate [in]', fontsize=font_size)
         ax.set_ylabel('Y Coordinate [in]', fontsize=font_size)
@@ -467,6 +469,16 @@ class GeneratePlots:
                 ax.plot(point['x'], point['y'], 'o', color=point['color'], markersize=marker_size)
                 ax.text(point['x'], point['y'], point['label'], color=point['color'], fontsize=font_size)
 
+    def plot_mtm_points(self, ax):
+        marker_size = self.plot_config.get_marker_size()
+        font_size = self.plot_config.get_font_size()
+
+        # Plot MTM points
+        for _, row in self.plot_df.iterrows():
+            point = row['mtm_points']
+
+            ax.plot(point['x'], point['y'], 'o', color=point['color'], markersize=marker_size)
+            ax.text(point['x'], point['y'], point['label'], color=point['color'], fontsize=font_size)
 
 def process_files():
     """
@@ -550,11 +562,23 @@ if __name__ == "__main__":
     visualize_alteration.create_and_save_grid(grid_filename)
 
     # Process all files
-    process_files()
+    #process_files()
 
     # Or process one at a time (DEBUGGING)
-    input_table_path = "data/staging_processed/processed_alterations/1LTH-FULL_SQUARE-12BY12-INCH.csv"
-    input_vertices_path = "data/staging_processed/processed_vertices/processed_vertices_SQUARE-12BY12-INCH.csv"
+    input_table_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_1LTH-FULL.csv"
+    input_vertices_path = "data/staging_processed/processed_vertices_by_piece/processed_vertices_LGFG-SH-01-CCB-FO.csv"
     
     # Call Generate Plots
+    visualize_alteration = GeneratePlots(
+        input_table_path=input_table_path,  # Temporary placeholder
+        input_vertices_path=input_vertices_path,  # Temporary placeholder
+        grid=False, 
+        plot_actual_size=True, 
+        display_size=display_size,
+        display_resolution_width=display_resolution_width, 
+        display_resolution_height=display_resolution_height
+    )
+
+    visualize_alteration.prepare_plot_data()
+    visualize_alteration.plot_polylines_table()
 
