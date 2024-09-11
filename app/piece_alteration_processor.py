@@ -14,8 +14,9 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s - [%(filename)s:%(lineno)d]'
 ) # Levels Info/Warning/Error/Critical
 
-# TODO: Merge all notch points
-# TODO: When Reducing the Points, THE MTM POINTS DO NOT LOOK EXACTLY ALIGNED ON THE PLOT
+# TODO: Merge all notch points: DONE
+# TODO: When Reducing the Points, THE MTM POINTS DO NOT LOOK EXACTLY ALIGNED ON THE PLOT. DONE
+
 # TODO: NEARBY MTM POINT FOR 8016 is WRONG
 
 class PieceAlterationProcessor:
@@ -741,11 +742,21 @@ if __name__ == "__main__":
 
     piece_table_path = "data/staging/alteration_by_piece/combined_table_LGFG-SH-01-CCB-FO.csv"
     vertices_table_path = "data/staging/vertices/vertices_LGFG-SH-01-CCB-FO.csv"
+
+    #piece_table_path = "data/staging/alteration_by_piece/combined_table_CIRCLE-12BY12-INCH.csv"
+    #vertices_table_path = "data/staging/vertices/vertices_CIRCLE-12BY12-INCH.csv"
+
+    #piece_table_path = "data/staging/alteration_by_piece/combined_table_LGFG-V2-SH-01-STBS-F.csv"
+    #vertices_table_path = "data/staging/vertices/vertices_LGFG-V2-SH-01-STBS-F.csv"
+
+    #piece_table_path = "data/staging/alteration_by_piece/combined_table_LGFG-SH-04FS-FOA.csv"
+    #vertices_table_path = "data/staging/vertices/vertices_LGFG-SH-04FS-FOA.csv"
     
     # Debug: Check by Alteration Rule
     #debug_alteration_rule = "7F-SHPOINT"
     #debug_alteration_rule = "4-WAIST"
     debug_alteration_rule = "1LTH-FULL"
+    #debug_alteration_rule = "1LTH-FSLV"
 
     make_alteration = PieceAlterationProcessor(piece_table_path=piece_table_path,
                                                vertices_table_path=vertices_table_path,

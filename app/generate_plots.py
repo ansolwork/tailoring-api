@@ -565,8 +565,17 @@ if __name__ == "__main__":
     #process_files()
 
     # Or process one at a time (DEBUGGING)
-    input_table_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_1LTH-FULL.csv"
-    input_vertices_path = "data/staging_processed/processed_vertices_by_piece/processed_vertices_LGFG-SH-01-CCB-FO.csv"
+    #input_table_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_1LTH-FULL.csv"
+    #input_vertices_path = "data/staging_processed/processed_vertices_by_piece/processed_vertices_LGFG-SH-01-CCB-FO.csv"
+
+    #input_table_path = "data/staging_processed/debug/CIRCLE-12BY12-INCH_1LTH-FULL.csv"
+    #input_vertices_path = "data/staging_processed/processed_vertices_by_piece/processed_vertices_CIRCLE-12BY12-INCH.csv"
+
+    #input_table_path = "data/staging_processed/debug/LGFG-V2-SH-01-STBS-F_1LTH-FULL.csv"
+    #input_vertices_path = "data/staging_processed/processed_vertices_by_piece/processed_vertices_LGFG-V2-SH-01-STBS-F.csv"
+
+    input_table_path = "data/staging_processed/debug/LGFG-SH-04FS-FOA_1LTH-FSLV.csv"
+    input_vertices_path = "data/staging_processed/processed_vertices_by_piece/processed_vertices_LGFG-SH-04FS-FOA.csv"
     
     # Call Generate Plots
     visualize_alteration = GeneratePlots(
