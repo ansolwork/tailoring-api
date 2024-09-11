@@ -143,7 +143,7 @@ class VertexPlotDataProcessor:
         scaled_vertices : list
             A list to store the scaled vertices.
         """
-        vertices_list = ast.literal_eval(row['original_vertices_reduced'])
+        vertices_list = ast.literal_eval(row['vertices'])
         
         if vertices_list:
             xs, ys = self.scale_vertices(vertices_list)
@@ -151,6 +151,9 @@ class VertexPlotDataProcessor:
             # Create a unique identifier for the vertex list
             scaled_vertex_tuple = tuple(zip(xs, ys))
             vertex_hash = hashlib.md5(str(scaled_vertex_tuple).encode()).hexdigest()
+
+            print("Vertex Tuple")
+            print(scaled_vertex_tuple)
 
             if vertex_hash not in plot_data['unique_vertices']:
                 plot_data['unique_vertices'].append(vertex_hash)

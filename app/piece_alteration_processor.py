@@ -5,6 +5,7 @@ from app.smoothing import SmoothingFunctions  # Import the SmoothingFunctions cl
 from utils.data_processing_utils import DataProcessingUtils
 import os
 from functools import partial
+from itertools import combinations
 
 # Setup Logging
 import logging
@@ -13,6 +14,7 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s - [%(filename)s:%(lineno)d]'
 ) # Levels Info/Warning/Error/Critical
 
+# TODO: Merge all notch points
 # TODO: When Reducing the Points, THE MTM POINTS DO NOT LOOK EXACTLY ALIGNED ON THE PLOT
 # TODO: NEARBY MTM POINT FOR 8016 is WRONG
 
@@ -540,12 +542,129 @@ class PieceAlterationProcessor:
         # Return the two closest points.
         return prev_point, next_point
 
+    def filter_notch_points(self, perimeter_threshold=0.1575, tolerance=0.50, angle_threshold=60.0, small_displacement_threshold=0.1):
+        """
+        Identifies and removes notch points from the list of vertices. A notch is defined as three points
+        forming a perimeter approximately equal to the given threshold and with sharp angles.
+
+        :param perimeter_threshold: The perimeter threshold in inches (default is 0.1575 inches for 4mm).
+        :param tolerance: The allowed tolerance when comparing perimeters.
+        :param angle_threshold: The angle threshold to detect sharp turns representing notches.
+        :param small_displacement_threshold: The minimum threshold for the displacement to avoid retaining points with
+                                            very small changes in coordinates (removes unwanted sharp points).
+        :return: Updated DataFrame with notch points removed from the vertices.
+        """
+        logging.info(f"Starting notch point removal process.")
+        total_notches_removed = 0
+
+        for index, row in self.vertices_df.iterrows():
+            vertex_list = ast.literal_eval(row['vertices'])
+            if len(vertex_list) < 3:
+                continue
+
+            # Copy the vertex_list to work on
+            cleaned_vertex_list = vertex_list.copy()
+
+            # Iterate through vertex list and analyze points for proximity, angles, and dips
+            for i in range(1, len(vertex_list) - 1):
+                p1, p2, p3 = vertex_list[i - 1], vertex_list[i], vertex_list[i + 1]
+
+                # Calculate distances
+                d12 = np.linalg.norm(np.array(p1) - np.array(p2))
+                d23 = np.linalg.norm(np.array(p2) - np.array(p3))
+                d31 = np.linalg.norm(np.array(p3) - np.array(p1))
+
+                # Calculate the angle between the points
+                angle = self.calculate_angle(p1, p2, p3)
+
+                # Calculate the perimeter (sum of the distances)
+                perimeter = d12 + d23 + d31
+
+                # Check for sharp angle (notch) and perimeter size
+                if abs(angle) < angle_threshold and (perimeter) < (perimeter_threshold + tolerance):
+                    logging.info(f"Notch detected at points: {p1}, {p2}, {p3} with angle: {angle:.2f} degrees")
+                    total_notches_removed += 1
+
+                    # Remove notch points
+                    if p1 in cleaned_vertex_list:
+                        cleaned_vertex_list.remove(p1)
+                    if p2 in cleaned_vertex_list:
+                        cleaned_vertex_list.remove(p2)
+                    if p3 in cleaned_vertex_list:
+                        cleaned_vertex_list.remove(p3)
+
+                # Additional check for small displacement points
+                if self.is_small_displacement(p1, p2, p3, small_displacement_threshold):
+                    logging.info(f"Small displacement detected at point: {p2}. Removing.")
+                    if p2 in cleaned_vertex_list:
+                        cleaned_vertex_list.remove(p2)
+
+            # Update the DataFrame row with the cleaned vertex list
+            self.vertices_df.at[index, 'vertices'] = str(cleaned_vertex_list)
+
+        logging.info(f"Total notches removed: {total_notches_removed}")
+        return self.vertices_df
+
+    def is_small_displacement(self, p1, p2, p3, threshold):
+        """
+        Check if the points form a very small displacement, indicating they are part of an unwanted artifact (sharp perpendicular line).
+        
+        :param p1: First point (x, y).
+        :param p2: Second point (vertex).
+        :param p3: Third point (x, y).
+        :param threshold: Threshold for detecting small changes.
+        :return: True if the displacement is small, False otherwise.
+        """
+        # Displacement between consecutive points
+        disp_x = abs(p2[0] - p1[0]) + abs(p3[0] - p2[0])
+        disp_y = abs(p2[1] - p1[1]) + abs(p3[1] - p2[1])
+        
+        # If both X and Y displacements are smaller than the threshold, consider it a small unwanted artifact
+        if disp_x < threshold and disp_y < threshold:
+            return True
+        
+        return False
+
+    def calculate_angle(self, p1, p2, p3):
+        """
+        Calculate the angle (in degrees) formed by three points (p1, p2, p3).
+
+        :param p1: First point (x, y).
+        :param p2: Second point (vertex).
+        :param p3: Third point (x, y).
+        :return: Angle in degrees.
+        """
+        a = np.array(p1)
+        b = np.array(p2)
+        c = np.array(p3)
+
+        # Vector from p2 to p1 and from p2 to p3
+        ba = a - b
+        bc = c - b
+
+        # Calculate the cosine of the angle between ba and bc
+        cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
+
+        # Handle potential floating-point issues
+        cosine_angle = np.clip(cosine_angle, -1.0, 1.0)
+
+        # Return the angle in degrees
+        angle = np.degrees(np.arccos(cosine_angle))
+
+        return angle
+
     def process_and_save_vertices(self):
         """
         Prepares the vertices, reduces them, flattens, and saves the processed vertices.
         """
-        # Prepare vertices by reducing them
-        self.vertices_df = self.vertices_df.copy().apply(self.reduce_vertices, axis=1)
+        logging.info(f"\nProcessing Vertices")
+
+        # Prepare vertices by removing notch points
+        self.filter_notch_points()
+
+        # Prepare vertices by reducing them (Old Method: Does not maintain the right dimensions)
+        # When i remove this, it causes problemos
+        #self.vertices_df = self.vertices_df.copy().apply(self.reduce_vertices, axis=1)
 
         # Save processed vertices
         self.save_processed_vertices()
