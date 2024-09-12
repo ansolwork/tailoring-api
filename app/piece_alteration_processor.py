@@ -61,6 +61,7 @@ class PieceAlterationProcessor:
         self.piece_df = self.processing_utils.load_csv(piece_table_path)
         self.vertices_df = self.processing_utils.load_csv(vertices_table_path)
         self.processed_vertices_list = []
+        self.line_pl_points = [] # Used to store line points
 
         # Get the unique alteration rules
         self.alteration_rules = self.get_alteration_rules()
@@ -118,6 +119,47 @@ class PieceAlterationProcessor:
 
         return alteration_dfs
     
+    def remove_line_pl_points(self, df):
+        """
+        Identifies and removes rows in `df` where the `pl_point_x` and `pl_point_y` correspond
+        to line segments (vertices with exactly two points) from the `vertices_df`.
+        Stores the removed line points in `self.line_pl_points` for later use.
+
+        :param df: The DataFrame from which line points should be removed.
+        :return: The DataFrame with line points removed.
+        """
+        line_pl_points = []
+
+        # Iterate through each row in the vertices DataFrame
+        for index, row in self.vertices_df.iterrows():
+            try:
+                # Parse the vertices (convert string representation to actual list)
+                vertices = ast.literal_eval(row['vertices'])
+                
+                # Check if the length of the vertices is exactly 2 (line segment)
+                if len(vertices) == 2:
+                    # Extract the pl_points (coordinates) of the vertex line
+                    pl_point_1 = vertices[0]
+                    pl_point_2 = vertices[1]
+                    
+                    # Store both points for later use
+                    line_pl_points.append(pl_point_1)
+                    line_pl_points.append(pl_point_2)
+
+            except Exception as e:
+                logging.error(f"Error processing vertices for row {index}: {e}")
+        
+        # Convert the list of line pl_points to a DataFrame and store in an instance variable
+        self.line_pl_points = pd.DataFrame(line_pl_points, columns=['pl_point_x', 'pl_point_y'])
+
+        # Remove rows from df where `pl_point_x` and `pl_point_y` match any of the points in self.line_pl_points
+        df_cleaned = df[~df.set_index(['pl_point_x', 'pl_point_y']).index.isin(self.line_pl_points.set_index(['pl_point_x', 'pl_point_y']).index)]
+
+        logging.info(f"Removed {len(df) - len(df_cleaned)} rows corresponding to line PL points.")
+        
+        return df_cleaned
+
+    
     def prepare_dataframe(self, df):
         """
         Prepares the DataFrame by converting columns to numeric values and adding necessary columns.
@@ -136,6 +178,9 @@ class PieceAlterationProcessor:
         df['movement y'] = df['movement_y'].astype(str).str.replace('%', '', regex=False).astype(float).fillna(0)
         df['pl_point_altered_x'] = ""
         df['pl_point_altered_y'] = ""
+
+        # Remove PL Points of lines
+        df = self.remove_line_pl_points(df)
         
         # Drop unnecessary columns
         df = df.drop('vertices', axis=1)
@@ -172,6 +217,8 @@ class PieceAlterationProcessor:
         """
         combined_df = pd.concat([selected_df, unselected_df], ignore_index=True)
         combined_df = self.drop_duplicate_rows(combined_df)
+
+        # Remove line PL Points
         
         return combined_df
 
@@ -545,6 +592,7 @@ class PieceAlterationProcessor:
         # Process vertices into a flattened list and remove duplicates
         vertices_nested_list = self.extract_and_flatten_vertices(self.vertices_df['vertices'].tolist())
         self.processed_vertices_list = self.processing_utils.remove_duplicates_preserve_order(vertices_nested_list)
+        logging.info("Processed Vertices Done")
 
     def save_processed_vertices(self):
         """
