@@ -197,21 +197,21 @@ class GeneratePlots:
             logging.info(f"Default DPI: {self.dpi}")
 
         # Create and save plots
-        fig_combined, ax_combined = plt.subplots(figsize=(self.width, self.height))
-        fig_vertices, ax_vertices = plt.subplots(figsize=(self.width, self.height))
-        fig_alteration, ax_alteration = plt.subplots(figsize=(self.width, self.height))
+        fig_vertices, ax_vertices = plt.subplots(figsize=(self.plot_config.width, self.plot_config.height))        
+        #fig_combined, ax_combined = plt.subplots(figsize=(self.plot_config.width, self.plot_config.height))
+        #fig_alteration, ax_alteration = plt.subplots(figsize=(self.plot_config.width, self.plot_config.height))
 
-        self.plot_combined(ax_combined)
         self.plot_only_vertices(ax_vertices)
-        self.plot_alteration_table(output_dir=piece_dir, fig=fig_alteration, ax=ax_alteration)
+        #self.plot_alteration_table(output_dir=piece_dir, fig=fig_alteration, ax=ax_alteration)
+        #self.plot_combined(ax_combined)
 
-        self.save_plot(fig_combined, ax_combined, "combined_plot", piece_dir)
         self.save_plot(fig_vertices, ax_vertices, "vertices_plot", piece_dir)
-        self.save_plot(fig_alteration, ax_alteration, "alteration_table_plot", piece_dir)
+        #self.save_plot(fig_combined, ax_combined, "combined_plot", piece_dir)
+        #self.save_plot(fig_alteration, ax_alteration, "alteration_table_plot", piece_dir)
 
         plt.close(fig_vertices)
-        plt.close(fig_alteration)
-        plt.close(fig_combined)
+        #plt.close(fig_alteration)
+        #plt.close(fig_combined)
 
     def save_plot(self, fig, ax, plot_type, output_dir):
         """
@@ -231,7 +231,7 @@ class GeneratePlots:
         fig.savefig(png_path, dpi=self.dpi, bbox_inches='tight')
         
         logging.info(f"Saving {plot_type} as SVG to {svg_path}")
-        self.data_processing_utils.save_plot_as_svg(fig, ax, self.width, self.height, svg_path, add_labels=False)
+        self.data_processing_utils.save_plot_as_svg(fig, ax, self.plot_config.width, self.plot_config.width, svg_path, add_labels=False)
 
         logging.info(f"Converting SVG to HPGL and saving to {hpgl_path}")
         self.data_processing_utils.svg_to_hpgl(svg_path, hpgl_path)
@@ -246,10 +246,10 @@ class GeneratePlots:
         xs_all = [x for xs in self.plot_df['unique_vertices_x'].dropna() for x in xs]
         ys_all = [y for ys in self.plot_df['unique_vertices_y'].dropna() for y in ys]
 
-        self.width = max(xs_all) - min(xs_all)
-        self.height = max(ys_all) - min(ys_all)
+        self.plot_config.width  = max(xs_all) - min(xs_all)
+        self.plot_config.height = max(ys_all) - min(ys_all)
 
-        logging.info(f"Calculated width: {self.width}, height: {self.height}")
+        logging.info(f"Calculated width: {self.plot_config.width}, height: {self.plot_config.height}")
 
     def plot_only_vertices(self, ax):
         """
@@ -545,21 +545,23 @@ if __name__ == "__main__":
     display_resolution_height = 2234
     display_size = 16  
 
+    ##### GRID #####
     # Create and save the grid once
-    visualize_alteration = GeneratePlots(
-        input_table_path="",  # Temporary placeholder
-        input_vertices_path="",  # Temporary placeholder
-        grid=False, 
-        plot_actual_size=True, 
-        display_size=display_size,
-        display_resolution_width=display_resolution_width, 
-        display_resolution_height=display_resolution_height
-    )
+    #visualize_alteration = GeneratePlots(
+    #    input_table_path="",  # Temporary placeholder
+    #    input_vertices_path="",  # Temporary placeholder
+    #    grid=False, 
+    #    plot_actual_size=True, 
+    #    display_size=display_size,
+    #    display_resolution_width=display_resolution_width, 
+    #    display_resolution_height=display_resolution_height
+    #)
 
     # Create and save grid only once
-    grid_filename = '10x10_grid'
-    logging.info(f"Creating grid: {grid_filename}")
-    visualize_alteration.create_and_save_grid(grid_filename)
+    #grid_filename = '10x10_grid'
+    #logging.info(f"Creating grid: {grid_filename}")
+    #visualize_alteration.create_and_save_grid(grid_filename)
+    ##################
 
     # Process all files
     #process_files()
@@ -574,15 +576,15 @@ if __name__ == "__main__":
     #input_table_path = "data/staging_processed/debug/LGFG-V2-SH-01-STBS-F_1LTH-FULL.csv"
     #input_vertices_path = "data/staging_processed/processed_vertices_by_piece/processed_vertices_LGFG-V2-SH-01-STBS-F.csv"
 
-    input_table_path = "data/staging_processed/debug/LGFG-SH-04FS-FOA_1LTH-FSLV.csv"
-    input_vertices_path = "data/staging_processed/processed_vertices_by_piece/processed_vertices_LGFG-SH-04FS-FOA.csv"
+    input_table_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_1LTH-FULL.csv"
+    input_vertices_path = "data/staging_processed/processed_vertices_by_piece/processed_vertices_LGFG-SH-01-CCB-FO.csv"
     
     # Call Generate Plots
     visualize_alteration = GeneratePlots(
         input_table_path=input_table_path,  # Temporary placeholder
         input_vertices_path=input_vertices_path,  # Temporary placeholder
         grid=False, 
-        plot_actual_size=True, 
+        plot_actual_size=False, 
         display_size=display_size,
         display_resolution_width=display_resolution_width, 
         display_resolution_height=display_resolution_height

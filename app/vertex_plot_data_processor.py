@@ -81,13 +81,13 @@ class VertexPlotDataProcessor:
         vertices_df = vertices_df.copy()
         
         # Process main data
-        for _, row in df.iterrows():
-            try:
-                self.process_altered_vertices(row, plot_data, self.scaled_altered_vertices)
-                self.process_altered_vertices_reduced(row, plot_data, self.scaled_altered_vertices_reduced)
-                self.process_mtm_points(row, plot_data)
-            except Exception as e:
-                continue
+        #for _, row in df.iterrows():
+        #    try:
+                #self.process_altered_vertices(row, plot_data, self.scaled_altered_vertices)
+                #self.process_altered_vertices_reduced(row, plot_data, self.scaled_altered_vertices_reduced)
+                #self.process_mtm_points(row, plot_data)
+        #    except Exception as e:
+        #        continue
         
         # Process vertices data
         for _, row in vertices_df.iterrows():
@@ -151,9 +151,6 @@ class VertexPlotDataProcessor:
             # Create a unique identifier for the vertex list
             scaled_vertex_tuple = tuple(zip(xs, ys))
             vertex_hash = hashlib.md5(str(scaled_vertex_tuple).encode()).hexdigest()
-
-            print("Vertex Tuple")
-            print(scaled_vertex_tuple)
 
             if vertex_hash not in plot_data['unique_vertices']:
                 plot_data['unique_vertices'].append(vertex_hash)

@@ -24,8 +24,8 @@ logging.basicConfig(
 
 # Debug
 pd.set_option('display.max_colwidth', None)  # No limit on column width
-#pd.set_option('display.max_columns', None)   # Display all columns
-#pd.set_option('display.width', None)         # No truncation on width
+pd.set_option('display.max_columns', None)   # Display all columns
+pd.set_option('display.width', None)         # No truncation on width
 
 
 # TODO: Merge all notch points: DONE
@@ -204,13 +204,31 @@ class PieceAlterationProcessor:
             """
             selected_df = self.alteration_dfs[alteration_rule]
             unselected_df = self.get_unselected_rows(selected_df)
-            
+
+            # Combine selected and unselected rows into a single DataFrame
             combined_df = self.combine_and_clean_data(selected_df, unselected_df)
+            
+            # Prepare DataFrame by converting columns and dropping unnecessary ones
             processed_df = self.prepare_dataframe(combined_df)
 
-            return processed_df.apply(partial(self.apply_alteration_to_row, selected_df=processed_df), axis=1)
+            # Apply alteration rule row-by-row
+            for index, row in processed_df.iterrows():
 
-        # Case when a specific debug alteration type is provided
+                # Only apply alterations where types exist
+                if not pd.isna(row['alteration_type']):
+
+                    # Apply the alteration and update both the row and the selected_df
+                    row, updated_df = self.apply_alteration_to_row(row, processed_df)
+                
+                    # Update the row back into processed_df (in case it's an individual row alteration)
+                    processed_df.loc[index] = row
+                
+                    # Ensure any DataFrame-wide changes are applied to processed_df
+                    processed_df = updated_df
+            
+            return processed_df
+
+        # Debug Mode: Apply a specific alteration rule and save the result
         if not pd.isna(self.debug_alteration_rule):
 
             # Setup Save Info
@@ -227,17 +245,40 @@ class PieceAlterationProcessor:
                 logging.warning(f"Debug alteration type '{self.debug_alteration_rule}' not found in requested alterations.")
             return  # Early return after processing the debug alteration
 
-        # Apply all alteration rules when no specific debug type is provided
         logging.info("Running Full Alteration Process")
         all_altered_dfs = []
-        for alteration_rule in self.alteration_rules:
-            altered_df = self.apply_single_rule(alteration_rule)  # This should return the altered DataFrame
-            all_altered_dfs.append(altered_df)
 
-        # Optionally combine all the altered DataFrames
+        # Loop through all alteration rules
+        for alteration_rule in self.alteration_rules:
+            selected_df = self.alteration_dfs[alteration_rule]
+
+            # Apply the alteration to every row in the selected_df
+            for index, row in selected_df.iterrows():
+                # Apply the alteration and return both row and selected_df
+                row, selected_df = self.apply_alteration_to_row(row, selected_df)
+                # Update the row back into selected_df
+                selected_df.loc[index] = row
+
+            # Append the fully altered DataFrame for this rule
+            all_altered_dfs.append(selected_df)
+
+        # Concatenate all the altered DataFrames
         self.altered_df = pd.concat(all_altered_dfs, ignore_index=True)
 
+        # Save the final altered DataFrame to CSV
+        save_filepath = f"{self.save_folder_processed_pieces}/processed_alterations_{self.piece_name}{self.save_file_format}"
+        self.processing_utils.save_csv(self.altered_df, save_filepath)
+        logging.info(f"Altered DataFrame saved to {save_filepath}")
+
     def apply_alteration_to_row(self, row, selected_df):
+        """
+        Applies the relevant alteration type to a row or the selected DataFrame.
+        Handles both individual row updates and DataFrame-level updates.
+        
+        :param row: The current row to alter.
+        :param selected_df: The entire DataFrame being altered.
+        :return: A tuple of (row, selected_df) after the alterations.
+        """
         alteration_type_map = {
             'X Y MOVE': self.apply_xy_coordinate_adjustment,
             'CW Ext': self.apply_cw_ext,
@@ -248,38 +289,42 @@ class PieceAlterationProcessor:
         alteration_type = row['alteration_type']
         
         if pd.isna(alteration_type):
-            return row
-        
+            return row, selected_df  # No alteration, return original row and DataFrame
+
         # Call the appropriate method for the alteration type
         func = alteration_type_map.get(alteration_type)
         if func:
-            return func(row, selected_df)
+            return func(row, selected_df)  # Expect both row and DataFrame to be updated
         else:
             logging.warning(f"No viable alteration types found for {alteration_type}")
-            return row
-        
-    def apply_cw_ext(self):
-        print(f"CW Ext: Nothing here yet")
+            return row, selected_df
 
-    def apply_ccw_ext(self):
-        print(f"CCW EXT Nothing here yet")
+    def apply_cw_ext(self, row, selected_df):
+        # Example logic for clockwise extension
+        # Modify row and selected_df based on CW extension logic
+        return row, selected_df
 
-    def apply_ccw_no_ext(self):
-        print(f"CCW No Ext Nothing here yet")
+    def apply_ccw_ext(self, row, selected_df):
+        # Example logic for counter-clockwise extension
+        return row, selected_df
+    
+    def apply_ccw_no_ext(self, row, selected_df):
+        # Example logic for Counter-clockwise No Extension
+        return row, selected_df
 
-    def find_points_in_range(self, df, x1, y1, x2, y2):
+    def find_points_in_range(self, df, p1, p2):
         """
-        Finds all points in the DataFrame that lie between two given coordinates (x1, y1) and (x2, y2).
+        Finds all points in the DataFrame that lie between two given coordinates p1 and p2.
 
         :param df: The DataFrame containing the coordinates (columns 'pl_point_x' and 'pl_point_y').
-        :param x1, y1: First coordinate.
-        :param x2, y2: Second coordinate.
-        :return: A DataFrame with the points that lie between (x1, y1) and (x2, y2).
+        :param p1: First coordinate as a tuple (x, y).
+        :param p2: Second coordinate as a tuple (x, y).
+        :return: A DataFrame with the points that lie between (p1, p2).
         """
 
         # Determine the bounding box (min and max for x and y)
-        min_x, max_x = min(x1, x2), max(x1, x2)
-        min_y, max_y = min(y1, y2), max(y1, y2)
+        min_x, max_x = min(p1[0], p2[0]), max(p1[0], p2[0])
+        min_y, max_y = min(p1[1], p2[1]), max(p1[1], p2[1])
 
         # Filter the DataFrame to get all points within the bounding box
         points_in_range = df[
@@ -292,47 +337,81 @@ class PieceAlterationProcessor:
     def apply_xy_coordinate_adjustment(self, row, selected_df):
         """
         Applies an XY movement alteration to the current row by adjusting X and Y coordinates.
-        This method modifies the original X and Y coordinates based on movement percentages 
-        and updates the altered vertices list with nearest points.
+        This method modifies the original X and Y coordinates based on movement percentages.
+        If necessary, it will update multiple rows in the selected DataFrame.
         
         :param row: The row containing point information and movement data.
         :param selected_df: The DataFrame containing all points for the current alteration rule.
-        :return: The updated row with modified coordinates and nearest points.
+        :return: A tuple of (row, selected_df) with updated coordinates.
         """
-
         try:
-            # Extract the current point's identifier ('mtm points') from the row.
             mtm_point = row['mtm points']
             mtm_dependent = row['mtm_dependent']
 
-            coords = (row['pl_point_x'], row['pl_point_y'])
-
-            # IF MTM Dependent Point is equal to MTM Alteration Point, then only move that point
+            # Case 1: Individual row alteration (mtm_dependent == mtm_point)
             if mtm_dependent == mtm_point:
-                # Move X/Y Coordinates as a function of 1 inch 
                 row['pl_point_altered_x'] = row['pl_point_x'] + (1 * row['movement_x'])
                 row['pl_point_altered_y'] = row['pl_point_y'] + (1 * row['movement_y'])
 
-                coords_new = (row['pl_point_altered_x'], row['pl_point_altered_y'])
+                logging.info(f"Altered point {mtm_point} to new coordinates: "
+                            f"({row['pl_point_altered_x']}, {row['pl_point_altered_y']})")
 
-                logging.info(f"Altered point {mtm_point} from {coords} to {coords_new}")
-
-                return row  # Return the altered row
+                return row, selected_df  # Return updated row and original DataFrame
             
+            # Case 2: Multiple row alteration (mtm_dependent != mtm_point)
             elif mtm_dependent != mtm_point:
                 # Find the dependent point's pl_point_x and pl_point_y in the selected_df
                 dependent_row = selected_df[selected_df['mtm points'] == mtm_dependent]
 
                 if dependent_row.empty:
                     logging.error(f"Dependent point {mtm_dependent} not found for MTM Point {mtm_point}.")
-                    return row
+                    return row, selected_df
 
-                # Alter all points between
+                # Extract the x and y coordinates of the current point and dependent point
+                p1 = (row["pl_point_x"], row["pl_point_y"])
+                p2 = (dependent_row.iloc[0]["pl_point_x"], dependent_row.iloc[0]["pl_point_y"])
 
-            return row
-        
+                # Find points in range between p1 and p2
+                points_in_range = self.find_points_in_range(selected_df, p1, p2)
+
+                if not points_in_range.empty:
+                    logging.info(f"Found {len(points_in_range)} points between MTM {mtm_point} and dependent {mtm_dependent}.")
+
+                    # Apply the XY adjustments to the points in range and update the DataFrame
+                    for idx, point in points_in_range.iterrows():
+                        altered_x = point['pl_point_x'] + (1 * row['movement_x'])
+                        altered_y = point['pl_point_y'] + (1 * row['movement_y'])
+                        
+                        # Update these values directly in selected_df
+                        selected_df.loc[idx, 'pl_point_altered_x'] = altered_x
+                        selected_df.loc[idx, 'pl_point_altered_y'] = altered_y
+
+                        logging.info(f"Altered point at index {idx} to new coordinates: "
+                                    f"({altered_x}, {altered_y})")
+                        
+                    # Apply alteration to the mtm_point itself
+                    row['pl_point_altered_x'] = row['pl_point_x'] + (1 * row['movement_x'])
+                    row['pl_point_altered_y'] = row['pl_point_y'] + (1 * row['movement_y'])
+                    selected_df.loc[selected_df['mtm points'] == mtm_point, 'pl_point_altered_x'] = row['pl_point_altered_x']
+                    selected_df.loc[selected_df['mtm points'] == mtm_point, 'pl_point_altered_y'] = row['pl_point_altered_y']
+
+                    logging.info(f"Altered MTM point {mtm_point} to new coordinates: "
+                                f"({row['pl_point_altered_x']}, {row['pl_point_altered_y']})")
+
+                    # Apply alteration to the mtm_dependent point itself
+                    dependent_row.loc[:, 'pl_point_altered_x'] = dependent_row['pl_point_x'] + (1 * row['movement_x'])
+                    dependent_row.loc[:, 'pl_point_altered_y'] = dependent_row['pl_point_y'] + (1 * row['movement_y'])
+                    selected_df.loc[selected_df['mtm points'] == mtm_dependent, 'pl_point_altered_x'] = dependent_row['pl_point_altered_x'].values[0]
+                    selected_df.loc[selected_df['mtm points'] == mtm_dependent, 'pl_point_altered_y'] = dependent_row['pl_point_altered_y'].values[0]
+
+                    logging.info(f"Altered dependent MTM point {mtm_dependent} to new coordinates: "
+                                f"({dependent_row['pl_point_altered_x'].values[0]}, {dependent_row['pl_point_altered_y'].values[0]})")
+                            
+                return row, selected_df  # Return the original row and updated DataFrame
+
         except Exception as e:
             logging.error(f"Failed to apply XY adjustment: {e}")
+            return row, selected_df  # In case of failure, return unmodified data
 
     def filter_notch_points(self, perimeter_threshold=0.1575, tolerance=0.50, angle_threshold=60.0, small_displacement_threshold=0.1):
         """
