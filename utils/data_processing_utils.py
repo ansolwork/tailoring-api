@@ -106,6 +106,12 @@ class DataProcessingUtils:
         xs = tuple(x * scaling_factor for x in xs)
         ys = tuple(y * scaling_factor for y in ys)
         return xs, ys
+    
+    def polar_angle(self, x, y, center_x=0, center_y=0):
+        """
+        Calculate the polar angle of the point (x, y) relative to the center (center_x, center_y).
+        """
+        return np.arctan2(y - center_y, x - center_x)
 
     def remove_duplicates_preserve_order(self, flattened_list):
         """

@@ -7,6 +7,14 @@ import os
 from functools import partial
 from itertools import combinations
 
+# TODO:
+# MTM Points in altered vertices are all the MTM points that are moved
+# Is this needed when we get new pl points?
+
+# TODO:
+# IF two times mention the same point, move that point only (XY Move)
+# IF Two different points, then move points from dependent to the mtm 8017 to 8020 (including both points)
+
 # Setup Logging
 import logging
 logging.basicConfig(
@@ -14,9 +22,16 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s - [%(filename)s:%(lineno)d]'
 ) # Levels Info/Warning/Error/Critical
 
+# Debug
+pd.set_option('display.max_colwidth', None)  # No limit on column width
+#pd.set_option('display.max_columns', None)   # Display all columns
+#pd.set_option('display.width', None)         # No truncation on width
+
+
 # TODO: Merge all notch points: DONE
 # TODO: When Reducing the Points, THE MTM POINTS DO NOT LOOK EXACTLY ALIGNED ON THE PLOT. DONE
 
+# TODO: FIND OUT WHY NOT ALL XY MOVE FOR 1LTH-FULL APPEARS FOR FRONT PIECE
 # TODO: NEARBY MTM POINT FOR 8016 is WRONG
 
 class PieceAlterationProcessor:
@@ -52,9 +67,7 @@ class PieceAlterationProcessor:
 
         # Dictionary to store DataFrames by alteration rule
         self.alteration_dfs = self.split_by_alteration_rule()
-
-        # Store All Processed Alteration Sets
-        self.alteration_log = []
+        self.altered_df = ""
 
         # Piece name (assuming only one unique piece name)
         self.piece_name = self.get_piece_name()
@@ -121,9 +134,12 @@ class PieceAlterationProcessor:
         
         df['movement_x'] = df['movement_x'].astype(str).str.replace('%', '').astype(float).fillna(0)
         df['movement y'] = df['movement_y'].astype(str).str.replace('%', '', regex=False).astype(float).fillna(0)
-        df['pl_point_x_modified'] = ""
-        df['pl_point_y_modified'] = ""
-        df['altered_vertices'] = ""
+        df['pl_point_altered_x'] = ""
+        df['pl_point_altered_y'] = ""
+        
+        # Drop unnecessary columns
+        df = df.drop('vertices', axis=1)
+        
         return df
     
     def get_unselected_rows(self, selected_df):
@@ -191,8 +207,7 @@ class PieceAlterationProcessor:
             
             combined_df = self.combine_and_clean_data(selected_df, unselected_df)
             processed_df = self.prepare_dataframe(combined_df)
-            
-            # Apply alterations row-by-row
+
             return processed_df.apply(partial(self.apply_alteration_to_row, selected_df=processed_df), axis=1)
 
         # Case when a specific debug alteration type is provided
@@ -206,231 +221,73 @@ class PieceAlterationProcessor:
             if self.debug_alteration_rule in self.alteration_rules:
                 # Apply the specific debug alteration rule
                 logging.info(f"Running Alteration in Debug Mode: {self.debug_alteration_rule}")
-                alteration_df = apply_single_rule(self.debug_alteration_rule)
-
-                # Even in debug mode, we should process and save the result.
-                cumulative_alteration_df = pd.DataFrame(self.alteration_log)
-                merged_df = self.merge_with_alteration_df(alteration_df, cumulative_alteration_df)
-
-                # Save the result
-                logging.info(f"Saved Processed Debug Alterations To: {save_filepath}")
-                merged_df = self.get_mtm_dependent_coords(merged_df)
-                merged_df.to_csv(save_filepath, index=False)
+                self.altered_df = apply_single_rule(self.debug_alteration_rule)
+                self.processing_utils.save_csv(self.altered_df, save_filepath)
             else:
                 logging.warning(f"Debug alteration type '{self.debug_alteration_rule}' not found in requested alterations.")
             return  # Early return after processing the debug alteration
 
         # Apply all alteration rules when no specific debug type is provided
         logging.info("Running Full Alteration Process")
-        all_merged_df = {}
+        all_altered_dfs = []
         for alteration_rule in self.alteration_rules:
-            alteration_df = apply_single_rule(alteration_rule)
-        
-            # After applying each alteration rule, accumulate and merge the data
-            cumulative_alteration_df = pd.DataFrame(self.alteration_log)
-            merged_df = self.merge_with_alteration_df(alteration_df, cumulative_alteration_df)
-            merged_df = self.get_mtm_dependent_coords(merged_df)
+            altered_df = self.apply_single_rule(alteration_rule)  # This should return the altered DataFrame
+            all_altered_dfs.append(altered_df)
 
-            # Concatenate all 
-
-        # Save the result for the full alteration process (concatenate all)
-        #logging.info(f"Saved Processed Alterations To: {save_filepath}")
-        #merged_df.to_csv(save_filepath, index=False)
-
-    def merge_with_alteration_df(self, alteration_df, cumulative_alteration_df):
-        """
-        Merges the original alteration DataFrame with the cumulative alterations DataFrame.
-        
-        This function merges the original alteration data (`alteration_df`) with the cumulative alterations
-        (`cumulative_alteration_df`) that have been processed and stored in `self.alteration_log`. The final
-        DataFrame will include both the original piece information and the alterations applied to it, along with
-        other relevant details such as altered vertices.
-
-        The process involves:
-        1. Dropping unnecessary columns from the original `alteration_df` to prevent duplication.
-        2. Renaming columns for better clarity and consistency.
-        3. Merging `alteration_df` and `cumulative_alteration_df` on the `mtm points` to align the original data 
-        with the cumulative alterations.
-        4. Sorting the altered vertices by their X-coordinates to maintain spatial integrity.
-        5. Cleaning up the final DataFrame by removing intermediate columns no longer required.
-
-        Parameters:
-        ----------
-        alteration_df : pd.DataFrame
-            The original DataFrame containing the staged alterations for the piece.
-            
-        cumulative_alteration_df : pd.DataFrame
-            DataFrame containing cumulative alterations applied to the piece, compiled from `self.alteration_log`.
-
-        Returns:
-        -------
-        pd.DataFrame
-            A merged DataFrame containing the original piece data alongside the cumulative alterations, ready 
-            for further analysis or saving.
-
-        Columns in the final DataFrame:
-        - `mtm_points_ref`: Reference points from the original `alteration_df`.
-        - `mtm_points_alteration`: Alteration points from `cumulative_alteration_df`.
-        - `original_vertices`: Vertices from the original `alteration_df` before any alterations.
-        - `alteration_set`: A sorted list of altered vertices based on X-coordinates.
-
-        Notes:
-        ------
-        - The function depends on `self.processing_utils.sort_by_x()` to ensure that altered vertices are 
-        sorted by their X-coordinates for spatial consistency.
-        """
-        
-        # Copy original alteration_df to avoid modifying the original DataFrame directly
-        original_df = alteration_df.copy()
-
-        # Drop columns that are not required post-merging to avoid duplication
-        original_df.drop(columns=['alteration_type', 'altered_vertices', 'mtm_dependent', 'movement_x', 'movement_y', 'vertices'], inplace=True)
-
-        # Rename columns for clarity
-        original_df.rename(columns={'mtm_points_in_altered_vertices': 'mtm_points_ref'}, inplace=True)
-
-        # Merge original alteration_df with cumulative_alteration_df using 'mtm points' as the key
-        merged_df = original_df.merge(cumulative_alteration_df, left_on='mtm points', right_on='mtm_point', how='left')
-
-        # Rename columns to make clear distinction between original and altered data
-        merged_df.rename(columns={'mtm_point': 'mtm_points_alteration'}, inplace=True)
-
-        # Sort the altered vertices by X-coordinates using the processing utility
-        merged_df['alteration_set'] = merged_df['altered_vertices'].apply(self.processing_utils.sort_by_x)
-        merged_df['altered_vertices'] = merged_df['altered_vertices_smoothened'].apply(self.processing_utils.sort_by_x)
-        merged_df['altered_vertices_reduced'] = merged_df['altered_vertices_smoothened_reduced'].apply(self.processing_utils.sort_by_x)
-        merged_df.drop(columns = ['altered_vertices_smoothened', 'altered_vertices_smoothened_reduced'], inplace=True)
-
-        return merged_df
-    
-    def get_mtm_dependent_coords(self, df):
-        """
-        Populates dependent MTM coordinates (X and Y) for each row in the DataFrame.
-
-        This function identifies the rows in the DataFrame that have dependent MTM points, retrieves the
-        coordinates (X and Y) for those dependent points, and populates two new columns: `mtm_dependant_x`
-        and `mtm_dependant_y` with these coordinates.
-
-        The process involves:
-        1. Initializing two new columns in the DataFrame to store X and Y coordinates for the dependent MTM points.
-        2. Parsing the `mtm_dependant` column to handle strings, lists, or individual labels.
-        3. Flattening and retrieving all MTM dependent values.
-        4. Finding matching rows based on `mtm points` and retrieving their X and Y coordinates.
-        5. Assigning the dependent X and Y coordinates to the new columns.
-
-        Parameters:
-        ----------
-        df : pd.DataFrame
-            The DataFrame containing the original data, including the `mtm_dependant` and `mtm points` columns.
-
-        Returns:
-        -------
-        pd.DataFrame
-            The updated DataFrame with two new columns:
-            - `mtm_dependant_x`: The X coordinates of the dependent MTM points.
-            - `mtm_dependant_y`: The Y coordinates of the dependent MTM points.
-        """
-
-        # Initialize new columns with object dtype to handle lists or individual values
-        df['mtm_dependant_x'] = pd.Series(dtype='object')
-        df['mtm_dependant_y'] = pd.Series(dtype='object')
-
-        # Helper function to parse the 'mtm_dependant' column
-        def parse_labels(labels):
-            if isinstance(labels, str):
-                return ast.literal_eval(labels)
-            return labels if isinstance(labels, list) else [labels]
-
-        # Helper function to check if all labels are in the provided list
-        def check_all_labels_in_list(labels, matching_list):
-            labels = parse_labels(labels)
-            return all(item in matching_list for item in labels)
-
-        # Flatten the MTM dependant values
-        mtm_dependant_vals = df['mtm_dependant'].dropna().tolist()
-        mtm_dependant_vals_flattened = self.processing_utils.flatten_if_needed(mtm_dependant_vals)
-
-        # Get rows where mtm points match the dependant values
-        matching_rows = df[df['mtm points'].isin(mtm_dependant_vals_flattened)]
-        matching_mtm_labels = matching_rows['mtm points'].unique()
-
-        # Create a dictionary to store unique (x, y) pairs by their labels
-        unique_coords = {}
-        for label, x, y in zip(matching_rows['mtm points'], matching_rows['pl_point_x'], matching_rows['pl_point_y']):
-            if (x, y) not in unique_coords:
-                unique_coords[(x, y)] = label
-
-        # Convert the dictionary back to lists
-        coords = {
-            "coords_x": [key[0] for key in unique_coords.keys()],
-            "coords_y": [key[1] for key in unique_coords.keys()],
-            "label": list(unique_coords.values())
-        }
-
-        # Filter rows where all labels in 'mtm_dependant' exist in the coords['label']
-        mtm_dependant_labels = df[df['mtm_dependant'].apply(lambda x: check_all_labels_in_list(x, coords["label"]))]
-
-        # Iterate over the rows to assign the dependent coordinates
-        for _, row in mtm_dependant_labels.iterrows():
-            labels = parse_labels(row['mtm_dependant'])
-
-            x_coords = []
-            y_coords = []
-
-            # Check if all labels exist in the coordinate dictionary
-            if all(label in coords["label"] for label in labels):
-                x_coords = [coords["coords_x"][coords["label"].index(label)] for label in labels]
-                y_coords = [coords["coords_y"][coords["label"].index(label)] for label in labels]
-
-            # Assign coordinates to the DataFrame (handling multiple or single coordinates)
-            df.at[row.name, 'mtm_dependant_x'] = x_coords if len(x_coords) > 1 else x_coords[0]
-            df.at[row.name, 'mtm_dependant_y'] = y_coords if len(y_coords) > 1 else y_coords[0]
-
-        return df
+        # Optionally combine all the altered DataFrames
+        self.altered_df = pd.concat(all_altered_dfs, ignore_index=True)
 
     def apply_alteration_to_row(self, row, selected_df):
+        alteration_type_map = {
+            'X Y MOVE': self.apply_xy_coordinate_adjustment,
+            'CW Ext': self.apply_cw_ext,
+            'CCW Ext': self.apply_ccw_ext,
+            'CCW No Ext': self.apply_ccw_no_ext,
+        }
+
         alteration_type = row['alteration_type']
-        mtm_points = row['mtm points']
         
         if pd.isna(alteration_type):
             return row
+        
+        # Call the appropriate method for the alteration type
+        func = alteration_type_map.get(alteration_type)
+        if func:
+            return func(row, selected_df)
         else:
-            # Create a dictionary to store the alteration data for the current row.
-            alteration_set = {
-                "mtm_point": mtm_points,
-                "mtm_dependant" : int(row['mtm_dependent']),
-                "alteration": alteration_type,
-                "old_coordinates": (row['pl_point_x'], row['pl_point_y']),
-                "movement_x": row['movement_x'],
-                "movement_y": row['movement_y'],
-            }
+            logging.warning(f"No viable alteration types found for {alteration_type}")
+            return row
+        
+    def apply_cw_ext(self):
+        print(f"CW Ext: Nothing here yet")
 
-        if alteration_type == 'X Y MOVE' and pd.notna(mtm_points):
-            logging.info(f"Alteration Type: {alteration_type}")
-            _, new_coordinates = self.apply_xy_coordinate_adjustment(row, selected_df)
-            
-            # Update Alteration Set
-            alteration_set["new_coordinates"] = (new_coordinates)     
-            alteration_set["altered_vertices"] = [(row['pl_point_x'], row['pl_point_y'])]      
-            alteration_set["mtm_points_in_altered_vertices"] = row['mtm_points_in_altered_vertices'] 
-            alteration_set["altered_vertices_smoothened"] = [(new_coordinates)]
-            alteration_set["altered_vertices_smoothened_reduced"] = [(new_coordinates)]
-            alteration_set["split_vertices"] = {}
-            
-        elif alteration_type in ['CW Ext', 'CCW Ext'] and pd.notna(mtm_points):
-            # With Extension: Curve length will change, which means MTM points move in stright X,Y Directions
-            logging.info(f"Alteration Type: {alteration_type}")
+    def apply_ccw_ext(self):
+        print(f"CCW EXT Nothing here yet")
 
-        elif alteration_type == "CCW No Ext" and pd.notna(mtm_points):
-            # No Extension: Curve Length Stays the same 
-            # This means the MTM points won't move in straight X,Y Directions.
-            logging.info(f"Alteration Type: {alteration_type}")
-        else:
-            logging.warning(f"No Viable Alteration Types Found")
+    def apply_ccw_no_ext(self):
+        print(f"CCW No Ext Nothing here yet")
 
-        self.accumulate_alterations(alteration_set)
+    def find_points_in_range(self, df, x1, y1, x2, y2):
+        """
+        Finds all points in the DataFrame that lie between two given coordinates (x1, y1) and (x2, y2).
 
-        return row
+        :param df: The DataFrame containing the coordinates (columns 'pl_point_x' and 'pl_point_y').
+        :param x1, y1: First coordinate.
+        :param x2, y2: Second coordinate.
+        :return: A DataFrame with the points that lie between (x1, y1) and (x2, y2).
+        """
+
+        # Determine the bounding box (min and max for x and y)
+        min_x, max_x = min(x1, x2), max(x1, x2)
+        min_y, max_y = min(y1, y2), max(y1, y2)
+
+        # Filter the DataFrame to get all points within the bounding box
+        points_in_range = df[
+            (df['pl_point_x'] >= min_x) & (df['pl_point_x'] <= max_x) &
+            (df['pl_point_y'] >= min_y) & (df['pl_point_y'] <= max_y)
+        ]
+
+        return points_in_range
 
     def apply_xy_coordinate_adjustment(self, row, selected_df):
         """
@@ -443,105 +300,39 @@ class PieceAlterationProcessor:
         :return: The updated row with modified coordinates and nearest points.
         """
 
-        # Move X/Y Coordinates as a function of 1 inch 
-        row['pl_point_x_modified'] = row['pl_point_x'] + (1 * row['movement_x'])
-        row['pl_point_y_modified'] = row['pl_point_y'] + (1 * row['movement_y'])
+        try:
+            # Extract the current point's identifier ('mtm points') from the row.
+            mtm_point = row['mtm points']
+            mtm_dependent = row['mtm_dependent']
 
-        # Extract the current point's identifier ('mtm points') from the row.
-        mtm_point = row['mtm points']
+            coords = (row['pl_point_x'], row['pl_point_y'])
 
-        # Call the 'find_closest_points' method to identify the two closest points (prev and next).
-        # This method excludes the current 'mtm_point' from the search to avoid comparing it to itself.
-        prev_point, next_point = self.find_closest_points(mtm_point, row['pl_point_x'], row['pl_point_y'], selected_df)
+            # IF MTM Dependent Point is equal to MTM Alteration Point, then only move that point
+            if mtm_dependent == mtm_point:
+                # Move X/Y Coordinates as a function of 1 inch 
+                row['pl_point_altered_x'] = row['pl_point_x'] + (1 * row['movement_x'])
+                row['pl_point_altered_y'] = row['pl_point_y'] + (1 * row['movement_y'])
 
-        # Extract the coordinates of the previous closest point (if it exists).
-        prev_coordinates = (prev_point['pl_point_x'], prev_point['pl_point_y']) if prev_point is not None else (None, None)
+                coords_new = (row['pl_point_altered_x'], row['pl_point_altered_y'])
+
+                logging.info(f"Altered point {mtm_point} from {coords} to {coords_new}")
+
+                return row  # Return the altered row
+            
+            elif mtm_dependent != mtm_point:
+                # Find the dependent point's pl_point_x and pl_point_y in the selected_df
+                dependent_row = selected_df[selected_df['mtm points'] == mtm_dependent]
+
+                if dependent_row.empty:
+                    logging.error(f"Dependent point {mtm_dependent} not found for MTM Point {mtm_point}.")
+                    return row
+
+                # Alter all points between
+
+            return row
         
-        # Extract the coordinates of the next closest point (if it exists).
-        next_coordinates = (next_point['pl_point_x'], next_point['pl_point_y']) if next_point is not None else (None, None)
-
-        # The altered coordinates of the current point after applying the movement.
-        altered_coordinates = (row['pl_point_x_modified'], row['pl_point_y_modified'])
-
-        # Construct a list that stores information about:
-        # - The previous closest point and its original coordinates.
-        # - The current point's original and altered coordinates.
-        # - The next closest point and its original coordinates.
-        mtm_points_in_altered_vertices = [
-            {'mtm_point': prev_point['mtm points'] if prev_point is not None else None, 'original_coordinates': prev_coordinates},
-            {'mtm_point': mtm_point, 'original_coordinates': (row['pl_point_x'], row['pl_point_y']), 'altered_coordinates': altered_coordinates},
-            {'mtm_point': next_point['mtm points'] if next_point is not None else None, 'original_coordinates': next_coordinates}
-        ]
-
-        # Update the 'mtm_points_in_altered_vertices' field in the row with the new data.
-        row['mtm_points_in_altered_vertices'] = mtm_points_in_altered_vertices
-
-        # Check if 'altered_vertices' is an empty or invalid string (e.g., 'None', 'nan', etc.).
-        # If it is empty, initialize it as a list containing the current altered coordinates.
-        if isinstance(row['altered_vertices'], str) and row['altered_vertices'] in ['', 'nan', 'None', 'NaN']:
-            row['altered_vertices'] = [altered_coordinates]
-        
-        # If 'altered_vertices' already exists, append the current altered coordinates to the list.
-        else:
-            # If 'altered_vertices' is a string representing a list, convert it into an actual list using ast.literal_eval.
-            altered_vertices = ast.literal_eval(row['altered_vertices']) if isinstance(row['altered_vertices'], str) else row['altered_vertices']
-            
-            # Append the current altered coordinates to the list of altered vertices.
-            altered_vertices.append(altered_coordinates)
-            
-            # Update the 'altered_vertices' field with the modified list.
-            row['altered_vertices'] = altered_vertices
-
-        # Return the updated row with the modified coordinates and altered vertices.
-        return row, altered_coordinates
-    
-    def accumulate_alterations(self, alt_set):
-        """
-        Update or add new alterations to the cumulative tracking list.
-        """
-        for existing in self.alteration_log:
-            if existing['mtm_point'] == alt_set['mtm_point']:
-
-                # If an alteration already exists for this MTM point, update its values
-                existing['movement_x'] += alt_set['movement_x']
-                existing['movement_y'] += alt_set['movement_y']
-                
-                # Recalculate the final coordinates based on the accumulated movements
-                existing['new_coordinates'] = (
-                    existing['old_coordinates'][0] * (1 + existing['movement_x']),
-                    existing['old_coordinates'][1] * (1 + existing['movement_y'])
-                )
-                
-                # Combine altered vertices and mtm points
-                existing['altered_vertices'] += alt_set['altered_vertices']
-                existing['mtm_points_in_altered_vertices'] += alt_set['mtm_points_in_altered_vertices']
-                
-                return  # Stop after updating the existing entry
-            
-        # If no existing entry found, add new entry
-        self.alteration_log.append(alt_set)
-
-    def find_closest_points(self, mtm_point, current_x, current_y, selected_df):
-        # Create a copy of the selected_df to ensure the original DataFrame isn't modified.
-        selected_df_copy = selected_df.copy()
-
-        # Drop rows with missing values for 'mtm points', 'pl_point_x', or 'pl_point_y'.
-        df_existing_mtm = selected_df_copy.dropna(subset=['mtm points', 'pl_point_x', 'pl_point_y'])    
-
-        # Calculate the Euclidean distance between the current point (current_x, current_y) and each point in the DataFrame.
-        df_existing_mtm['distance'] = np.sqrt(
-            (df_existing_mtm['pl_point_x'] - current_x) ** 2 + (df_existing_mtm['pl_point_y'] - current_y) ** 2
-        )
-
-        # Exclude the current 'mtm_point' from the comparison (we don't want to compare the point to itself).
-        df_sorted = df_existing_mtm[df_existing_mtm['mtm points'] != mtm_point].sort_values(by='distance')
-
-        # Get the two closest points by selecting the first two rows in the sorted DataFrame.
-        prev_point = df_sorted.iloc[0] if not df_sorted.empty else None
-        next_point = df_sorted.iloc[1] if len(df_sorted) > 1 else None
-
-        # Return the two closest points.
-        return prev_point, next_point
+        except Exception as e:
+            logging.error(f"Failed to apply XY adjustment: {e}")
 
     def filter_notch_points(self, perimeter_threshold=0.1575, tolerance=0.50, angle_threshold=60.0, small_displacement_threshold=0.1):
         """
@@ -660,12 +451,14 @@ class PieceAlterationProcessor:
         """
         logging.info(f"\nProcessing Vertices")
 
+        ##### Processing Functions #####
         # Prepare vertices by removing notch points
-        self.filter_notch_points()
+        #self.filter_notch_points()
 
         # Prepare vertices by reducing them (Old Method: Does not maintain the right dimensions)
         # When i remove this, it causes problemos
         #self.vertices_df = self.vertices_df.copy().apply(self.reduce_vertices, axis=1)
+        #########
 
         # Save processed vertices
         self.save_processed_vertices()
@@ -700,7 +493,7 @@ class PieceAlterationProcessor:
         to simplify the list of vertices while preserving the overall shape.
 
         :param row: A row from the vertices DataFrame.
-        :return: The modified row with reduced vertices in 'original_vertices_reduced'.
+        :return: The altered row with reduced vertices in 'original_vertices_reduced'.
         """
         if pd.isna(row['vertices']) or row['vertices'] in ['nan', 'None', '', 'NaN']:
             row['original_vertices_reduced'] = []
@@ -720,18 +513,26 @@ class PieceAlterationProcessor:
                 row['original_vertices_reduced'] = []
         return row
     
-    def log_info(self):
+    def log_info(self, debug_alteration_rule):
         """
         Log Alteration Info (for Debugging)
         """
         logging.info(f"\nMake alteration on Piece Name: {self.piece_name}")
 
         # Define the alteration type you're looking for
-        alteration_rule = "7F-SHPOINT"
+        alteration_rule = debug_alteration_rule
 
         # Check if the alteration type exists in the alteration DataFrame
         if alteration_rule in self.alteration_dfs:
-            logging.info(f"\nAlteration DFs on Alteration Rule {alteration_rule}:\n{self.alteration_dfs[alteration_rule]}")
+            # Get the DataFrame for the specific alteration rule
+            df = self.alteration_dfs[alteration_rule]
+
+            # Filter the DataFrame for rows where 'alteration_rule' is not NaN
+            non_nan_rows = df[df['alteration_rule'].notna()]
+
+            # Log the non-NaN rows
+            logging.info(f"\nAlteration DFs on Alteration Rule {alteration_rule} (Non-NaN rows):\n{non_nan_rows}")
+            logging.info(f"\nNumber of Alterations: {len(non_nan_rows)}")
         else:
             logging.warning(f"\nAlteration Rule '{alteration_rule}' not found in the DataFrame.")
 
@@ -762,5 +563,5 @@ if __name__ == "__main__":
                                                vertices_table_path=vertices_table_path,
                                                debug_alteration_rule=debug_alteration_rule)
     make_alteration.process_alterations()
-    #make_alteration.log_info()
+    #make_alteration.log_info(debug_alteration_rule)
 

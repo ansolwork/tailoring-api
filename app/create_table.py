@@ -2,6 +2,8 @@ import pandas as pd
 import os
 import numpy as np
 
+# TODO: Fix issue why we are not getting enough Alteration Rules in the output
+
 class CreateTable:
     def __init__(self, alteration_filepath, combined_entities_folder):
         self.alteration_filepath = alteration_filepath
@@ -127,6 +129,9 @@ class CreateTable:
         for piece_name, group_df in grouped:
             # Convert all column headers to lowercase
             group_df.columns = group_df.columns.str.lower()
+
+            # Sort rows by 'alteration_rule'
+            group_df = group_df.sort_values(by='alteration_rule')
 
             safe_piece_name = str(piece_name).replace(" ", "_").replace("/", "_")  # Ensure no illegal filename characters
             output_file_path = os.path.join(output_table_path, f"{output_filename_prefix}_{safe_piece_name}.csv")
