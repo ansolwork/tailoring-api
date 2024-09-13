@@ -9,7 +9,7 @@ class AwsUtils:
                  allowed_mime_types, 
                  aws_s3_bucket_name, 
                  aws_signature_version, 
-                 aws_profile_name='tailoring_api'):
+                 aws_profile_name):
         
         self.allowed_extensions = allowed_extensions
         self.allowed_mime_types = allowed_mime_types
