@@ -332,7 +332,7 @@ class PieceAlterationProcessor:
             self.ccw_no_ext_count = alteration_type_counts.get('CCW No Ext', 0)
 
             # Make sure new dataset is sorted
-            processed_df = processed_df.sort_values(by='mtm points')
+            #processed_df = processed_df.sort_values(by='mtm points')
 
             # Apply alteration rule row-by-row
             for index, row in processed_df.iterrows():
@@ -351,8 +351,8 @@ class PieceAlterationProcessor:
                     processed_df = updated_df
 
             # Check for further alteration points
-            if self.xy_move_step_counter == self.xy_move_step_counter:
-                processed_df = self.apply_mtm_correction(processed_df)
+            #if self.xy_move_step_counter == self.xy_move_step_counter:
+            #    processed_df = self.apply_mtm_correction(processed_df)
             
             # Remove empty rows
             processed_df = self.remove_empty_rows(processed_df)
@@ -626,33 +626,63 @@ class PieceAlterationProcessor:
 
             # Case 2: Multiple row alteration (mtm_dependent != mtm_point)
             else:
-                # Get the x and y coordinates of the current and dependent points
-                p1 = np.array([row['pl_point_x'], row['pl_point_y']])
-                dependent_row = selected_df[selected_df['mtm points'] == mtm_dependent].iloc[0]
-                p2 = np.array([dependent_row['pl_point_x'], dependent_row['pl_point_y']])
+                selected_df_copy = selected_df.copy()
 
-                # Extract all points between mtm_point and mtm_dependent in a sequential order
-                points_in_range = selected_df[(selected_df['pl_point_x'] > min(p1[0], p2[0])) & 
-                                            (selected_df['pl_point_x'] <= max(p1[0], p2[0]))]
+                # Now, continue with operations on selected_df_copy
+                p1 = selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_point, ['pl_point_x', 'pl_point_y']].values[0]
+                p2 = selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_dependent, ['pl_point_x', 'pl_point_y']].values[0]
+                dependent_row = selected_df_copy[selected_df_copy['mtm points'] == mtm_dependent].iloc[0]
+
+                movement_x = row['movement_x']  
+                movement_y = row['movement_y']
                 
-                # Debug limits above if something goes wrong
-                #print(points_in_range["mtm points"])
+                print(f"Movement X: {movement_x}")
+                print(f"Movement Y: {movement_y}")
 
+                # Get the point_order for mtm_point
+                start_point_order = selected_df_copy[selected_df_copy['mtm points'] == mtm_point]["point_order"].values[0]
+
+                # Get the point_order for mtm_dependent
+                end_point_order = selected_df_copy[selected_df_copy['mtm points'] == mtm_dependent]["point_order"].values[0]
+
+                # Print the results
+                logging.info(f"Start Point Order: {start_point_order}, End Point Order: {end_point_order}")
+
+                # Make sure to capture points in either ascending or descending order
+                if start_point_order > end_point_order:
+                    points_in_range = selected_df_copy[
+                        (selected_df_copy['point_order'] <= start_point_order) &
+                        (selected_df_copy['point_order'] >= end_point_order)
+                    ]
+                else:
+                    points_in_range = selected_df_copy[
+                        (selected_df_copy['point_order'] >= start_point_order) &
+                        (selected_df_copy['point_order'] <= end_point_order)
+                    ]
+
+                # Debug
+                selected_df_copy.to_csv("data/selected_df_" + str(self.xy_move_step_counter) + ".csv")
+                points_in_range.to_csv("data/points_in_range_" + str(self.xy_move_step_counter) + ".csv")
+                
                 # Apply XY movement to points between mtm_point and mtm_dependent
                 for idx, point in points_in_range.iterrows():
-
+                    # Use the index of the row in selected_df_copy, not the idx from points_in_range
+                    copy_idx = point.name  # This gets the correct index for selected_df_copy
+                    
                     # Use altered coordinates if available, otherwise use original ones
                     current_x = point['pl_point_altered_x'] if pd.notna(point['pl_point_altered_x']) and point['pl_point_altered_x'] != "" else point['pl_point_x']
                     current_y = point['pl_point_altered_y'] if pd.notna(point['pl_point_altered_y']) and point['pl_point_altered_y'] != "" else point['pl_point_y']
 
                     # Apply the movement
-                    altered_x = current_x + (self.alteration_movement * row['movement_x'])
-                    altered_y = current_y + (self.alteration_movement * row['movement_y'])
+                    altered_x = current_x + (self.alteration_movement * movement_x)
+                    altered_y = current_y + (self.alteration_movement * movement_y)
 
-                    # Update these values directly in selected_df
-                    selected_df.loc[idx, 'pl_point_altered_x'] = altered_x
-                    selected_df.loc[idx, 'pl_point_altered_y'] = altered_y
+                    # Update these values directly in selected_df_copy using the correct index
+                    selected_df_copy.loc[copy_idx, 'pl_point_altered_x'] = altered_x
+                    selected_df_copy.loc[copy_idx, 'pl_point_altered_y'] = altered_y
                 
+                selected_df_copy.to_csv("data/altered_df_" + str(self.xy_move_step_counter) + ".csv")
+
                 # Update counter
                 self.xy_move_step_counter +=1
 
@@ -661,8 +691,8 @@ class PieceAlterationProcessor:
                 row['pl_point_altered_y'] = p1[1] + (self.alteration_movement * row['movement_y'])
                 
                 # Update the mtm_point in selected_df
-                selected_df.loc[selected_df['mtm points'] == mtm_point, 'pl_point_altered_x'] = row['pl_point_altered_x']
-                selected_df.loc[selected_df['mtm points'] == mtm_point, 'pl_point_altered_y'] = row['pl_point_altered_y']
+                selected_df_copy.loc[selected_df['mtm points'] == mtm_point, 'pl_point_altered_x'] = row['pl_point_altered_x']
+                selected_df_copy.loc[selected_df['mtm points'] == mtm_point, 'pl_point_altered_y'] = row['pl_point_altered_y']
 
                 logging.info(f"Altered MTM point {mtm_point} to new coordinates: "
                             f"({row['pl_point_altered_x']}, {row['pl_point_altered_y']})")
@@ -672,13 +702,13 @@ class PieceAlterationProcessor:
                 dependent_row['pl_point_altered_y'] = p2[1] + (self.alteration_movement * row['movement_y'])
 
                 # Update the mtm_dependent in selected_df
-                selected_df.loc[selected_df['mtm points'] == mtm_dependent, 'pl_point_altered_x'] = dependent_row['pl_point_altered_x']
-                selected_df.loc[selected_df['mtm points'] == mtm_dependent, 'pl_point_altered_y'] = dependent_row['pl_point_altered_y']
+                selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_dependent, 'pl_point_altered_x'] = dependent_row['pl_point_altered_x']
+                selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_dependent, 'pl_point_altered_y'] = dependent_row['pl_point_altered_y']
 
                 logging.info(f"Altered dependent MTM point {mtm_dependent} to new coordinates: "
                             f"({dependent_row['pl_point_altered_x']}, {dependent_row['pl_point_altered_y']})")
                 
-                return row, selected_df
+                return row, selected_df_copy
 
         except Exception as e:
             logging.error(f"Failed to apply XY adjustment: {e}")
@@ -715,7 +745,7 @@ class PieceAlterationProcessor:
             ]
 
             # Sort the DataFrame by 'mtm points' to ensure proper ordering
-            selected_df = selected_df.sort_values(by='mtm points').reset_index(drop=True)
+            #selected_df = selected_df.sort_values(by='mtm points').reset_index(drop=True)
 
             # Loop through the filtered rows and apply the correction
             for idx, row in filtered_df.iterrows():

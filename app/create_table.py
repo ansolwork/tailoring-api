@@ -3,6 +3,7 @@ import os
 import numpy as np
 
 # TODO: Fix issue why we are not getting enough Alteration Rules in the output
+# TODO: Mark Line Points
 # Join with point specification Table 
 # IMplement sorting of MTM Points
 
@@ -161,6 +162,9 @@ class CreateTable:
 
             group_df = group_df.sort_values(by='mtm points')
             group_df = group_df.drop('vertices', axis=1)
+
+            # Add labels to each row - since they are ordered
+            group_df['point_order'] = group_df.index
             
             # Save the group as a CSV file
             group_df.to_csv(output_file_path, index=False)
