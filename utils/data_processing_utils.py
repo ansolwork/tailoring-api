@@ -107,6 +107,34 @@ class DataProcessingUtils:
         ys = tuple(y * scaling_factor for y in ys)
         return xs, ys
     
+    def calculate_angle(self, p1, p2, p3):
+        """
+        Calculate the angle (in degrees) formed by three points (p1, p2, p3).
+
+        :param p1: First point (x, y).
+        :param p2: Second point (vertex).
+        :param p3: Third point (x, y).
+        :return: Angle in degrees.
+        """
+        a = np.array(p1)
+        b = np.array(p2)
+        c = np.array(p3)
+
+        # Vector from p2 to p1 and from p2 to p3
+        ba = a - b
+        bc = c - b
+
+        # Calculate the cosine of the angle between ba and bc
+        cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
+
+        # Handle potential floating-point issues
+        cosine_angle = np.clip(cosine_angle, -1.0, 1.0)
+
+        # Return the angle in degrees
+        angle = np.degrees(np.arccos(cosine_angle))
+
+        return angle
+    
     def polar_angle(self, x, y, center_x=0, center_y=0):
         """
         Calculate the polar angle of the point (x, y) relative to the center (center_x, center_y).

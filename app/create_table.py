@@ -3,6 +3,8 @@ import os
 import numpy as np
 
 # TODO: Fix issue why we are not getting enough Alteration Rules in the output
+# Join with point specification Table 
+# IMplement sorting of MTM Points
 
 class CreateTable:
     def __init__(self, alteration_filepath, combined_entities_folder):
@@ -30,15 +32,37 @@ class CreateTable:
         df_csv = pd.read_csv(filepath)
         return df_csv
     
+    def join_mtm_details(self):
+        # Load MTM point details from the dictionary
+        mtm_point_details = self.df_dict["MTM POINT NUMBERS"]
+
+        # Ensure 'mtm points' are floats, and drop NaNs or invalid values before processing
+        self.alteration_joined_df = self.alteration_joined_df[self.alteration_joined_df['mtm points'].notna()]
+
+        # Convert the 'mtm points' to integers by extracting the whole number part
+        self.alteration_joined_df['mtm points'] = self.alteration_joined_df['mtm points'].astype(int)
+
+        # Now extract the first two digits of 'mtm points' to match with 'mtm_group'
+        self.alteration_joined_df['mtm_group'] = self.alteration_joined_df['mtm points'].astype(str).str[:2].astype(int)
+
+        # Merge MTM point details with alteration_joined_df based on 'mtm_group'
+        self.alteration_joined_df = pd.merge(
+            self.alteration_joined_df, 
+            mtm_point_details, 
+            on='mtm_group', 
+            how='left'
+        )
+    
     def process_table(self):
         # Filter the sheets dictionary to only include the specified sheets
         selected_sheets = {name: self.df_dict[name] for name in self.sheet_list if name in self.df_dict}
-        
+
         # Concatenate the DataFrames into a single DataFrame
         big_df = pd.concat(selected_sheets.values(), ignore_index=True)
         big_df = big_df.rename(columns={'mtm_alteration': 'mtm points'})
 
         self.alteration_joined_df = big_df
+        self.join_mtm_details()
     
     def process_combined_entities(self):
         combined_df_list = []
@@ -47,7 +71,6 @@ class CreateTable:
         for filename in os.listdir(self.combined_entities_folder):
             if filename.endswith(".xlsx"):
                 filepath = os.path.join(self.combined_entities_folder, filename)
-                #print(f"Processing file: {filepath}")
                 
                 # Load the current Excel file
                 combined_df = pd.read_excel(filepath)
@@ -135,6 +158,9 @@ class CreateTable:
 
             safe_piece_name = str(piece_name).replace(" ", "_").replace("/", "_")  # Ensure no illegal filename characters
             output_file_path = os.path.join(output_table_path, f"{output_filename_prefix}_{safe_piece_name}.csv")
+
+            group_df = group_df.sort_values(by='mtm points')
+            group_df = group_df.drop('vertices', axis=1)
             
             # Save the group as a CSV file
             group_df.to_csv(output_file_path, index=False)
@@ -169,7 +195,6 @@ class CreateTable:
                 df.to_csv(load_path, index=False)
 
                 print(f"Updated DataFrame saved to {load_path}")
-
 
     def create_vertices_df(self):
         # Base directory where all piece_name directories will be created
