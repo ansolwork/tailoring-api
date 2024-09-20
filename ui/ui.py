@@ -13,7 +13,7 @@ config_filepath = "tailoring_api_config.yml"
 #test_profile = "183295423477_PowerUserAccess"
 
 app = Flask(__name__, template_folder="templates")
-app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024  # 1 MB as per file upload limit
+app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024  # 30 MB as per file upload limit
 
 dxf_loader = DXFLoader()
 
@@ -93,7 +93,8 @@ def upload_file():
 
             # This needs to happen after temp file is closed
             aws_utils.upload_file_to_s3(file, AWS_DXF_DIR_PATH)
-            aws_utils.upload_dataframe_to_s3(sorted_df, aws_mtm_dir_path, file_format="csv")
+            #aws_utils.upload_dataframe_to_s3(sorted_df, aws_mtm_dir_path, file_format="csv")
+            aws_utils.upload_dataframe_to_s3(sorted_df, aws_mtm_dir_path, file_format="excel")
         
             # Generate a presigned URL for the CSV file
             presigned_url = aws_utils.generate_presigned_url(aws_mtm_dir_path)
