@@ -50,7 +50,7 @@ class AwsUtils:
         response = s3_client.upload_fileobj(buffer, self.aws_s3_bucket_name, s3_file_path)
         print(f'Upload to S3 completed. Response: {response}')
 
-    def upload_dataframe_to_s3(self, dataframe, s3_file_path, file_format="csv"):
+    def upload_dataframe_to_s3(self, dataframe, s3_file_path, file_format):
         # Create an in-memory buffer
         buffer = io.BytesIO()
 
