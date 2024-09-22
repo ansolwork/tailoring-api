@@ -225,8 +225,6 @@ class PieceAlterationProcessor:
         combined_df = pd.concat([selected_df, unselected_df], ignore_index=True)
         combined_df = self.drop_duplicate_rows(combined_df)
 
-        # Remove line PL Points
-        
         return combined_df
 
     def drop_duplicate_rows(self, df):
@@ -241,7 +239,7 @@ class PieceAlterationProcessor:
         df['pl_point_x'] = df['pl_point_x'].round(3)  # Round to avoid floating-point precision issues
         df['pl_point_y'] = df['pl_point_y'].round(3)
         
-        return df.drop_duplicates(subset=['mtm points', 'pl_point_x', 'pl_point_y'])
+        return df.drop_duplicates(subset=['alteration_type', 'mtm points', 'pl_point_x', 'pl_point_y'])
     
     def mark_notch_points(self, notch_points):
         """
@@ -331,10 +329,6 @@ class PieceAlterationProcessor:
             self.ccw_ext_count = alteration_type_counts.get('CCW Ext', 0)
             self.ccw_no_ext_count = alteration_type_counts.get('CCW No Ext', 0)
 
-            # Make sure new dataset is sorted
-            #processed_df = processed_df.sort_values(by='mtm points')
-
-            count = 0
             # Apply alteration rule row-by-row
             for index, row in processed_df.iterrows():
 
@@ -350,10 +344,6 @@ class PieceAlterationProcessor:
                 
                     # Ensure any DataFrame-wide changes are applied to processed_df
                     processed_df = updated_df
-
-                    #count +=1
-                    #if count == 2:
-                    #    break
 
             # Check for further alteration points
             #if self.xy_move_step_counter == self.xy_move_step_counter:
@@ -431,6 +421,7 @@ class PieceAlterationProcessor:
         }
 
         alteration_type = row['alteration_type']
+        logging.info(f"Attempting to apply alteration: {alteration_type}")
         
         if pd.isna(alteration_type):
             return row, selected_df  # No alteration, return original row and DataFrame
@@ -467,6 +458,7 @@ class PieceAlterationProcessor:
         :param selected_df: The DataFrame containing the points for the alteration rule.
         :return: A tuple of the updated row and DataFrame.
         """
+        print("Hello")
         try:
             mtm_point = row['mtm points']
             mtm_dependent = row['mtm_dependent']
@@ -474,7 +466,6 @@ class PieceAlterationProcessor:
             selected_df_copy = selected_df.copy()
             p1, p2 = self._get_point_coordinates(mtm_point, mtm_dependent, selected_df_copy)
             movement_x, movement_y = row['movement_x'], row['movement_y']
-            dependent_row = selected_df_copy[selected_df_copy['mtm points'] == mtm_dependent].iloc[0]
 
             # Calculate point orders
             start_point_order = self._get_point_order(mtm_point, selected_df_copy)
@@ -527,7 +518,6 @@ class PieceAlterationProcessor:
             selected_df_copy = selected_df.copy()
             p1, p2 = self._get_point_coordinates(mtm_point, mtm_dependent, selected_df_copy)
             movement_x, movement_y = row['movement_x'], row['movement_y']
-            dependent_row = selected_df_copy[selected_df_copy['mtm points'] == mtm_dependent].iloc[0]
 
             # Calculate point orders
             start_point_order = self._get_point_order(mtm_point, selected_df_copy)
@@ -634,28 +624,6 @@ class PieceAlterationProcessor:
                 # Update counter
                 self.xy_move_step_counter +=1
 
-                # Apply alteration to the mtm_point itself
-                #row['pl_point_altered_x'] = p1[0] + (self.alteration_movement * movement_x)
-                #row['pl_point_altered_y'] = p1[1] + (self.alteration_movement * movement_y)
-                
-                # Update the mtm_point in selected_df
-                #selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_point, 'pl_point_altered_x'] = row['pl_point_altered_x']
-                #selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_point, 'pl_point_altered_y'] = row['pl_point_altered_y']
-
-                #logging.info(f"Altered MTM point {mtm_point} to new coordinates: "
-                #            f"({row['pl_point_altered_x']}, {row['pl_point_altered_y']})")
-
-                # Apply alteration to the mtm_dependent point itself
-                #dependent_row['pl_point_altered_x'] = p2[0] + (self.alteration_movement * movement_x)
-                #dependent_row['pl_point_altered_y'] = p2[1] + (self.alteration_movement * movement_y)
-
-                # Update the mtm_dependent in selected_df
-                #selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_dependent, 'pl_point_altered_x'] = dependent_row['pl_point_altered_x']
-                #selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_dependent, 'pl_point_altered_y'] = dependent_row['pl_point_altered_y']
-
-                #logging.info(f"Altered dependent MTM point {mtm_dependent} to new coordinates: "
-                #            f"({dependent_row['pl_point_altered_x']}, {dependent_row['pl_point_altered_y']})")
-                
                 return row, selected_df_copy
 
         except Exception as e:
