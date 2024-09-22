@@ -96,8 +96,8 @@ def test_plot_vertices_and_altered(file_path, file_path_vertices, output_dir="da
 # Example usage
 #file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_1LTH-FULL.csv"
 #file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_1LTH-BACK.csv"
-file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_2ARMHOLEDN.csv"
-#file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_4-WAIST.csv"
+#file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_2ARMHOLEDN.csv"
+file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_4-WAIST.csv"
 #file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_4-CHEST.csv"
 #file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_7F-SHPOINT.csv"
 

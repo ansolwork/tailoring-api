@@ -459,7 +459,7 @@ class PieceAlterationProcessor:
             return pl_point_x, pl_point_y
         return None, None
 
-    def apply_cw_ext(self, row, selected_df):
+    def apply_cw_ext(self, row, selected_df, tolerance=0):
         """
         Applies Clockwise Extension (CW Ext) between the mtm_point and mtm_dependent.
 
@@ -467,66 +467,106 @@ class PieceAlterationProcessor:
         :param selected_df: The DataFrame containing the points for the alteration rule.
         :return: A tuple of the updated row and DataFrame.
         """
-        mtm_point = row['mtm points']
-        mtm_dependent = row['mtm_dependent']
+        try:
+            mtm_point = row['mtm points']
+            mtm_dependent = row['mtm_dependent']
 
-        p1 = np.array([row['pl_point_x'], row['pl_point_y']])
-        dependent_row = selected_df[selected_df['mtm points'] == mtm_dependent].iloc[0]
-        p2 = np.array([dependent_row['pl_point_x'], dependent_row['pl_point_y']])
+            selected_df_copy = selected_df.copy()
+            p1, p2 = self._get_point_coordinates(mtm_point, mtm_dependent, selected_df_copy)
+            movement_x, movement_y = row['movement_x'], row['movement_y']
+            dependent_row = selected_df_copy[selected_df_copy['mtm points'] == mtm_dependent].iloc[0]
 
-        # Extract all points between mtm_point and mtm_dependent in a sequential order
-        points_in_range = selected_df[(selected_df['pl_point_x'] > min(p1[0], p2[0])) & 
-                                    (selected_df['pl_point_x'] <= max(p1[0], p2[0]))]
+            # Calculate point orders
+            start_point_order = self._get_point_order(mtm_point, selected_df_copy)
+            end_point_order = self._get_point_order(mtm_dependent, selected_df_copy)
+
+            # Add distance calculations to DataFrame for proximity
+            selected_df_copy = self._add_distance_to_points(selected_df_copy, p1, p2)
+
+            # Capture points within range
+            points_in_range = self._get_points_in_range(selected_df_copy, start_point_order, end_point_order, tolerance, mtm_point, mtm_dependent)           
+
+            # Apply XY movement to points between mtm_point and mtm_dependent
+            for idx, point in points_in_range.iterrows():
+                # Use the index of the row in selected_df_copy, not the idx from points_in_range
+                copy_idx = point.name  # This gets the correct index for selected_df_copy
+                
+                # Use altered coordinates if available, otherwise use original ones
+                current_x = point['pl_point_altered_x'] if pd.notna(point['pl_point_altered_x']) and point['pl_point_altered_x'] != "" else point['pl_point_x']
+                current_y = point['pl_point_altered_y'] if pd.notna(point['pl_point_altered_y']) and point['pl_point_altered_y'] != "" else point['pl_point_y']
+
+                # Apply the movement
+                altered_x = current_x + (self.alteration_movement * movement_x)
+                altered_y = current_y + (self.alteration_movement * movement_y)
+
+                # Update these values directly in selected_df_copy using the correct index
+                selected_df_copy.loc[copy_idx, 'pl_point_altered_x'] = altered_x
+                selected_df_copy.loc[copy_idx, 'pl_point_altered_y'] = altered_y
+
+            # Update counter
+            self.cw_ext_count +=1
         
-        # Debug limits above if something goes wrong
-        #print(points_in_range["mtm points"])
+        except Exception as e:
+            logging.error(f"Failed to apply CW Ext alteration: {e}")
+            return row, selected_df
 
-        # Apply XY movement to points between mtm_point and mtm_dependent
-        for idx, point in points_in_range.iterrows():
+        return row, selected_df_copy
 
-            # Use altered coordinates if available, otherwise use original ones
-            current_x = point['pl_point_altered_x'] if pd.notna(point['pl_point_altered_x']) and point['pl_point_altered_x'] != "" else point['pl_point_x']
-            current_y = point['pl_point_altered_y'] if pd.notna(point['pl_point_altered_y']) and point['pl_point_altered_y'] != "" else point['pl_point_y']
+    def apply_ccw_ext(self, row, selected_df, tolerance = 0):
+        """
+        Applies Clockwise Extension (CW Ext) between the mtm_point and mtm_dependent.
 
-            # Apply the movement
-            altered_x = current_x + (self.alteration_movement * row['movement_x'])
-            altered_y = current_y + (self.alteration_movement * row['movement_y'])
+        :param row: The current row being altered.
+        :param selected_df: The DataFrame containing the points for the alteration rule.
+        :return: A tuple of the updated row and DataFrame.
+        """
+        try:
+            mtm_point = row['mtm points']
+            mtm_dependent = row['mtm_dependent']
 
-            # Update these values directly in selected_df
-            selected_df.loc[idx, 'pl_point_altered_x'] = altered_x
-            selected_df.loc[idx, 'pl_point_altered_y'] = altered_y
+            selected_df_copy = selected_df.copy()
+            p1, p2 = self._get_point_coordinates(mtm_point, mtm_dependent, selected_df_copy)
+            movement_x, movement_y = row['movement_x'], row['movement_y']
+            dependent_row = selected_df_copy[selected_df_copy['mtm points'] == mtm_dependent].iloc[0]
+
+            # Calculate point orders
+            start_point_order = self._get_point_order(mtm_point, selected_df_copy)
+            end_point_order = self._get_point_order(mtm_dependent, selected_df_copy)
+
+            # Add distance calculations to DataFrame for proximity
+            selected_df_copy = self._add_distance_to_points(selected_df_copy, p1, p2)
+
+            # Capture points within range
+            points_in_range = self._get_points_in_range(selected_df_copy, start_point_order, end_point_order, tolerance, mtm_point, mtm_dependent)           
+
+            # Apply XY movement to points between mtm_point and mtm_dependent
+            for idx, point in points_in_range.iterrows():
+                # Use the index of the row in selected_df_copy, not the idx from points_in_range
+                copy_idx = point.name  # This gets the correct index for selected_df_copy
+                
+                # Use altered coordinates if available, otherwise use original ones
+                current_x = point['pl_point_altered_x'] if pd.notna(point['pl_point_altered_x']) and point['pl_point_altered_x'] != "" else point['pl_point_x']
+                current_y = point['pl_point_altered_y'] if pd.notna(point['pl_point_altered_y']) and point['pl_point_altered_y'] != "" else point['pl_point_y']
+
+                # Apply the movement
+                altered_x = current_x + (self.alteration_movement * movement_x)
+                altered_y = current_y + (self.alteration_movement * movement_y)
+
+                # Update these values directly in selected_df_copy using the correct index
+                selected_df_copy.loc[copy_idx, 'pl_point_altered_x'] = altered_x
+                selected_df_copy.loc[copy_idx, 'pl_point_altered_y'] = altered_y
+
+            # Update counter
+            self.cw_ext_count +=1
         
-        # Update counter
-        self.xy_move_step_counter +=1
-
-        # Apply alteration to the mtm_point itself
-        row['pl_point_altered_x'] = p1[0] + (self.alteration_movement * row['movement_x'])
-        row['pl_point_altered_y'] = p1[1] + (self.alteration_movement * row['movement_y'])
+        except Exception as e:
+            logging.error(f"Failed to apply CCW Ext alteration: {e}")
+            return row, selected_df
         
-        # Update the mtm_point in selected_df
-        selected_df.loc[selected_df['mtm points'] == mtm_point, 'pl_point_altered_x'] = row['pl_point_altered_x']
-        selected_df.loc[selected_df['mtm points'] == mtm_point, 'pl_point_altered_y'] = row['pl_point_altered_y']
-
-        logging.info(f"Altered MTM point {mtm_point} to new coordinates: "
-                    f"({row['pl_point_altered_x']}, {row['pl_point_altered_y']})")
-
-        # Apply alteration to the mtm_dependent point itself
-        dependent_row['pl_point_altered_x'] = p2[0] + (self.alteration_movement * row['movement_x'])
-        dependent_row['pl_point_altered_y'] = p2[1] + (self.alteration_movement * row['movement_y'])
-
-        # Update the mtm_dependent in selected_df
-        selected_df.loc[selected_df['mtm points'] == mtm_dependent, 'pl_point_altered_x'] = dependent_row['pl_point_altered_x']
-        selected_df.loc[selected_df['mtm points'] == mtm_dependent, 'pl_point_altered_y'] = dependent_row['pl_point_altered_y']
-
-        logging.info(f"Altered dependent MTM point {mtm_dependent} to new coordinates: "
-                    f"({dependent_row['pl_point_altered_x']}, {dependent_row['pl_point_altered_y']})")
-        
-        return row, selected_df
-
-    def apply_ccw_ext(self, row, selected_df):
-        return row, selected_df
+        logging.info("Applied CCW Ext")
+        return row, selected_df_copy
     
-    def apply_ccw_no_ext(self, row, selected_df):
+    def apply_ccw_no_ext(self, row, selected_df, tolerance = 0):
         # Example logic for Counter-clockwise No Extension
         return row, selected_df
 
@@ -551,102 +591,28 @@ class PieceAlterationProcessor:
 
             # Case 1: Individual row alteration (mtm_dependent == mtm_point)
             if mtm_dependent == mtm_point:
-
-                # Use altered coordinates if available, otherwise use original ones
-                current_x = row['pl_point_altered_x'] if pd.notna(row['pl_point_altered_x']) and row['pl_point_altered_x'] != "" else row['pl_point_x']
-                current_y = row['pl_point_altered_y'] if pd.notna(row['pl_point_altered_y']) and row['pl_point_altered_y'] != "" else row['pl_point_y']
-
-                # Apply the movement based on the current altered coordinates
-                row['pl_point_altered_x'] = current_x + (self.alteration_movement * row['movement_x'])
-                row['pl_point_altered_y'] = current_y + (self.alteration_movement * row['movement_y'])
-
-                # Update the altered values in the DataFrame
-                selected_df.loc[selected_df['mtm points'] == mtm_point, 'pl_point_altered_x'] = row['pl_point_altered_x']
-                selected_df.loc[selected_df['mtm points'] == mtm_point, 'pl_point_altered_y'] = row['pl_point_altered_y']
-
-                # Update Counter
                 self.xy_move_step_counter +=1
-
-                logging.info(f"Altered MTM point {mtm_point} to new coordinates: "
-                            f"({row['pl_point_altered_x']}, {row['pl_point_altered_y']})")
-
-                return row, selected_df
+                return self._apply_single_point_move(row, selected_df, mtm_point)
 
             # Case 2: Multiple row alteration (mtm_dependent != mtm_point)
             else:
                 selected_df_copy = selected_df.copy()
-
-                # Now, continue with operations on selected_df_copy
-                p1 = selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_point, ['pl_point_x', 'pl_point_y']].values[0]
-                p2 = selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_dependent, ['pl_point_x', 'pl_point_y']].values[0]
+                p1, p2 = self._get_point_coordinates(mtm_point, mtm_dependent, selected_df_copy)
+                movement_x, movement_y = row['movement_x'], row['movement_y']
                 dependent_row = selected_df_copy[selected_df_copy['mtm points'] == mtm_dependent].iloc[0]
 
-                movement_x = row['movement_x']  
-                movement_y = row['movement_y']
-                
-                print(f"Movement X: {movement_x}")
-                print(f"Movement Y: {movement_y}")
+                # Calculate point orders
+                start_point_order = self._get_point_order(mtm_point, selected_df_copy)
+                end_point_order = self._get_point_order(mtm_dependent, selected_df_copy)
 
-                # Get the point_order for mtm_point
-                start_point_order = selected_df_copy[selected_df_copy['mtm points'] == mtm_point]["point_order"].values[0]
+                # Add distance calculations to DataFrame for proximity
+                selected_df_copy = self._add_distance_to_points(selected_df_copy, p1, p2)
 
-                # Get the point_order for mtm_dependent
-                end_point_order = selected_df_copy[selected_df_copy['mtm points'] == mtm_dependent]["point_order"].values[0]
+                # Capture points within range
+                points_in_range = self._get_points_in_range(selected_df_copy, start_point_order, end_point_order, tolerance, mtm_point, mtm_dependent)           
 
-                # Calculate Euclidean distance from p1 and p2
-                selected_df_copy['dist_to_p1'] = np.sqrt((selected_df_copy['pl_point_x'] - p1[0])**2 + (selected_df_copy['pl_point_y'] - p1[1])**2)
-                selected_df_copy['dist_to_p2'] = np.sqrt((selected_df_copy['pl_point_x'] - p2[0])**2 + (selected_df_copy['pl_point_y'] - p2[1])**2)
-
-                # Make sure to capture points in either ascending or descending order
-                if start_point_order > end_point_order:
-                    # Descending Order
-                    points_in_range = selected_df_copy[
-                        (
-                            (selected_df_copy['point_order'] <= start_point_order) &  # Capture points between the start and end orders
-                            (selected_df_copy['point_order'] >= end_point_order)
-                        ) |
-                        (
-                            # Points that are close to either p1 or p2, based on proximity tolerance
-                            ((selected_df_copy['dist_to_p1'] < tolerance) | (selected_df_copy['dist_to_p2'] < tolerance)) &  
-                            (selected_df_copy['mtm points'] != mtm_point) &  # Exclude mtm_point itself
-                            (selected_df_copy['mtm points'] != mtm_dependent)  # Exclude mtm_dependent itself
-                        )
-                    ]
-                    # If Descending Order, remove the row with the next MTM point after the last MTM point
-                    # Get the next MTM point (greater than the current mtm_point)
-                    next_mtm_point = selected_df_copy[selected_df_copy['mtm points'] > mtm_point]['mtm points'].min()
-                    if pd.notna(next_mtm_point):
-                        points_in_range = points_in_range[points_in_range['mtm points'] != next_mtm_point]
-
-                else:
-                    # Ascending Order
-                    points_in_range = selected_df_copy[
-                        (
-                            (selected_df_copy['point_order'] >= start_point_order) &  # Capture points between the start and end orders
-                            (selected_df_copy['point_order'] <= end_point_order)
-                        ) |
-                        (
-                            # Points that are close to either p1 or p2, based on proximity tolerance
-                            ((selected_df_copy['dist_to_p1'] < tolerance) | (selected_df_copy['dist_to_p2'] < tolerance)) &  
-                            (selected_df_copy['mtm points'] != mtm_point) &  # Exclude mtm_point itself
-                            (selected_df_copy['mtm points'] != mtm_dependent)  # Exclude mtm_dependent itself
-                        )
-                    ] 
-                    # If Ascending Order, remove the row with the previous MTM point before the first MTM point
-                    # Get the previous MTM point (less than the current mtm_point)
-                    prev_mtm_point = selected_df_copy[selected_df_copy['mtm points'] < mtm_point]['mtm points'].max()
-                    if pd.notna(prev_mtm_point):
-                        points_in_range = points_in_range[points_in_range['mtm points'] != prev_mtm_point]             
-
-                # Ensure that point_order is numeric
-                points_in_range['point_order'] = pd.to_numeric(points_in_range['point_order'], errors='coerce')
-
-                # Now sort by point_order
-                points_in_range = points_in_range.sort_values(by="point_order")
-
-                # Debug
-                selected_df_copy.to_csv("data/selected_df_" + str(self.xy_move_step_counter) + ".csv")
-                points_in_range.to_csv("data/points_in_range_" + str(self.xy_move_step_counter) + ".csv")
+                # Save debug information
+                self._save_debug_data(selected_df_copy, points_in_range)
                 
                 # Apply XY movement to points between mtm_point and mtm_dependent
                 for idx, point in points_in_range.iterrows():
@@ -664,39 +630,101 @@ class PieceAlterationProcessor:
                     # Update these values directly in selected_df_copy using the correct index
                     selected_df_copy.loc[copy_idx, 'pl_point_altered_x'] = altered_x
                     selected_df_copy.loc[copy_idx, 'pl_point_altered_y'] = altered_y
-                
-                selected_df_copy.to_csv("data/altered_df_" + str(self.xy_move_step_counter) + ".csv")
 
                 # Update counter
                 self.xy_move_step_counter +=1
 
                 # Apply alteration to the mtm_point itself
-                #row['pl_point_altered_x'] = p1[0] + (self.alteration_movement * row['movement_x'])
-                #row['pl_point_altered_y'] = p1[1] + (self.alteration_movement * row['movement_y'])
+                #row['pl_point_altered_x'] = p1[0] + (self.alteration_movement * movement_x)
+                #row['pl_point_altered_y'] = p1[1] + (self.alteration_movement * movement_y)
                 
                 # Update the mtm_point in selected_df
-                #selected_df_copy.loc[selected_df['mtm points'] == mtm_point, 'pl_point_altered_x'] = row['pl_point_altered_x']
-                #selected_df_copy.loc[selected_df['mtm points'] == mtm_point, 'pl_point_altered_y'] = row['pl_point_altered_y']
+                #selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_point, 'pl_point_altered_x'] = row['pl_point_altered_x']
+                #selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_point, 'pl_point_altered_y'] = row['pl_point_altered_y']
 
-                logging.info(f"Altered MTM point {mtm_point} to new coordinates: "
-                            f"({row['pl_point_altered_x']}, {row['pl_point_altered_y']})")
+                #logging.info(f"Altered MTM point {mtm_point} to new coordinates: "
+                #            f"({row['pl_point_altered_x']}, {row['pl_point_altered_y']})")
 
                 # Apply alteration to the mtm_dependent point itself
-                #dependent_row['pl_point_altered_x'] = p2[0] + (self.alteration_movement * row['movement_x'])
-                #dependent_row['pl_point_altered_y'] = p2[1] + (self.alteration_movement * row['movement_y'])
+                #dependent_row['pl_point_altered_x'] = p2[0] + (self.alteration_movement * movement_x)
+                #dependent_row['pl_point_altered_y'] = p2[1] + (self.alteration_movement * movement_y)
 
                 # Update the mtm_dependent in selected_df
                 #selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_dependent, 'pl_point_altered_x'] = dependent_row['pl_point_altered_x']
                 #selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_dependent, 'pl_point_altered_y'] = dependent_row['pl_point_altered_y']
 
-                logging.info(f"Altered dependent MTM point {mtm_dependent} to new coordinates: "
-                            f"({dependent_row['pl_point_altered_x']}, {dependent_row['pl_point_altered_y']})")
+                #logging.info(f"Altered dependent MTM point {mtm_dependent} to new coordinates: "
+                #            f"({dependent_row['pl_point_altered_x']}, {dependent_row['pl_point_altered_y']})")
                 
                 return row, selected_df_copy
 
         except Exception as e:
             logging.error(f"Failed to apply XY adjustment: {e}")
             return row, selected_df
+        
+    def _apply_single_point_move(self, row, selected_df, mtm_point):
+        # Use altered coordinates if available, otherwise use original ones
+        current_x = row['pl_point_altered_x'] if pd.notna(row['pl_point_altered_x']) and row['pl_point_altered_x'] != "" else row['pl_point_x']
+        current_y = row['pl_point_altered_y'] if pd.notna(row['pl_point_altered_y']) and row['pl_point_altered_y'] != "" else row['pl_point_y']
+
+        # Apply the movement based on the current altered coordinates
+        row['pl_point_altered_x'] = current_x + (self.alteration_movement * row['movement_x'])
+        row['pl_point_altered_y'] = current_y + (self.alteration_movement * row['movement_y'])
+
+        # Update the altered values in the DataFrame
+        selected_df.loc[selected_df['mtm points'] == mtm_point, 'pl_point_altered_x'] = row['pl_point_altered_x']
+        selected_df.loc[selected_df['mtm points'] == mtm_point, 'pl_point_altered_y'] = row['pl_point_altered_y']
+
+        logging.info(f"Altered MTM point {mtm_point} to new coordinates: "
+                    f"({row['pl_point_altered_x']}, {row['pl_point_altered_y']})")
+
+        return row, selected_df
+    
+    def _get_point_coordinates(self, mtm_point, mtm_dependent, df):
+        """Returns the coordinates for mtm_point and mtm_dependent."""
+        p1 = df.loc[df['mtm points'] == mtm_point, ['pl_point_x', 'pl_point_y']].values[0]
+        p2 = df.loc[df['mtm points'] == mtm_dependent, ['pl_point_x', 'pl_point_y']].values[0]
+        return p1, p2
+    
+    def _get_point_order(self, point, df):
+        """Returns the point_order for a given MTM point."""
+        return df.loc[df['mtm points'] == point, 'point_order'].values[0]
+    
+    def _add_distance_to_points(self, df, p1, p2):
+        """Adds the Euclidean distance from p1 and p2 to each point in the DataFrame."""
+        df['dist_to_p1'] = np.sqrt((df['pl_point_x'] - p1[0]) ** 2 + (df['pl_point_y'] - p1[1]) ** 2)
+        df['dist_to_p2'] = np.sqrt((df['pl_point_x'] - p2[0]) ** 2 + (df['pl_point_y'] - p2[1]) ** 2)
+        return df
+    
+    def _get_points_in_range(self, df, start_order, end_order, tolerance, mtm_point, mtm_dependent):
+        """Returns the points between the start and end orders, considering proximity tolerance."""
+        if start_order > end_order:
+            # Descending Order
+            points_in_range = df[
+                (
+                    (df['point_order'] <= start_order) & (df['point_order'] >= end_order)
+                ) | (
+                    (df['dist_to_p1'] < tolerance) | (df['dist_to_p2'] < tolerance)
+                ) & (df['mtm points'] != mtm_point) & (df['mtm points'] != mtm_dependent)
+            ]
+        else:
+            # Ascending Order
+            points_in_range = df[
+                (
+                    (df['point_order'] >= start_order) & (df['point_order'] <= end_order)
+                ) | (
+                    (df['dist_to_p1'] < tolerance) | (df['dist_to_p2'] < tolerance)
+                ) & (df['mtm points'] != mtm_point) & (df['mtm points'] != mtm_dependent)
+            ]
+        
+        # Ensure that point_order is numeric
+        points_in_range['point_order'] = pd.to_numeric(points_in_range['point_order'], errors='coerce')
+        return points_in_range.sort_values(by="point_order")
+    
+    def _save_debug_data(self, df, points_in_range):
+        """Saves debug data to CSV files."""
+        df.to_csv("data/selected_df_" + str(self.xy_move_step_counter) + ".csv")
+        points_in_range.to_csv("data/points_in_range_" + str(self.xy_move_step_counter) + ".csv")
             
     def apply_mtm_correction(self, selected_df):
         """
@@ -972,11 +1000,11 @@ if __name__ == "__main__":
     # Debug: Check by Alteration Rule
     #debug_alteration_rule = "7F-SHPOINT"
     #debug_alteration_rule = "7F-ERECT"
-    #debug_alteration_rule = "4-WAIST"
+    debug_alteration_rule = "4-WAIST"
     #debug_alteration_rule = "1LTH-FULL"
     #debug_alteration_rule = "1LTH-FSLV"
     #debug_alteration_rule = "1LTH-BACK"
-    debug_alteration_rule = "2ARMHOLEDN"
+    #debug_alteration_rule = "2ARMHOLEDN"
     #debug_alteration_rule = "2ARMHOLEIN"
     #debug_alteration_rule = "4-CHEST"
     #debug_alteration_rule = "3-COLLAR"
