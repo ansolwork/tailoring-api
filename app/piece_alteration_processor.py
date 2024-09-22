@@ -354,6 +354,20 @@ class PieceAlterationProcessor:
 
             return processed_df
 
+        def reapply_cw_ccw_alterations(processed_df):
+            """
+            Post-process the DataFrame to reapply CW and CCW alterations after all other alterations.
+            This ensures the altered points are used in the CW/CCW adjustments.
+            """
+            # Apply CW/CCW Ext alterations after all others are completed
+            for index, row in processed_df.iterrows():
+                if row['alteration_type'] in ['CW Ext', 'CCW Ext']:
+                    logging.info(f"Reapplying Alteration Type: {row['alteration_type']} to final altered points")
+                    row, updated_df = self.apply_alteration_to_row(row, processed_df)
+                    processed_df.loc[index] = row  # Update the row in the dataframe
+
+            return processed_df
+
         # Debug Mode: Apply a specific alteration rule and save the result
         if not pd.isna(self.debug_alteration_rule):
 
@@ -366,6 +380,7 @@ class PieceAlterationProcessor:
                 # Apply the specific debug alteration rule
                 logging.info(f"Running Alteration in Debug Mode: {self.debug_alteration_rule}")
                 self.altered_df = apply_single_rule(self.debug_alteration_rule)
+                self.altered_df = reapply_cw_ccw_alterations(self.altered_df)
                 self.mark_notch_points(notch_points)
                 self.processing_utils.save_csv(self.altered_df, save_filepath)
             else:
@@ -458,7 +473,6 @@ class PieceAlterationProcessor:
         :param selected_df: The DataFrame containing the points for the alteration rule.
         :return: A tuple of the updated row and DataFrame.
         """
-        print("Hello")
         try:
             mtm_point = row['mtm points']
             mtm_dependent = row['mtm_dependent']
@@ -477,6 +491,15 @@ class PieceAlterationProcessor:
             # Capture points within range
             points_in_range = self._get_points_in_range(selected_df_copy, start_point_order, end_point_order, tolerance, mtm_point, mtm_dependent)           
 
+            # Get the coordinates of the mtm_point and mtm_dependent
+            mtm_point_coords = selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_point, ['pl_point_x', 'pl_point_y']].values[0]
+            mtm_dependent_coords = selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_dependent, ['pl_point_x', 'pl_point_y']].values[0]
+
+            logging.info(f"Adjustment calculated relative to MTM Point: {mtm_point} at coordinates {mtm_point_coords}")
+
+            # Total distance between the mtm point and the mtm dependent
+            total_distance = np.linalg.norm(mtm_dependent_coords - mtm_point_coords)
+
             # Apply XY movement to points between mtm_point and mtm_dependent
             for idx, point in points_in_range.iterrows():
                 # Use the index of the row in selected_df_copy, not the idx from points_in_range
@@ -486,9 +509,16 @@ class PieceAlterationProcessor:
                 current_x = point['pl_point_altered_x'] if pd.notna(point['pl_point_altered_x']) and point['pl_point_altered_x'] != "" else point['pl_point_x']
                 current_y = point['pl_point_altered_y'] if pd.notna(point['pl_point_altered_y']) and point['pl_point_altered_y'] != "" else point['pl_point_y']
 
-                # Apply the movement
-                altered_x = current_x + (self.alteration_movement * movement_x)
-                altered_y = current_y + (self.alteration_movement * movement_y)
+                # Calculate the distance of the current point from the mtm point
+                point_coords = np.array([current_x, current_y])
+                distance_to_mtm = np.linalg.norm(point_coords - mtm_point_coords)
+
+                # Calculate the adjustment factor: closer to mtm point means larger movement
+                adjustment_factor = (total_distance - distance_to_mtm) / total_distance  # Factor decreases as distance increases
+
+                # Apply the weighted movement
+                altered_x = current_x + adjustment_factor * (self.alteration_movement * movement_x)
+                altered_y = current_y + adjustment_factor * (self.alteration_movement * movement_y)
 
                 # Update these values directly in selected_df_copy using the correct index
                 selected_df_copy.loc[copy_idx, 'pl_point_altered_x'] = altered_x
