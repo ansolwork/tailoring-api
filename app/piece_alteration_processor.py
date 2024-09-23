@@ -6,6 +6,7 @@ from utils.data_processing_utils import DataProcessingUtils
 import os
 from functools import partial
 from itertools import combinations
+pd.set_option('future.no_silent_downcasting', True)
 
 # TODO: Fix Check further alteration point logic.. It breaks when I change pieces
 
@@ -261,7 +262,7 @@ class PieceAlterationProcessor:
         for notch in notch_points:
             p1, p2, p3 = notch
 
-            logging.info(f"Marking notch: ({p1}, {p2}, {p3})")
+            #logging.info(f"Marking notch: ({p1}, {p2}, {p3})")
 
             # Find and mark each of the three points in the DataFrame
             for point in [p1, p2, p3]:
@@ -271,11 +272,11 @@ class PieceAlterationProcessor:
                     # Check if 'notch' is already in the 'notch_labels' column for the point
                     if 'notch' not in df.loc[match_condition, 'notch_labels'].values[0]:
                         df.loc[match_condition, 'notch_labels'] += 'notch'
-                        logging.info(f"Marked notch point: {point} in DataFrame.")
-                    else:
-                        logging.info(f"Duplicate notch point: {point} already marked, skipping.")
-                else:
-                    logging.warning(f"Notch point {point} not found in DataFrame.")
+                    #    logging.info(f"Marked notch point: {point} in DataFrame.")
+                    #else:
+                    #    logging.info(f"Duplicate notch point: {point} already marked, skipping.")
+                #else:
+                #    logging.warning(f"Notch point {point} not found in DataFrame.")
 
         logging.info("Completed marking notch points.")
         
@@ -293,7 +294,7 @@ class PieceAlterationProcessor:
         df.replace("", np.nan, inplace=True)
 
         # Step 2: Check if each element in a row (excluding 'piece_name') is either NaN or zero
-        is_nan_or_zero = df.drop(columns=['piece_name']).applymap(lambda x: pd.isna(x) or x == 0)
+        is_nan_or_zero = df.drop(columns=['piece_name']).map(lambda x: pd.isna(x) or x == 0)
 
         # Step 3: Keep rows where not all values in the row (excluding 'piece_name') are NaN or zero
         cleaned_df = df.loc[~is_nan_or_zero.all(axis=1)]
@@ -340,6 +341,7 @@ class PieceAlterationProcessor:
                     row, updated_df = self.apply_alteration_to_row(row, processed_df)
                 
                     # Update the row back into processed_df (in case it's an individual row alteration)
+                    row = row.apply(lambda x: np.nan if x == "" else x)
                     processed_df.loc[index] = row
                 
                     # Ensure any DataFrame-wide changes are applied to processed_df
@@ -467,7 +469,7 @@ class PieceAlterationProcessor:
             movement_x, movement_y = row['movement_x'], row['movement_y']
 
             # Ensure any empty strings are converted to NaN
-            selected_df_copy.replace("", np.nan, inplace=True)
+            selected_df_copy = selected_df_copy.replace("", np.nan).infer_objects()
 
             # Calculate point orders
             start_point_order = self._get_point_order(mtm_point, selected_df_copy)
@@ -553,7 +555,7 @@ class PieceAlterationProcessor:
             movement_x, movement_y = row['movement_x'], row['movement_y']
 
             # Ensure any empty strings are converted to NaN
-            selected_df_copy.replace("", np.nan, inplace=True)
+            selected_df_copy = selected_df_copy.replace("", np.nan).infer_objects()
 
             # Calculate point orders
             start_point_order = self._get_point_order(mtm_point, selected_df_copy)
@@ -757,7 +759,7 @@ class PieceAlterationProcessor:
             ]
         
         # Ensure that point_order is numeric
-        points_in_range['point_order'] = pd.to_numeric(points_in_range['point_order'], errors='coerce')
+        points_in_range.loc[:, 'point_order'] = pd.to_numeric(points_in_range['point_order'], errors='coerce')
         return points_in_range.sort_values(by="point_order")
     
     def _save_debug_data(self, df, points_in_range):
@@ -890,7 +892,7 @@ class PieceAlterationProcessor:
 
                 # Check for sharp angle (notch) and perimeter size
                 if abs(angle) < angle_threshold and perimeter < (perimeter_threshold + tolerance):
-                    logging.info(f"Notch detected at points: {p1}, {p2}, {p3} with angle: {angle:.2f} degrees")
+                    #logging.info(f"Notch detected at points: {p1}, {p2}, {p3} with angle: {angle:.2f} degrees")
                     total_notches_detected += 1
                     notch_points.append((p1, p2, p3))  # Store the identified notch points
 
