@@ -7,6 +7,8 @@ from ui.dxf_loader import DXFLoader
 from ui.mtm_processor import MTMProcessor
 import tempfile
 import shutil
+from matplotlib import pyplot as plt
+import pandas as pd
 
 # Run from project root (no relative path needed)
 config_filepath = "tailoring_api_config.yml"
@@ -82,24 +84,75 @@ def upload_file():
                 # Convert DXF entities to a Pandas DataFrame
                 df = dxf_loader.entities_to_dataframe()
 
+                # Create plot
+                output_plot_path = os.path.join("ui/static/plots", f"{os.path.splitext(file.filename)[0]}_plot.png")
+
+                # Prepare a matplotlib figure
+                fig, ax = plt.subplots(figsize=(60, 50))
+                ax.set_aspect('equal')
+
+                # Draw lines
+                lines = df[df['Type'] == 'LINE']
+                for _, row in lines.iterrows():
+                    if pd.notna(row['Line_Start_X']) and pd.notna(row['Line_End_X']) and pd.notna(row['Line_Start_Y']) and pd.notna(row['Line_End_Y']):
+                        plt.plot([row['Line_Start_X'], row['Line_End_X']], [row['Line_Start_Y'], row['Line_End_Y']], marker='o', linewidth=0.5, markersize=5)
+                        plt.text(row['Line_Start_X'], row['Line_Start_Y'], f"({row['Line_Start_X']}, {row['Line_Start_Y']})", fontsize=8, ha='right', va='bottom')
+                        plt.text(row['Line_End_X'], row['Line_End_Y'], f"({row['Line_End_X']}, {row['Line_End_Y']})", fontsize=8, ha='right', va='bottom')
+
+                # Draw polylines
+                polylines = df[df['Type'].isin(['POLYLINE', 'LWPOLYLINE'])]
+                unique_points = polylines.drop_duplicates(subset=['PL_POINT_X', 'PL_POINT_Y'])
+                for vertex_label in polylines['Vertex Label'].unique():
+                    vertex_group = polylines[polylines['Vertex Label'] == vertex_label]
+                    xs = vertex_group['PL_POINT_X'].tolist()
+                    ys = vertex_group['PL_POINT_Y'].tolist()
+                    plt.plot(xs, ys, marker='o', linewidth=0.5, markersize=5)
+
+                # Annotate unique points
+                for x, y, point_label in zip(unique_points['PL_POINT_X'], unique_points['PL_POINT_Y'], unique_points['Point Label']):
+                    plt.text(x, y, f'{point_label}', fontsize=8, ha='right', va='bottom')
+
+                # Configure and save the plot
+                plt.title(f'Polyline Plot for {file.filename}', fontsize=26)
+                plt.xlabel('X Coordinate', fontsize=24)
+                plt.ylabel('Y Coordinate', fontsize=24)
+
+                # Increase x-tick and y-tick label sizes
+                plt.xticks(fontsize=20)  # Increase x-tick size
+                plt.yticks(fontsize=20)  # Increase y-tick size
+
+                plt.grid(True)
+                plt.tight_layout()
+                plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)  # Adjust margins to reduce whitespace
+                fig.savefig(output_plot_path, dpi=300, bbox_inches='tight')  # Save plot locally with minimal whitespace
+                plt.close(fig)
+
+                # Upload plot to S3
+                s3_plot_path = os.path.join(AWS_PLOT_DIR_BASE + "/for_labeling", f"{os.path.splitext(file.filename)[0]}_plot.png")
+                aws_utils.upload_file_by_path_to_s3(output_plot_path, s3_plot_path)  # Upload plot to S3
+
+                # Generate presigned URL for the plot
+                presigned_plot_url = aws_utils.generate_presigned_url(s3_plot_path)
+
+                ## MTM Stuff: Generate Excel
                 sorted_df = df.sort_values(by=['Filename', 'Type', 'Layer'])
                 sorted_df['MTM Points'] = ''
 
                 base_filename = os.path.splitext(os.path.basename(file.filename))[0]
-                aws_mtm_dir_path = os.path.join(AWS_MTM_DIR_PATH, f"{base_filename}_combined_entities.csv")
+                aws_mtm_dir_path = os.path.join(AWS_MTM_DIR_PATH, f"{base_filename}_combined_entities.xlsx")
 
             # Delete the temp file after processing (optional)
             os.remove(temp_file.name)
 
             # This needs to happen after temp file is closed
             aws_utils.upload_file_to_s3(file, AWS_DXF_DIR_PATH)
-            #aws_utils.upload_dataframe_to_s3(sorted_df, aws_mtm_dir_path, file_format="csv")
             aws_utils.upload_dataframe_to_s3(sorted_df, aws_mtm_dir_path, file_format="excel")
         
             # Generate a presigned URL for the CSV file
-            presigned_url = aws_utils.generate_presigned_url(aws_mtm_dir_path)
+            presigned_csv_url = aws_utils.generate_presigned_url(aws_mtm_dir_path)
 
-            return render_template("Download.html", download_url=presigned_url)
+            #return render_template("download.html", download_url=presigned_url)
+            return render_template("display_and_download_dxf.html", plot_url=presigned_plot_url, csv_url=presigned_csv_url)
 
         if typeform.lower() == 'mtm_points_file':
             print(f"Processing MTM points file: {file.filename}")
@@ -117,7 +170,7 @@ def upload_file():
 
                 plot_filename, plot_file_path = mtm_processor.plot_points(rename=piece_name)
                 
-                aws_mtm_plot_dir_path = os.path.join(AWS_PLOT_DIR_BASE, f"{plot_filename}_base.png")
+                aws_mtm_plot_dir_path = os.path.join(AWS_PLOT_DIR_BASE + "/labeled_mtm/", f"{plot_filename}_base.png")
                 aws_utils.upload_file_by_path_to_s3(plot_file_path, aws_mtm_plot_dir_path)
                 print(f"Plot Filename {plot_filename}")
 
@@ -133,7 +186,7 @@ def upload_file():
             clear_static_plots_folder()
 
             # Render the plot on the page by passing the presigned URL to the template
-            return render_template("display_plot.html", plot_url=plot_presigned_url)   
+            return render_template("display_mtm_plot.html", plot_url=plot_presigned_url)   
                  
         return redirect("/home")
     else:

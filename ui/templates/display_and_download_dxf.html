@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DXF Plot and CSV Download</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 50px;
+        }
+        img {
+            max-width: 90%;
+            height: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+        a {
+            text-decoration: none;
+            color: white;
+            background-color: #3498db;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: inline-block;  /* Allow buttons to be inline */
+            margin: 10px;  /* Control spacing between buttons */
+        }
+        a:hover {
+            background-color: #2980b9;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .button-container {
+            display: inline-flex;  /* Align buttons in a row */
+            gap: 10px;  /* Adds spacing between buttons */
+        }
+    </style>
+</head>
+<body>
+    <h2>Your DXF Plot and Processed Data</h2>
+
+    <!-- Plot Section -->
+    <div class="container">
+        <h3>Annotated DXF Plot</h3>
+        <img src="{{ plot_url }}" alt="Annotated DXF Plot" />
+    </div>
+
+    <!-- Buttons for Plot and CSV Download -->
+    <div class="button-container">
+        <a href="{{ plot_url }}" download>Download Annotated Plot</a>
+        <a href="{{ csv_url }}" download>Download Entities File</a>
+    </div>
+
+    <br><br>
+    <a href="/home" class="btn btn-primary">Return to Homepage</a>
+</body>
+</html>

@@ -59,7 +59,7 @@ class AwsUtils:
             dataframe.to_csv(buffer, index=False)
         elif file_format == "excel":
             # Save the DataFrame to the buffer as an Excel file
-            dataframe.to_excel(buffer, index=False, engine='xlsxwriter')
+            dataframe.to_excel(buffer, index=False)
 
         # Move the buffer's position to the start
         buffer.seek(0)
