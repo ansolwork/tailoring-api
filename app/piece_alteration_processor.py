@@ -450,14 +450,9 @@ class PieceAlterationProcessor:
             return pl_point_x, pl_point_y
         return None, None
 
-    # Define a Gaussian-based function
-    def gaussian(self, x, mean, std_dev):
-        """Gaussian function for smooth adjustment scaling."""
-        return np.exp(-0.5 * ((x - mean) / std_dev) ** 2)
-
     def apply_cw_ext(self, row, selected_df, tolerance=0):
         """
-        Applies Clockwise Extension (CW Ext) between the mtm_point and mtm_dependent using a Gaussian adjustment factor.
+        Applies Clockwise Extension (CW Ext) between the mtm_point and mtm_dependent.
 
         :param row: The current row being altered.
         :param selected_df: The DataFrame containing the points for the alteration rule.
@@ -468,19 +463,17 @@ class PieceAlterationProcessor:
             mtm_dependent = row['mtm_dependent']
 
             selected_df_copy = selected_df.copy()
+            p1, p2 = self._get_point_coordinates(mtm_point, mtm_dependent, selected_df_copy)
             movement_x, movement_y = row['movement_x'], row['movement_y']
 
-            # Ensure any empty strings are converted to NaN and handle dtype conversion for altered columns
+            # Ensure any empty strings are converted to NaN
             selected_df_copy.replace("", np.nan, inplace=True)
-            selected_df_copy['pl_point_altered_x'] = pd.to_numeric(selected_df_copy['pl_point_altered_x'], errors='coerce')
-            selected_df_copy['pl_point_altered_y'] = pd.to_numeric(selected_df_copy['pl_point_altered_y'], errors='coerce')
 
             # Calculate point orders
             start_point_order = self._get_point_order(mtm_point, selected_df_copy)
             end_point_order = self._get_point_order(mtm_dependent, selected_df_copy)
 
             # Add distance calculations to DataFrame for proximity
-            p1, p2 = self._get_point_coordinates(mtm_point, mtm_dependent, selected_df_copy)
             selected_df_copy = self._add_distance_to_points(selected_df_copy, p1, p2)
 
             # Capture points within range
@@ -510,13 +503,7 @@ class PieceAlterationProcessor:
             mtm_dependent_coords = np.array(mtm_dependent_coords, dtype=np.float64)
             total_distance = np.linalg.norm(mtm_dependent_coords - mtm_point_coords)
 
-            if total_distance == 0:
-                logging.error(f"Total distance between MTM point {mtm_point} and dependent {mtm_dependent} is zero. Skipping adjustment.")
-                return row, selected_df  # No movement if they are at the same point
-
             # Apply XY movement to points between mtm_point and mtm_dependent
-            std_dev = total_distance / 3  # Standard deviation (width) of the Gaussian curve
-
             for idx, point in points_in_range.iterrows():
                 # Use the index of the row in selected_df_copy, not the idx from points_in_range
                 copy_idx = point.name  # This gets the correct index for selected_df_copy
@@ -529,10 +516,10 @@ class PieceAlterationProcessor:
                 point_coords = np.array([current_x, current_y], dtype=np.float64)
                 distance_to_mtm = np.linalg.norm(point_coords - mtm_point_coords)
 
-                # Calculate the Gaussian-based adjustment factor
-                adjustment_factor = self.gaussian(distance_to_mtm, total_distance / 2, std_dev)
+                # Calculate the adjustment factor: closer to mtm point means larger movement
+                adjustment_factor = (total_distance - distance_to_mtm) / total_distance  # Factor decreases as distance increases
 
-                # Apply the weighted movement based on the Gaussian adjustment factor
+                # Apply the weighted movement
                 altered_x = current_x + adjustment_factor * (self.alteration_movement * movement_x)
                 altered_y = current_y + adjustment_factor * (self.alteration_movement * movement_y)
 
@@ -548,7 +535,6 @@ class PieceAlterationProcessor:
             return row, selected_df
 
         return row, selected_df_copy
-
 
     def apply_ccw_ext(self, row, selected_df, tolerance = 0):
         """
