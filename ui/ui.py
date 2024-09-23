@@ -13,7 +13,7 @@ config_filepath = "tailoring_api_config.yml"
 #test_profile = "183295423477_PowerUserAccess"
 
 app = Flask(__name__, template_folder="templates")
-app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024  # 1 MB as per file upload limit
+app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024  # 30 MB as per file upload limit
 
 dxf_loader = DXFLoader()
 
@@ -33,8 +33,9 @@ AWS_MTM_DIR_PATH_LABELED = yaml_config['AWS_MTM_DIR_PATH_LABELED']
 AWS_OUTPUT_DIR_PATH = yaml_config['AWS_OUTPUT_DIR_PATH']
 AWS_S3_SIGNATURE_VERSION = yaml_config['AWS_S3_SIGNATURE_VERSION']
 AWS_PLOT_DIR_BASE = yaml_config['AWS_PLOT_DIR_BASE']
+AWS_PROFILE= yaml_config['AWS_PROFILE']
 
-aws_utils = AwsUtils(ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, AWS_S3_BUCKET_NAME, AWS_S3_SIGNATURE_VERSION)
+aws_utils = AwsUtils(ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, AWS_S3_BUCKET_NAME, AWS_S3_SIGNATURE_VERSION,AWS_PROFILE)
 
 # Function to clear static/plots folder
 def clear_static_plots_folder(folder_path="ui/static/plots/"):
@@ -92,12 +93,13 @@ def upload_file():
 
             # This needs to happen after temp file is closed
             aws_utils.upload_file_to_s3(file, AWS_DXF_DIR_PATH)
-            aws_utils.upload_dataframe_to_s3(sorted_df, aws_mtm_dir_path, file_format="csv")
+            #aws_utils.upload_dataframe_to_s3(sorted_df, aws_mtm_dir_path, file_format="csv")
+            aws_utils.upload_dataframe_to_s3(sorted_df, aws_mtm_dir_path, file_format="excel")
         
             # Generate a presigned URL for the CSV file
             presigned_url = aws_utils.generate_presigned_url(aws_mtm_dir_path)
 
-            return render_template("download.html", download_url=presigned_url)
+            return render_template("Download.html", download_url=presigned_url)
 
         if typeform.lower() == 'mtm_points_file':
             print(f"Processing MTM points file: {file.filename}")
@@ -195,4 +197,4 @@ def run_main_process():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000)
