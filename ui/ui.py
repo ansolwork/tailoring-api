@@ -4,7 +4,6 @@ import yaml
 from utils.aws_utils import AwsUtils
 from app.main import Main
 from ui.dxf_loader import DXFLoader
-from ui.dxf_visualize import DXFVisualize
 from ui.mtm_processor import MTMProcessor
 import tempfile
 import shutil
@@ -36,9 +35,8 @@ AWS_MTM_DIR_PATH_LABELED = yaml_config['AWS_MTM_DIR_PATH_LABELED']
 AWS_OUTPUT_DIR_PATH = yaml_config['AWS_OUTPUT_DIR_PATH']
 AWS_S3_SIGNATURE_VERSION = yaml_config['AWS_S3_SIGNATURE_VERSION']
 AWS_PLOT_DIR_BASE = yaml_config['AWS_PLOT_DIR_BASE']
-AWS_PROFILE= yaml_config['AWS_PROFILE']
 
-aws_utils = AwsUtils(ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, AWS_S3_BUCKET_NAME, AWS_S3_SIGNATURE_VERSION,AWS_PROFILE)
+aws_utils = AwsUtils(ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, AWS_S3_BUCKET_NAME, AWS_S3_SIGNATURE_VERSION)
 
 # Function to clear static/plots folder
 def clear_static_plots_folder(folder_path="ui/static/plots/"):
@@ -251,4 +249,4 @@ def run_main_process():
 
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=True)
