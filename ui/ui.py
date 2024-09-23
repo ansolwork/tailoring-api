@@ -15,7 +15,7 @@ config_filepath = "tailoring_api_config.yml"
 #test_profile = "183295423477_PowerUserAccess"
 
 app = Flask(__name__, template_folder="templates")
-app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024  # 1 MB as per file upload limit
+app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024  # 30 MB as per file upload limit
 
 dxf_loader = DXFLoader()
 
