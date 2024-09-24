@@ -532,7 +532,11 @@ class PieceAlterationProcessor:
             logging.error(f"Error during re-adjustments: {e}")
             return selected_df
 
-    def apply_adjustment_to_points(self, alteration_type, adjustment_points, selected_df):
+    def apply_adjustment_to_points(self, 
+                                   alteration_type, 
+                                   adjustment_points, 
+                                   selected_df,
+                                   notch_point_proximity_margin = 0.2):
         """
         Apply movement adjustments to the given adjustment points using a non-linear scaling function (e.g., polynomial).
         
@@ -579,6 +583,9 @@ class PieceAlterationProcessor:
         adjustment_points = adjustment_points[adjustment_points['mtm points'] != mtm_point]
 
         for idx, point in adjustment_points.iterrows():
+            # Identify if this point is a notch point
+            is_notch = 'notch' in str(point.get('notch_labels', ''))
+
             # Use altered coordinates if available, otherwise use original ones
             current_x = point['pl_point_altered_x'] if pd.notna(point['pl_point_altered_x']) else point['pl_point_x']
             current_y = point['pl_point_altered_y'] if pd.notna(point['pl_point_altered_y']) else point['pl_point_y']
@@ -586,13 +593,32 @@ class PieceAlterationProcessor:
             # Calculate the distance of the current point from the MTM point
             point_coords = np.array([current_x, current_y], dtype=np.float64)
             distance_to_mtm = np.linalg.norm(point_coords - mtm_coords)
+            distance_to_mtm_original = np.linalg.norm(point_coords - mtm_row[['pl_point_x', 'pl_point_y']].to_numpy())
 
-            # Example of polynomial scaling for adjustment factor
-            adjustment_factor = (total_distance - distance_to_mtm) / total_distance
+            # Handle notch points that are near the MTM point (within the proximity_margin)
+            if is_notch and distance_to_mtm_original <= notch_point_proximity_margin:
+                logging.info(f"Notch point found near MTM point {mtm_point}. Moving it directly by the same movement.")
 
-            # Apply the adjustment based on the movement and the scaling factor
-            altered_x = current_x + (adjustment_factor * movement_x)
-            altered_y = current_y + (adjustment_factor * movement_y)
+                # Does this handle both positive and negative?
+                diff_coords = np.abs(point_coords - mtm_row[['pl_point_x', 'pl_point_y']])
+                
+                # Move the notch point by the same movement as the MTM point
+                altered_x = mtm_coords[0] - diff_coords[0]
+                altered_y = mtm_coords[1] - diff_coords[1]
+            else:
+                # For other points, apply a polynomial scaling based on the distance
+                adjustment_factor = (total_distance - distance_to_mtm) / total_distance
+
+                if movement_x != 0 and movement_y == 0:
+                    altered_x = current_x + adjustment_factor
+                    altered_y = current_y 
+
+                elif movement_y != 0 and movement_x == 0:
+                    altered_x = current_x 
+                    altered_y = current_y + adjustment_factor
+                else:
+                    altered_x = current_x  + adjustment_factor
+                    altered_y = current_y + adjustment_factor
 
             # Update the altered values in the DataFrame
             adjustment_points.loc[idx, 'pl_point_altered_x'] = altered_x
@@ -602,7 +628,6 @@ class PieceAlterationProcessor:
         adjustment_points.to_csv(f"data/adjustment_points_{alteration_type}.csv")
 
         return adjustment_points
-
 
     def apply_ccw_no_ext(self, row, selected_df, tolerance = 0):
         # Example logic for Counter-clockwise No Extension
