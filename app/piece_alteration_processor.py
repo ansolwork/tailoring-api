@@ -592,6 +592,9 @@ class PieceAlterationProcessor:
 
             # Calculate the distance of the current point from the MTM point
             point_coords = np.array([current_x, current_y], dtype=np.float64)
+
+            # Dummy: Calculate temporary "new" point coords based on the altered distance 
+
             distance_to_mtm = np.linalg.norm(point_coords - mtm_coords)
             distance_to_mtm_original = np.linalg.norm(point_coords - mtm_row[['pl_point_x', 'pl_point_y']].to_numpy())
 
@@ -606,8 +609,26 @@ class PieceAlterationProcessor:
                 altered_x = mtm_coords[0] - diff_coords[0]
                 altered_y = mtm_coords[1] - diff_coords[1]
             else:
-                # For other points, apply a polynomial scaling based on the distance
-                adjustment_factor = (total_distance - distance_to_mtm) / total_distance
+                # Example for cubic scaling
+                # adjustment_factor = 1 - (distance_to_mtm / total_distance) ** 3
+                
+                # Example for exponential decay
+                #lambda_param = 0.5  # Adjust this for different decay rates
+                #adjustment_factor = np.exp(-lambda_param * (distance_to_mtm / total_distance))
+                
+                # Example for logarithmic scaling
+                adjustment_factor = 1 - np.log(distance_to_mtm + 1) / np.log(total_distance + 1)
+                
+                # Example for sine scaling
+                # adjustment_factor = np.sin(np.pi / 2 * (distance_to_mtm / total_distance))
+
+                # Example for inverse proportional scaling
+                # k = 1  # You can adjust this value to control the slope
+                # adjustment_factor = 1 / (1 + k * (distance_to_mtm / total_distance))
+                
+                # Example for sigmoid scaling
+                # a, b = 10, 0.5  # Tuning parameters
+                # adjustment_factor = 1 / (1 + np.exp(a * (distance_to_mtm / total_distance - b)))
 
                 if movement_x != 0 and movement_y == 0:
                     altered_x = current_x + adjustment_factor
