@@ -8,8 +8,6 @@ from functools import partial
 from itertools import combinations
 pd.set_option('future.no_silent_downcasting', True)
 
-# TODO: Duplicate pl_point x and y appear for the same MTM point!
-
 # TODO: Fix Check further alteration point logic.. It breaks when I change pieces
 
 # TODO:
@@ -612,12 +610,16 @@ class PieceAlterationProcessor:
                 # Example for cubic scaling
                 # adjustment_factor = 1 - (distance_to_mtm / total_distance) ** 3
                 
-                # Example for exponential decay
-                #lambda_param = 0.5  # Adjust this for different decay rates
-                #adjustment_factor = np.exp(-lambda_param * (distance_to_mtm / total_distance))
+                # Apply exponential decay or other scaling function
+                lambda_param = 1.0  # Adjust this for different decay rates
+                adjustment_factor = np.exp(-lambda_param * (distance_to_mtm / total_distance))
+                
+                # Ensure the dependent point stays fixed
+                if np.isclose(distance_to_mtm, total_distance):
+                    adjustment_factor = 0  # Fix the last point (dependent point)
                 
                 # Example for logarithmic scaling
-                adjustment_factor = 1 - np.log(distance_to_mtm + 1) / np.log(total_distance + 1)
+                #adjustment_factor = 1 - np.log(distance_to_mtm + 1) / np.log(total_distance + 1)
                 
                 # Example for sine scaling
                 # adjustment_factor = np.sin(np.pi / 2 * (distance_to_mtm / total_distance))
