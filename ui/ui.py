@@ -127,7 +127,7 @@ def upload_file():
                 plt.grid(True)
                 plt.tight_layout()
                 plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)  # Adjust margins to reduce whitespace
-                fig.savefig(output_plot_path, dpi=60, bbox_inches='tight')  # Save plot locally with minimal whitespace
+                fig.savefig(output_plot_path, dpi=150, bbox_inches='tight')  # Save plot locally with minimal whitespace
                 plt.close(fig)
 
                 # Upload plot to S3
