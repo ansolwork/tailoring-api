@@ -20,4 +20,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Add API Call method
 EXPOSE 5000
 
-CMD ["python","-m","ui.ui"]
+#CMD ["python","-m","ui.ui"]
+
+# Run the Flask app using Gunicorn.
+# Change the workers(2 * num-cores + 1) to more while production deployment
+CMD ["gunicorn", "-w", "3", "-b", "0.0.0.0:5000","--timeout","120", "ui.ui:app"]
