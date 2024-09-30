@@ -396,9 +396,9 @@ class PieceAlterationProcessor:
 
             processed_df.to_csv(f"data/processed_df_{alteration_rule}_before_correction.csv")
             # Check for further alteration points
-            if self.xy_move_step_counter == self.xy_move_step_counter:
-                processed_df = self.xy_move_correction(processed_df)
-                processed_df.to_csv(f"data/processed_df_{alteration_rule}_after_correction.csv")
+            #if self.xy_move_step_counter == self.xy_move_step_counter:
+                #processed_df = self.xy_move_correction(processed_df)
+                #processed_df.to_csv(f"data/processed_df_{alteration_rule}_after_correction.csv")
             
             # Remove empty rows
             processed_df = self.remove_empty_rows(processed_df)
@@ -808,28 +808,27 @@ class PieceAlterationProcessor:
             return row, selected_df
         
     def _apply_single_point_move(self, row, selected_df, mtm_point):
-        selected_df_copy = selected_df.copy()
-        
         # Use altered coordinates if available, otherwise use original ones
         current_x = row['pl_point_altered_x'] if pd.notna(row['pl_point_altered_x']) and row['pl_point_altered_x'] != "" else row['pl_point_x']
         current_y = row['pl_point_altered_y'] if pd.notna(row['pl_point_altered_y']) and row['pl_point_altered_y'] != "" else row['pl_point_y']
 
         # Apply the movement based on the current altered coordinates
-        new_x = current_x + (self.alteration_movement * row['movement_x'])
-        new_y = current_y + (self.alteration_movement * row['movement_y'])
+        row['pl_point_altered_x'] = current_x + (self.alteration_movement * row['movement_x'])
+        row['pl_point_altered_y'] = current_y + (self.alteration_movement * row['movement_y'])
 
         logging.info(f"XY Move (movement_x, movement_y): {(row['movement_x'], row['movement_y'])}")
 
-        # Update the altered values in the DataFrame copy
-        selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_point, 'pl_point_altered_x'] = new_x
-        selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_point, 'pl_point_altered_y'] = new_y
+        # Update the altered values in the DataFrame
+        selected_df.loc[selected_df['mtm points'] == mtm_point, 'pl_point_altered_x'] = row['pl_point_altered_x']
+        selected_df.loc[selected_df['mtm points'] == mtm_point, 'pl_point_altered_y'] = row['pl_point_altered_y']
 
-        logging.info(f"XY Move: Altered MTM point {mtm_point} to new coordinates: ({new_x}, {new_y})")
+        logging.info(f"XY Move: Altered MTM point {mtm_point} to new coordinates: "
+                    f"({row['pl_point_altered_x']}, {row['pl_point_altered_y']})")
 
         # Check adjacent points
         current_point_order = row['point_order']
-        prev_point = selected_df_copy[selected_df_copy['point_order'] == current_point_order - 1].iloc[0] if current_point_order > 0 else None
-        next_point = selected_df_copy[selected_df_copy['point_order'] == current_point_order + 1].iloc[0] if current_point_order < len(selected_df_copy) - 1 else None
+        prev_point = selected_df[selected_df['point_order'] == current_point_order - 1].iloc[0] if current_point_order > 0 else None
+        next_point = selected_df[selected_df['point_order'] == current_point_order + 1].iloc[0] if current_point_order < len(selected_df) - 1 else None
 
         def move_if_notch(adjacent_point, direction):
             if adjacent_point is not None:
@@ -842,17 +841,17 @@ class PieceAlterationProcessor:
                     new_adjacent_x = adjacent_x + (self.alteration_movement * row['movement_x'])
                     new_adjacent_y = adjacent_y + (self.alteration_movement * row['movement_y'])
                     
-                    selected_df_copy.loc[selected_df_copy['point_order'] == adjacent_point['point_order'], 'pl_point_altered_x'] = new_adjacent_x
-                    selected_df_copy.loc[selected_df_copy['point_order'] == adjacent_point['point_order'], 'pl_point_altered_y'] = new_adjacent_y
+                    selected_df.loc[selected_df['point_order'] == adjacent_point['point_order'], 'pl_point_altered_x'] = new_adjacent_x
+                    selected_df.loc[selected_df['point_order'] == adjacent_point['point_order'], 'pl_point_altered_y'] = new_adjacent_y
                     
                     logging.info(f"XY Move: Moved adjacent {direction} notch point to new coordinates: ({new_adjacent_x}, {new_adjacent_y})")
 
-                    selected_df_copy.to_csv(f"data/selected_df_xy_move_{adjacent_point['point_order']}.csv")
+                    selected_df.to_csv(f"data/selected_df_xy_move_{adjacent_point['point_order']}.csv")
 
         move_if_notch(prev_point, "previous")
         move_if_notch(next_point, "next")
 
-        return row, selected_df_copy
+        return row, selected_df
     
     def _get_point_coordinates(self, mtm_point, mtm_dependent, df):
         """Returns the coordinates for mtm_point and mtm_dependent."""
@@ -918,23 +917,7 @@ class PieceAlterationProcessor:
                 logging.info(f"1 instance of 'X Y MOVE' found. Proceeding with processing.")
 
                 mtm_point = filtered_df['mtm points'].iloc[0]
-                movement_x = filtered_df['movement_x'].iloc[0]
-                movement_y = filtered_df['movement_y'].iloc[0]
-
-                # Determine the direction and sign of movement
-                mtm_movement = np.array([movement_x, movement_y])
-                mtm_direction = np.sign(mtm_movement)
-
-                logging.info(f"MTM point: {mtm_point}")
-                logging.info(f"MTM movement: {mtm_movement}")
-                logging.info(f"MTM direction: {mtm_direction}")
-
-                # Handle cases where movement is zero
-                mtm_direction = np.where(mtm_direction == 0, 1, mtm_direction)
-
                 mtm_coords = filtered_df[['pl_point_altered_x', 'pl_point_altered_y']].fillna(filtered_df[['pl_point_x', 'pl_point_y']]).iloc[0].to_numpy()
-                original_mtm_coords = filtered_df[['pl_point_x', 'pl_point_y']].iloc[0].to_numpy()
-                mtm_movement = mtm_coords - original_mtm_coords
 
                 # Find the previous and next MTM points
                 previous_mtm = selected_df_copy[selected_df_copy['mtm points'].notna() & (selected_df_copy['mtm points'] < mtm_point)]['mtm points'].max()
@@ -965,18 +948,16 @@ class PieceAlterationProcessor:
                     (selected_df_copy['pl_point_altered_y'].notna()) & 
                     (selected_df_copy['notch_labels'].notna())
                 ]['point_order'].tolist()
-                logging.info(f"Number of moved notch points: {len(moved_notch_points)}")
-                logging.info(f"Moved notch points: {moved_notch_points}")
 
                 # Create graphs and apply force-directed algorithm for both sections
                 G_before = self._create_point_graph(points_before, mtm_point, mtm_coords, moved_notch_points)
                 G_after = self._create_point_graph(points_after, mtm_point, mtm_coords, moved_notch_points)
 
                 print("Applying force-directed algorithm to points before MTM")
-                new_positions_before = self._apply_force_directed_algorithm(G_before, mtm_point, mtm_coords, moved_notch_points, mtm_direction, iterations=50, k=0.5)
+                new_positions_before = self._apply_force_directed_algorithm(G_before, mtm_point, mtm_coords, moved_notch_points, iterations=50, k=0.1)
                 
                 print("Applying force-directed algorithm to points after MTM")
-                new_positions_after = self._apply_force_directed_algorithm(G_after, mtm_point, mtm_coords, moved_notch_points, mtm_direction, iterations=50, k=0.5)
+                new_positions_after = self._apply_force_directed_algorithm(G_after, mtm_point, mtm_coords, moved_notch_points, iterations=50, k=0.1)
 
                 # Combine new positions
                 new_positions = {**new_positions_before, **new_positions_after}
@@ -995,7 +976,8 @@ class PieceAlterationProcessor:
                             selected_df_copy.loc[selected_df_copy['point_order'] == node, 'pl_point_altered_x'] = pos[0]
                             selected_df_copy.loc[selected_df_copy['point_order'] == node, 'pl_point_altered_y'] = pos[1]
                             if G_before.nodes.get(node, {}).get('is_notch', False) or G_after.nodes.get(node, {}).get('is_notch', False):
-                                logging.info(f"Notch point {node} final movement: {old_pos} -> {pos}")
+                                #logging.info(f"Notch point {node} final movement: {old_pos} -> {pos}")
+                                pass
 
                 # Save for debugging
                 selected_df_copy.to_csv("data/selected_df_force_directed.csv")
@@ -1030,7 +1012,7 @@ class PieceAlterationProcessor:
         
         return G
 
-    def _apply_force_directed_algorithm(self, G, fixed_point, fixed_pos, moved_notch_points, mtm_movement, iterations=50, k=0.1):
+    def _apply_force_directed_algorithm(self, G, fixed_point, fixed_pos, moved_notch_points, iterations=50, k=0.1):
         try:
             # Set initial positions for all nodes
             pos = nx.get_node_attributes(G, 'pos')
@@ -1040,45 +1022,36 @@ class PieceAlterationProcessor:
             
             # Identify all MTM points, the altered point, and moved notch points
             fixed_nodes = [node for node, data in G.nodes(data=True) if data['is_mtm'] or node == fixed_point or data['is_fixed_notch']]
-            logging.info(f"Number of fixed nodes: {len(fixed_nodes)}")
-            logging.info(f"Fixed nodes: {fixed_nodes}")
             
             # Group notch points
             notch_groups = self._group_notch_points(G)
             
-            # Determine the direction of movement
-            mtm_direction = np.sign(mtm_movement)
-            logging.info(f"MTM movement direction: {mtm_direction}")
-
             # Custom spring layout function
             def custom_spring_layout(G, k=0.1, iterations=50):
                 pos_array = np.array([pos[node] for node in G.nodes()])
-                for iteration in range(iterations):
-                    max_movement = 0
+                for _ in range(iterations):
                     for i, node in enumerate(G.nodes()):
                         if node not in fixed_nodes:
+                            # Calculate force
                             force = np.zeros(2)
                             for neighbor in G.neighbors(node):
                                 diff = pos_array[list(G.nodes()).index(neighbor)] - pos_array[i]
                                 distance = np.linalg.norm(diff)
                                 if distance > 0:
-                                    force += 0.5 * diff / distance  # Increased force factor
+                                    force += 0.1 * diff / distance  # Attractive force
                             
-                            # Apply force with damping and respect MTM movement direction
-                            movement = force * k
-                            movement *= mtm_direction  # This ensures movement is in the same direction as MTM point
-                            pos_array[i] += movement
-                            max_movement = max(max_movement, np.linalg.norm(movement))
+                            # Apply force with damping
+                            pos_array[i] += force * k
                             
-                            logging.info(f"Node {node}: Force = {force}, Movement = {movement}")
+                            # Limit displacement
+                            original_pos = np.array(pos[node])
+                            max_displacement = 0.1  # Limit maximum displacement
+                            displacement = pos_array[i] - original_pos
+                            if np.linalg.norm(displacement) > max_displacement:
+                                pos_array[i] = original_pos + displacement / np.linalg.norm(displacement) * max_displacement
                     
                     # Move notch groups as rigid units
                     self._move_notch_groups(notch_groups, pos_array, G)
-                    
-                    logging.info(f"Iteration {iteration + 1}: Max movement = {max_movement}")
-                    if max_movement < 1e-4:  # You can adjust this threshold
-                        logging.info(f"Converged after {iteration + 1} iterations")
-                        break
                 
                 return {node: tuple(pos) for node, pos in zip(G.nodes(), pos_array)}
 
@@ -1091,10 +1064,6 @@ class PieceAlterationProcessor:
 
             # Log final notch positions
             self._log_notch_positions(G, new_pos, "Final notch positions")
-
-            # Log overall movement
-            total_movement = sum(np.linalg.norm(np.array(new_pos[node]) - np.array(pos[node])) for node in G.nodes())
-            logging.info(f"Total movement of all nodes: {total_movement}")
 
             return new_pos
 
@@ -1469,4 +1438,3 @@ if __name__ == "__main__":
                                                alteration_movement = alteration_movement)
     make_alteration.process_alterations()
     #make_alteration.log_info(debug_alteration_rule)
-
