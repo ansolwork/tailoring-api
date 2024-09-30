@@ -1,7 +1,6 @@
 import pandas as pd
 import ast
 import numpy as np
-from app.smoothing import SmoothingFunctions  # Import the SmoothingFunctions class
 from utils.data_processing_utils import DataProcessingUtils
 import os
 from functools import partial
@@ -347,8 +346,6 @@ class PieceAlterationProcessor:
             # Mark notch points
             processed_df = self.mark_notch_points(notch_points, processed_df)
 
-            self.processing_utils.save_csv(processed_df, "data/processed_df.csv")
-
             # Assuming you have your DataFrame loaded as `df`
             alteration_type_counts = processed_df['alteration_type'].value_counts()
             self.xy_move_count = alteration_type_counts.get('X Y MOVE', 0)  # Defaults to 0 if 'X Y MOVE' doesn't exist
@@ -392,13 +389,9 @@ class PieceAlterationProcessor:
                     processed_df.update(updated_df)
                     order_count += 1
 
-            # Check if CW Ext or CCW 
-
-            processed_df.to_csv(f"data/processed_df_{alteration_rule}_before_correction.csv")
             # Check for further alteration points
             if self.xy_move_step_counter == self.xy_move_step_counter:
                 processed_df = self.xy_move_correction(processed_df)
-                processed_df.to_csv(f"data/processed_df_{alteration_rule}_after_correction.csv")
             
             # Remove empty rows
             processed_df = self.remove_empty_rows(processed_df)
@@ -658,9 +651,6 @@ class PieceAlterationProcessor:
             adjustment_points.loc[idx, 'pl_point_altered_x'] = altered_x
             adjustment_points.loc[idx, 'pl_point_altered_y'] = altered_y
 
-        # Save debug information for adjustment points
-        adjustment_points.to_csv(f"data/adjustment_points_{alteration_type}.csv")
-
         return adjustment_points
 
     def apply_ccw_no_ext(self, row, selected_df, tolerance = 0):
@@ -764,7 +754,6 @@ class PieceAlterationProcessor:
 
             # Case 2: Multiple row alteration (mtm_dependent != mtm_point)
             else:
-                selected_df.to_csv("data/selected_df_xy_move.csv")     
                 selected_df_copy = selected_df.copy()
                 p1, p2 = self._get_point_coordinates(mtm_point, mtm_dependent, selected_df_copy)
                 movement_x, movement_y = row['movement_x'], row['movement_y']
@@ -1002,9 +991,6 @@ class PieceAlterationProcessor:
                     selected_df_copy.loc[notch_idx, 'pl_point_altered_y'] = new_notch_y
                     
                     logging.info(f"Notch point {notch_point['point_order']} moved by {alteration_vector}")
-
-                # Save for debugging
-                selected_df_copy.to_csv("data/selected_df_xy_move_corrected.csv")
 
                 return selected_df_copy
 
