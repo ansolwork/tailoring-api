@@ -918,7 +918,23 @@ class PieceAlterationProcessor:
                 logging.info(f"1 instance of 'X Y MOVE' found. Proceeding with processing.")
 
                 mtm_point = filtered_df['mtm points'].iloc[0]
+                movement_x = filtered_df['movement_x'].iloc[0]
+                movement_y = filtered_df['movement_y'].iloc[0]
+
+                # Determine the direction and sign of movement
+                mtm_movement = np.array([movement_x, movement_y])
+                mtm_direction = np.sign(mtm_movement)
+
+                logging.info(f"MTM point: {mtm_point}")
+                logging.info(f"MTM movement: {mtm_movement}")
+                logging.info(f"MTM direction: {mtm_direction}")
+
+                # Handle cases where movement is zero
+                mtm_direction = np.where(mtm_direction == 0, 1, mtm_direction)
+
                 mtm_coords = filtered_df[['pl_point_altered_x', 'pl_point_altered_y']].fillna(filtered_df[['pl_point_x', 'pl_point_y']]).iloc[0].to_numpy()
+                original_mtm_coords = filtered_df[['pl_point_x', 'pl_point_y']].iloc[0].to_numpy()
+                mtm_movement = mtm_coords - original_mtm_coords
 
                 # Find the previous and next MTM points
                 previous_mtm = selected_df_copy[selected_df_copy['mtm points'].notna() & (selected_df_copy['mtm points'] < mtm_point)]['mtm points'].max()
@@ -949,16 +965,18 @@ class PieceAlterationProcessor:
                     (selected_df_copy['pl_point_altered_y'].notna()) & 
                     (selected_df_copy['notch_labels'].notna())
                 ]['point_order'].tolist()
+                logging.info(f"Number of moved notch points: {len(moved_notch_points)}")
+                logging.info(f"Moved notch points: {moved_notch_points}")
 
                 # Create graphs and apply force-directed algorithm for both sections
                 G_before = self._create_point_graph(points_before, mtm_point, mtm_coords, moved_notch_points)
                 G_after = self._create_point_graph(points_after, mtm_point, mtm_coords, moved_notch_points)
 
                 print("Applying force-directed algorithm to points before MTM")
-                new_positions_before = self._apply_force_directed_algorithm(G_before, mtm_point, mtm_coords, moved_notch_points, iterations=50, k=0.1)
+                new_positions_before = self._apply_force_directed_algorithm(G_before, mtm_point, mtm_coords, moved_notch_points, mtm_direction, iterations=50, k=0.5)
                 
                 print("Applying force-directed algorithm to points after MTM")
-                new_positions_after = self._apply_force_directed_algorithm(G_after, mtm_point, mtm_coords, moved_notch_points, iterations=50, k=0.1)
+                new_positions_after = self._apply_force_directed_algorithm(G_after, mtm_point, mtm_coords, moved_notch_points, mtm_direction, iterations=50, k=0.5)
 
                 # Combine new positions
                 new_positions = {**new_positions_before, **new_positions_after}
@@ -977,8 +995,7 @@ class PieceAlterationProcessor:
                             selected_df_copy.loc[selected_df_copy['point_order'] == node, 'pl_point_altered_x'] = pos[0]
                             selected_df_copy.loc[selected_df_copy['point_order'] == node, 'pl_point_altered_y'] = pos[1]
                             if G_before.nodes.get(node, {}).get('is_notch', False) or G_after.nodes.get(node, {}).get('is_notch', False):
-                                #logging.info(f"Notch point {node} final movement: {old_pos} -> {pos}")
-                                pass
+                                logging.info(f"Notch point {node} final movement: {old_pos} -> {pos}")
 
                 # Save for debugging
                 selected_df_copy.to_csv("data/selected_df_force_directed.csv")
@@ -1013,7 +1030,7 @@ class PieceAlterationProcessor:
         
         return G
 
-    def _apply_force_directed_algorithm(self, G, fixed_point, fixed_pos, moved_notch_points, iterations=50, k=0.1):
+    def _apply_force_directed_algorithm(self, G, fixed_point, fixed_pos, moved_notch_points, mtm_movement, iterations=50, k=0.1):
         try:
             # Set initial positions for all nodes
             pos = nx.get_node_attributes(G, 'pos')
@@ -1023,36 +1040,45 @@ class PieceAlterationProcessor:
             
             # Identify all MTM points, the altered point, and moved notch points
             fixed_nodes = [node for node, data in G.nodes(data=True) if data['is_mtm'] or node == fixed_point or data['is_fixed_notch']]
+            logging.info(f"Number of fixed nodes: {len(fixed_nodes)}")
+            logging.info(f"Fixed nodes: {fixed_nodes}")
             
             # Group notch points
             notch_groups = self._group_notch_points(G)
             
+            # Determine the direction of movement
+            mtm_direction = np.sign(mtm_movement)
+            logging.info(f"MTM movement direction: {mtm_direction}")
+
             # Custom spring layout function
             def custom_spring_layout(G, k=0.1, iterations=50):
                 pos_array = np.array([pos[node] for node in G.nodes()])
-                for _ in range(iterations):
+                for iteration in range(iterations):
+                    max_movement = 0
                     for i, node in enumerate(G.nodes()):
                         if node not in fixed_nodes:
-                            # Calculate force
                             force = np.zeros(2)
                             for neighbor in G.neighbors(node):
                                 diff = pos_array[list(G.nodes()).index(neighbor)] - pos_array[i]
                                 distance = np.linalg.norm(diff)
                                 if distance > 0:
-                                    force += 0.1 * diff / distance  # Attractive force
+                                    force += 0.5 * diff / distance  # Increased force factor
                             
-                            # Apply force with damping
-                            pos_array[i] += force * k
+                            # Apply force with damping and respect MTM movement direction
+                            movement = force * k
+                            movement *= mtm_direction  # This ensures movement is in the same direction as MTM point
+                            pos_array[i] += movement
+                            max_movement = max(max_movement, np.linalg.norm(movement))
                             
-                            # Limit displacement
-                            original_pos = np.array(pos[node])
-                            max_displacement = 0.1  # Limit maximum displacement
-                            displacement = pos_array[i] - original_pos
-                            if np.linalg.norm(displacement) > max_displacement:
-                                pos_array[i] = original_pos + displacement / np.linalg.norm(displacement) * max_displacement
+                            logging.info(f"Node {node}: Force = {force}, Movement = {movement}")
                     
                     # Move notch groups as rigid units
                     self._move_notch_groups(notch_groups, pos_array, G)
+                    
+                    logging.info(f"Iteration {iteration + 1}: Max movement = {max_movement}")
+                    if max_movement < 1e-4:  # You can adjust this threshold
+                        logging.info(f"Converged after {iteration + 1} iterations")
+                        break
                 
                 return {node: tuple(pos) for node, pos in zip(G.nodes(), pos_array)}
 
@@ -1065,6 +1091,10 @@ class PieceAlterationProcessor:
 
             # Log final notch positions
             self._log_notch_positions(G, new_pos, "Final notch positions")
+
+            # Log overall movement
+            total_movement = sum(np.linalg.norm(np.array(new_pos[node]) - np.array(pos[node])) for node in G.nodes())
+            logging.info(f"Total movement of all nodes: {total_movement}")
 
             return new_pos
 
@@ -1419,8 +1449,8 @@ if __name__ == "__main__":
     # Debug: Check by Alteration Rule
     #debug_alteration_rule = "7F-SHPOINT"
     #debug_alteration_rule = "7F-ERECT"
-    #debug_alteration_rule = "4-WAIST"
-    debug_alteration_rule = "1LTH-FULL"
+    debug_alteration_rule = "4-WAIST"
+    #debug_alteration_rule = "1LTH-FULL"
     #debug_alteration_rule = "1LTH-FSLV"
     #debug_alteration_rule = "1LTH-BACK"
     #debug_alteration_rule = "2ARMHOLEDN"
