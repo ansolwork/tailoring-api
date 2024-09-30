@@ -396,7 +396,6 @@ class PieceAlterationProcessor:
 
             # Check for further alteration points
             if self.xy_move_step_counter == self.xy_move_step_counter:
-                #processed_df = self.apply_mtm_correction(processed_df)
                 processed_df = self.xy_move_correction(processed_df)
             
             # Remove empty rows
@@ -1381,8 +1380,8 @@ if __name__ == "__main__":
     # Debug: Check by Alteration Rule
     #debug_alteration_rule = "7F-SHPOINT"
     #debug_alteration_rule = "7F-ERECT"
-    debug_alteration_rule = "4-WAIST"
-    #debug_alteration_rule = "1LTH-FULL"
+    #debug_alteration_rule = "4-WAIST"
+    debug_alteration_rule = "1LTH-FULL"
     #debug_alteration_rule = "1LTH-FSLV"
     #debug_alteration_rule = "1LTH-BACK"
     #debug_alteration_rule = "2ARMHOLEDN"
