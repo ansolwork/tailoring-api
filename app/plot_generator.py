@@ -13,7 +13,7 @@ class PlotGenerator:
         self.dpi = dpi
         self.data_processing_utils = DataProcessingUtils()
 
-    def save_plot(self, fig, ax, plot_type, piece_name, alteration_rule=None, svg_width=50, svg_height=30):
+    def save_plot(self, fig, ax, plot_type, piece_name, alteration_rule=None):
         if plot_type == "vertices_plot":
             png_output_dir = os.path.join(self.output_dir, piece_name, "vertices", "png")
             svg_output_dir = os.path.join(self.output_dir, piece_name, "vertices", "svg")
@@ -31,10 +31,18 @@ class PlotGenerator:
         fig.savefig(png_output_file, format='png', dpi=self.dpi, bbox_inches='tight')
         print(f"PNG plot saved to {png_output_file}")
 
+        # Get the current axis limits
+        x_min, x_max = ax.get_xlim()
+        y_min, y_max = ax.get_ylim()
+
+        # Calculate the width and height in inches
+        width_inches = x_max - x_min
+        height_inches = y_max - y_min
+
         # Save as SVG
         svg_output_file = os.path.join(svg_output_dir, f"{plot_type}_{piece_name}.svg")
         print(f"Saving {plot_type} as SVG to {svg_output_file}")
-        self.data_processing_utils.save_plot_as_svg(fig, ax, svg_width, svg_height, svg_output_file)
+        self.data_processing_utils.save_plot_as_svg(fig, ax, width_inches, height_inches, svg_output_file)
         print(f"SVG plot saved to {svg_output_file}")
 
         plt.close(fig)
