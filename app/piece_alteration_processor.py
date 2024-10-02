@@ -357,6 +357,7 @@ class PieceAlterationProcessor:
             processed_df = processed_df.copy()
             processed_df.loc[:, "alteration_order"] = np.nan
             order_count = 0
+            processed_df.to_csv("data/processed_df.csv")
 
             # Apply alteration rule row-by-row
             for index, row in processed_df.iterrows():
@@ -390,10 +391,9 @@ class PieceAlterationProcessor:
                     order_count += 1
 
             # Check for further alteration points
-            if self.xy_move_step_counter == self.xy_move_step_counter:
+            if self.xy_move_step_counter > 0 and self.xy_move_step_counter == self.xy_move_step_counter:
                 processed_df = self.xy_move_correction(processed_df)
             
-            # Remove empty rows
             processed_df = self.remove_empty_rows(processed_df)
 
             return processed_df
@@ -1438,18 +1438,39 @@ if __name__ == "__main__":
     #vertices_table_path = "data/staging/vertices/vertices_LGFG-V2-BC1-SH-08.csv"
     
     # Debug: Check by Alteration Rule
-    #debug_alteration_rule = "7F-SHPOINT"
-    #debug_alteration_rule = "7F-ERECT"
-    debug_alteration_rule = "4-WAIST"
-    #debug_alteration_rule = "1LTH-FULL"
+    
     #debug_alteration_rule = "1LTH-FSLV"
-    #debug_alteration_rule = "1LTH-BACK"
-    #debug_alteration_rule = "2ARMHOLEDN"
-    #debug_alteration_rule = "2ARMHOLEIN"
-    #debug_alteration_rule = "4-CHEST"
-    #debug_alteration_rule = "3-COLLAR"
     #debug_alteration_rule = "FRT-HEIGHT"
     #debug_alteration_rule = "2SL-BICEP"
+
+    ## LGFG-SH-01-CCB-FO
+    #debug_alteration_rule = "1LTH-BACK"
+    #debug_alteration_rule = "1LTH-FRONT"
+    #debug_alteration_rule = "1LTH-FULL"
+    #debug_alteration_rule = "2ARMHOLEDN"
+    #debug_alteration_rule = "2ARMHOLEIN"
+    #debug_alteration_rule = "3-COLLAR"
+    #debug_alteration_rule = "3-SHOULDER"
+    #debug_alteration_rule = "4-CHEST"
+    #debug_alteration_rule = "4-HIP"
+    #debug_alteration_rule = "4-WAIST"
+    #debug_alteration_rule = "4CHESTACRS" 
+    #debug_alteration_rule = "5-DARTBACK"
+    #debug_alteration_rule = "6-PLACKET"
+    #debug_alteration_rule = "7F-BELLY"
+    #debug_alteration_rule = "7F-ERECT"
+    #debug_alteration_rule = "7F-SH-BKSL"
+    debug_alteration_rule = "7F-SHPOINT"
+    #debug_alteration_rule = "7F-SHSLOPE"
+    #debug_alteration_rule = "7F-SHSQUAR"
+    #debug_alteration_rule = "7F-STOOPED"
+    #debug_alteration_rule = "HIGH-CHEST"
+    #debug_alteration_rule = "LONG-BACK"
+    #debug_alteration_rule = "OPEN-CLR"
+    #debug_alteration_rule = "ROUND-BACK"
+    #debug_alteration_rule = "SHORT-BACK"
+    #debug_alteration_rule = "WAISTSHAPE"
+    #debug_alteration_rule = "WAISTSMOTH"
 
 
     alteration_movement = 5 # INCHES (can be positive or negative)
