@@ -643,9 +643,9 @@ class PieceAlterationProcessor:
             elif alteration_movement < min_pos:
                 raise ValueError(f"Alteration movement ({alteration_movement}) is less than suggested minimum positive movement ({min_pos}) for point {mtm_point}")
         elif alteration_movement < 0:
-            if abs(alteration_movement) > max_neg:
+            if abs(alteration_movement) > abs(max_neg):
                 raise ValueError(f"Alteration movement ({alteration_movement}) exceeds suggested maximum negative movement ({max_neg}) for point {mtm_point}")
-            elif abs(alteration_movement) < min_neg:
+            elif abs(alteration_movement) < abs(min_neg):
                 raise ValueError(f"Alteration movement ({alteration_movement}) is less than suggested minimum negative movement ({min_neg}) for point {mtm_point}")
 
     def apply_no_extension(self, row, selected_df, extension_type="CCW", tolerance=0):
@@ -802,10 +802,18 @@ class PieceAlterationProcessor:
         :param altered_points: A set of altered points' indexes to prevent multiple alterations.
         :return: A tuple of (row, selected_df, altered_points) with updated coordinates.
         """
-        try:
-            mtm_point = row['mtm points']
-            mtm_dependent = row['mtm_dependent']
+        mtm_point = row['mtm points']
+        mtm_dependent = row['mtm_dependent']
 
+        # Get movement limits 
+        max_pos = row['maximum_movement_inches_positive']
+        max_neg = row['maximum_movement_inches_negative']
+        min_pos = row['minimum_movement_inches_positive']
+        min_neg = row['minimum_movement_inches_negative']   
+
+        self.check_alteration_limits(self.alteration_movement, max_pos, max_neg, min_pos, min_neg, mtm_point)
+
+        try:
             logging.info(f"Applying XY Move on {mtm_point}")
 
             # Case 1: Individual row alteration (mtm_dependent == mtm_point)
