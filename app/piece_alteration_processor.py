@@ -375,6 +375,9 @@ class PieceAlterationProcessor:
                         # Apply CCW Ext (MTM point only)
                         row, updated_df = self.apply_extension(row, processed_df, extension_type="CCW")
                         self.ccw_ext_count += 1
+                    elif row['alteration_type'] == 'CCW No Ext':
+                        row, updated_df = self.apply_no_extension(row, processed_df, extension_type="CCW")
+                        self.ccw_no_ext_count += 1
                     else:
                         # For other alterations (X Y Move, CCW No Ext), apply normally
                         row, updated_df = self.apply_alteration_to_row(row, processed_df)
@@ -653,9 +656,54 @@ class PieceAlterationProcessor:
 
         return adjustment_points
 
-    def apply_ccw_no_ext(self, row, selected_df, tolerance = 0):
-        # Example logic for Counter-clockwise No Extension
-        return row, selected_df
+    def apply_no_extension(self, row, selected_df, extension_type="CCW", tolerance=0):
+        try:
+            mtm_point = row['mtm points']
+            mtm_dependent = row['mtm_dependent']
+
+            selected_df_copy = selected_df.copy()
+            p1, p2 = self._get_point_coordinates(mtm_point, mtm_dependent, selected_df_copy)
+            movement_x, movement_y = row['movement_x'], row['movement_y']
+
+            # Calculate point orders
+            start_point_order = self._get_point_order(mtm_point, selected_df_copy)
+            end_point_order = self._get_point_order(mtm_dependent, selected_df_copy)
+
+            # Add distance calculations to DataFrame for proximity
+            selected_df_copy = self._add_distance_to_points(selected_df_copy, p1, p2)
+
+            # Get points between mtm_point and mtm_dependent
+            points_in_range = self._get_points_in_range(selected_df_copy, start_point_order, end_point_order, tolerance, mtm_point, mtm_dependent)
+
+            # Move the MTM point
+            new_mtm_x = p1[0] + (self.alteration_movement * movement_x)
+            new_mtm_y = p1[1] + (self.alteration_movement * movement_y)
+            selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_point, ['pl_point_altered_x', 'pl_point_altered_y']] = [new_mtm_x, new_mtm_y]
+
+            # Calculate the movement vector
+            movement_vector = np.array([new_mtm_x, new_mtm_y]) - np.array(p1)
+
+            # Move all points except the MTM dependent
+            for i, point in points_in_range.iterrows():
+                if point['mtm points'] != mtm_dependent:
+                    original_point = np.array([point['pl_point_x'], point['pl_point_y']])
+                    new_point = original_point + movement_vector
+                    selected_df_copy.loc[i, ['pl_point_altered_x', 'pl_point_altered_y']] = new_point
+
+            logging.info(f"{extension_type} No Extension applied. MTM point {mtm_point} moved to ({new_mtm_x}, {new_mtm_y})")
+            logging.info(f"MTM dependent {mtm_dependent} remains fixed at ({p2[0]}, {p2[1]})")
+
+            return row, selected_df_copy
+
+        except Exception as e:
+            logging.error(f"Failed to apply {extension_type} No Extension alteration: {e}")
+            return row, selected_df
+
+    def _add_distance_to_points(self, df, p1, p2):
+        """Adds the Euclidean distance from p1 and p2 to each point in the DataFrame."""
+        df['dist_to_p1'] = np.sqrt((df['pl_point_x'] - p1[0]) ** 2 + (df['pl_point_y'] - p1[1]) ** 2)
+        df['dist_to_p2'] = np.sqrt((df['pl_point_x'] - p2[0]) ** 2 + (df['pl_point_y'] - p2[1]) ** 2)
+        return df
     
     def apply_extension(self, row, selected_df, extension_type="CW", tolerance=0):
         """
