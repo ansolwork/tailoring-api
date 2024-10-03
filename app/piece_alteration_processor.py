@@ -3,21 +3,11 @@ import ast
 import numpy as np
 from utils.data_processing_utils import DataProcessingUtils
 import os
+from itertools import groupby 
 from functools import partial
-from itertools import combinations, groupby  # Added groupby import
 import networkx as nx
 
 pd.set_option('future.no_silent_downcasting', True)
-
-# TODO: Fix Check further alteration point logic.. It breaks when I change pieces
-
-# TODO:
-# MTM Points in altered vertices are all the MTM points that are moved
-# Is this needed when we get new pl points?
-
-# TODO:
-# IF two times mention the same point, move that point only (XY Move)
-# IF Two different points, then move points from dependent to the mtm 8017 to 8020 (including both points)
 
 # Setup Logging
 import logging
@@ -30,6 +20,10 @@ logging.basicConfig(
 pd.set_option('display.max_colwidth', None)  # No limit on column width
 pd.set_option('display.max_columns', None)   # Display all columns
 pd.set_option('display.width', None)         # No truncation on width
+
+# TODO: Go through the alterations we have done currently
+# TODO: Add limitation check for XY Movem
+# TODO: Start with 1LTH-FULL
 
 class PieceAlterationProcessor:
     """
@@ -323,17 +317,13 @@ class PieceAlterationProcessor:
 
     def process_alterations(self):
         """
-        Applies alteration rules to each DataFrame and processes vertices. If a debug_alteration_rule is set,
-        only that rule is applied. Otherwise, all alteration rules are processed.
+        Applies alteration rules to each DataFrame and processes vertices.
+        Handles both debug mode and full alteration process.
         """
         # Prepare vertices and get notch points
         notch_points = self.process_and_save_vertices()
 
-        def apply_single_rule(alteration_rule):
-            """
-            Applies a single alteration rule by combining the selected and unselected rows.
-            Prepares the combined DataFrame and processes it row-by-row.
-            """
+        def apply_single_alteration_rule(alteration_rule):
             selected_df = self.alteration_dfs[alteration_rule]
             unselected_df = self.get_unselected_rows(selected_df)
 
@@ -346,78 +336,87 @@ class PieceAlterationProcessor:
             # Mark notch points
             processed_df = self.mark_notch_points(notch_points, processed_df)
 
-            # Assuming you have your DataFrame loaded as `df`
+            # Count alteration types
             alteration_type_counts = processed_df['alteration_type'].value_counts()
-            self.xy_move_count = alteration_type_counts.get('X Y MOVE', 0)  # Defaults to 0 if 'X Y MOVE' doesn't exist
+            self.xy_move_count = alteration_type_counts.get('X Y MOVE', 0)
             self.cw_ext_count = alteration_type_counts.get('CW Ext', 0)
             self.ccw_ext_count = alteration_type_counts.get('CCW Ext', 0)
             self.ccw_no_ext_count = alteration_type_counts.get('CCW No Ext', 0)
 
-            # Initiate alteration order to keep track of alterations
-            processed_df = processed_df.copy()
-            processed_df.loc[:, "alteration_order"] = np.nan
+            # Initialize alteration order
+            processed_df['alteration_order'] = np.nan
             order_count = 0
-            processed_df.to_csv("data/processed_df.csv")
+
+            # Define alteration type map
+            alteration_type_map = {
+                'X Y MOVE': self.apply_xy_coordinate_adjustment,
+                'CW Ext': partial(self.apply_extension, extension_type="CW"),
+                'CCW Ext': partial(self.apply_extension, extension_type="CCW"),
+                'CCW No Ext': partial(self.apply_no_extension, extension_type="CCW"),
+            }
 
             # Apply alteration rule row-by-row
             for index, row in processed_df.iterrows():
-
-                # Only apply alterations where types exist
                 if not pd.isna(row['alteration_type']):
-                    logging.info(f"Processing Alteration Type: {row['alteration_type']}")
+                    alteration_type = row['alteration_type']
+                    logging.info(f"Processing Alteration Type: {alteration_type}")
 
-                    if row['alteration_type'] == 'CW Ext':
-                        # Apply CW Ext (MTM point only)
-                        row, updated_df = self.apply_extension(row, processed_df, extension_type="CW")
-                        self.cw_ext_count += 1
-
-                    elif row['alteration_type'] == 'CCW Ext':
-                        # Apply CCW Ext (MTM point only)
-                        row, updated_df = self.apply_extension(row, processed_df, extension_type="CCW")
-                        self.ccw_ext_count += 1
-                    elif row['alteration_type'] == 'CCW No Ext':
-                        row, updated_df = self.apply_no_extension(row, processed_df, extension_type="CCW")
-                        self.ccw_no_ext_count += 1
+                    func = alteration_type_map.get(alteration_type)
+                    if func:
+                        _, processed_df = func(row, processed_df)  # Use the returned DataFrame
+                        processed_df.loc[index, 'alteration_order'] = order_count
+                        order_count += 1
                     else:
-                        # For other alterations (X Y Move, CCW No Ext), apply normally
-                        row, updated_df = self.apply_alteration_to_row(row, processed_df)
+                        logging.warning(f"No viable alteration types found for {alteration_type}")
 
-                    # Update alteration order in the row
-                    row["alteration_order"] = int(order_count)
-                
-                    # Update the row back into processed_df (in case it's an individual row alteration)
-                    row = row.apply(lambda x: np.nan if x == "" else x)
-                    processed_df.loc[index] = row
-                
-                    # Ensure any DataFrame-wide changes are applied to processed_df
-                    processed_df.update(updated_df)
-                    order_count += 1
+            # Update the row in processed_df
+            processed_df = processed_df.map(lambda x: np.nan if x == "" else x)
+            processed_df.to_csv("data/processed_df.csv", index=False)
 
             # Check for further alteration points
-            if self.xy_move_step_counter > 0 and self.xy_move_step_counter == self.xy_move_step_counter:
+            if self.xy_move_step_counter > 0 and self.xy_move_step_counter == self.xy_move_count:
                 processed_df = self.xy_move_correction(processed_df)
             
             processed_df = self.remove_empty_rows(processed_df)
+            processed_df = self.re_adjust_points(processed_df)
 
             return processed_df
 
-        # Debug Mode: Apply a specific alteration rule and save the result
+        # Debug Mode
         if not pd.isna(self.debug_alteration_rule):
-
-            # Setup Save Info
             debug_savefolder = "data/staging_processed/debug/"
             save_filepath = f"{debug_savefolder}{self.piece_name}_{self.debug_alteration_rule}{self.save_file_format}"
             os.makedirs(debug_savefolder, exist_ok=True)
 
             if self.debug_alteration_rule in self.alteration_rules:
-                # Apply the specific debug alteration rule
                 logging.info(f"Running Alteration in Debug Mode: {self.debug_alteration_rule}")
-                self.altered_df = apply_single_rule(self.debug_alteration_rule)
-                self.altered_df = self.re_adjust_points(self.altered_df)
+                self.altered_df = apply_single_alteration_rule(self.debug_alteration_rule)
                 self.processing_utils.save_csv(self.altered_df, save_filepath)
             else:
-                logging.warning(f"Debug alteratio n type '{self.debug_alteration_rule}' not found in requested alterations.")
+                logging.warning(f"Debug alteration type '{self.debug_alteration_rule}' not found in requested alterations.")
             return  # Early return after processing the debug alteration
+
+        # Full Alteration Process
+        #logging.info("Running Full Alteration Process")
+        #all_altered_dfs = []
+
+        #for alteration_rule in self.alteration_rules:
+        #    altered_df = apply_single_rule(alteration_rule)
+        #    all_altered_dfs.append(altered_df)
+
+            # Optional: Find closest altered point
+            # for index, row in altered_df.iterrows():
+            #     closest_point, closest_distance = self.find_closest_altered_point(row, altered_df)
+            #     if closest_point is not None:
+            #         logging.info(f"Closest altered point to {row['mtm points']} is {closest_point['mtm points']} at distance {closest_distance:.2f}.")
+
+        # Concatenate all the altered DataFrames
+        #self.altered_df = pd.concat(all_altered_dfs, ignore_index=True)
+
+        # Save the final altered DataFrame to CSV
+        #save_filepath = f"{self.save_folder_processed_pieces}/processed_alterations_{self.piece_name}{self.save_file_format}"
+        #self.processing_utils.save_csv(self.altered_df, save_filepath)
+        #logging.info(f"Altered DataFrame saved to {save_filepath}")
         
         #logging.info("Running Full Alteration Process")
         #all_altered_dfs = []
@@ -450,36 +449,6 @@ class PieceAlterationProcessor:
         #save_filepath = f"{self.save_folder_processed_pieces}/proces sed_alterations_{self.piece_name}{self.save_file_format}"
         #self.processing_utils.save_csv(self.altered_df, save_filepath)
         #logging.info(f"Altered DataFrame saved to {save_filepath}")
-
-    def apply_alteration_to_row(self, row, selected_df):
-        """
-        Applies the relevant alteration type to a row or the selected DataFrame.
-        Handles both individual row updates and DataFrame-level updates.
-        
-        :param row: The current row to alter.
-        :param selected_df: The entire DataFrame being altered.
-        :return: A tuple of (row, selected_df) after the alterations.
-        """
-        alteration_type_map = {
-            'X Y MOVE': self.apply_xy_coordinate_adjustment,
-            #'CW Ext': self.apply_cw_ext,
-            #'CCW Ext': self.apply_ccw_ext,
-            'CCW No Ext': self.apply_ccw_no_ext,
-        }
-
-        alteration_type = row['alteration_type']
-        logging.info(f"Attempting to apply alteration: {alteration_type}")
-        
-        if pd.isna(alteration_type):
-            return row, selected_df  # No alteration, return original row and DataFrame
-
-        # Call the appropriate method for the alteration type
-        func = alteration_type_map.get(alteration_type)
-        if func:
-            return func(row, selected_df)  # Expect both row and DataFrame to be updated
-        else:
-            logging.warning(f"No viable alteration types found for {alteration_type}")
-            return row, selected_df
         
     # Get matching points for a particular MTM, now using selected_df instead of start_df
     def get_pl_points(self, matching_pt, df):
@@ -655,12 +624,43 @@ class PieceAlterationProcessor:
             adjustment_points.loc[idx, 'pl_point_altered_y'] = altered_y
 
         return adjustment_points
+    
+    def check_alteration_limits(self, alteration_movement, max_pos, max_neg, min_pos, min_neg, mtm_point):
+        """
+        Check if the alteration movement is within the suggested limits.
+
+        :param alteration_movement: The proposed alteration movement.
+        :param max_pos: Maximum positive movement limit.
+        :param max_neg: Maximum negative movement limit.
+        :param min_pos: Minimum positive movement limit.
+        :param min_neg: Minimum negative movement limit.
+        :param mtm_point: The MTM point being altered.
+        :raises ValueError: If the alteration movement exceeds the suggested limits.
+        """
+        if alteration_movement > 0:
+            if alteration_movement > max_pos:
+                raise ValueError(f"Alteration movement ({alteration_movement}) exceeds suggested maximum positive movement ({max_pos}) for point {mtm_point}")
+            elif alteration_movement < min_pos:
+                raise ValueError(f"Alteration movement ({alteration_movement}) is less than suggested minimum positive movement ({min_pos}) for point {mtm_point}")
+        elif alteration_movement < 0:
+            if abs(alteration_movement) > max_neg:
+                raise ValueError(f"Alteration movement ({alteration_movement}) exceeds suggested maximum negative movement ({max_neg}) for point {mtm_point}")
+            elif abs(alteration_movement) < min_neg:
+                raise ValueError(f"Alteration movement ({alteration_movement}) is less than suggested minimum negative movement ({min_neg}) for point {mtm_point}")
 
     def apply_no_extension(self, row, selected_df, extension_type="CCW", tolerance=0):
-        try:
-            mtm_point = row['mtm points']
-            mtm_dependent = row['mtm_dependent']
+        mtm_point = row['mtm points']
+        mtm_dependent = row['mtm_dependent']
 
+        # Get movement limits 
+        max_pos = row['maximum_movement_inches_positive']
+        max_neg = row['maximum_movement_inches_negative']
+        min_pos = row['minimum_movement_inches_positive']
+        min_neg = row['minimum_movement_inches_negative']   
+
+        self.check_alteration_limits(self.alteration_movement, max_pos, max_neg, min_pos, min_neg, mtm_point)
+
+        try:
             selected_df_copy = selected_df.copy()
             p1, p2 = self._get_point_coordinates(mtm_point, mtm_dependent, selected_df_copy)
             movement_x, movement_y = row['movement_x'], row['movement_y']
@@ -678,7 +678,9 @@ class PieceAlterationProcessor:
             # Move the MTM point
             new_mtm_x = p1[0] + (self.alteration_movement * movement_x)
             new_mtm_y = p1[1] + (self.alteration_movement * movement_y)
+
             selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_point, ['pl_point_altered_x', 'pl_point_altered_y']] = [new_mtm_x, new_mtm_y]
+            logging.info(f"MTM point {mtm_point} moved from ({p1[0]}, {p1[1]}) to ({new_mtm_x}, {new_mtm_y})")
 
             # Calculate the movement vector
             movement_vector = np.array([new_mtm_x, new_mtm_y]) - np.array(p1)
@@ -690,14 +692,16 @@ class PieceAlterationProcessor:
                     new_point = original_point + movement_vector
                     selected_df_copy.loc[i, ['pl_point_altered_x', 'pl_point_altered_y']] = new_point
 
-            logging.info(f"{extension_type} No Extension applied. MTM point {mtm_point} moved to ({new_mtm_x}, {new_mtm_y})")
+            logging.info(f"{extension_type} No Extension applied. MTM point {mtm_point} moved from ({p1[0]}, {p1[1]}) to ({new_mtm_x}, {new_mtm_y})")
             logging.info(f"MTM dependent {mtm_dependent} remains fixed at ({p2[0]}, {p2[1]})")
+
+            selected_df_copy.to_csv("data/ccw_no_ext_df.csv", index=False)
 
             return row, selected_df_copy
 
         except Exception as e:
             logging.error(f"Failed to apply {extension_type} No Extension alteration: {e}")
-            return row, selected_df
+            return row, selected_df  # Return original row and DataFrame without alteration
 
     def _add_distance_to_points(self, df, p1, p2):
         """Adds the Euclidean distance from p1 and p2 to each point in the DataFrame."""
@@ -709,9 +713,18 @@ class PieceAlterationProcessor:
         """
         Apply CW or CCW Ext alteration to the MTM point itself, and record surrounding points for adjustment later.
         """
+        mtm_point = row['mtm points']
+        mtm_dependent = row['mtm_dependent']  
+
+        # Get movement limits 
+        max_pos = row['maximum_movement_inches_positive']
+        max_neg = row['maximum_movement_inches_negative']
+        min_pos = row['minimum_movement_inches_positive']
+        min_neg = row['minimum_movement_inches_negative']   
+
+        self.check_alteration_limits(self.alteration_movement, max_pos, max_neg, min_pos, min_neg, mtm_point)
+
         try:
-            mtm_point = row['mtm points']
-            mtm_dependent = row['mtm_dependent']
 
             selected_df_copy = selected_df.copy()
             p1, p2 = self._get_point_coordinates(mtm_point, mtm_dependent, selected_df_copy)
@@ -1045,6 +1058,7 @@ class PieceAlterationProcessor:
             elif xy_move_count > 1:
                 logging.warning(f"More than 1 instance of 'X Y MOVE' found: {xy_move_count} instances.")
                 # Handle multiple X Y MOVE instances if needed
+                return selected_df_copy
 
         except Exception as e:
             logging.error(f"Failed to apply XY Move correction: {e}")
@@ -1213,92 +1227,6 @@ class PieceAlterationProcessor:
                 total_movement += movement
                 count += 1
         return total_movement / count if count > 0 else [0, 0]
-
-    def apply_mtm_correction(self, selected_df):
-        """
-        Post-processing.
-        Applies MTM correction by identifying the rows where 'mtm_dependent' is equal to 'mtm points',
-        both values are not NaN, and the 'alteration_type' is "X Y MOVE". Additionally, it finds the
-        adjacent MTM points (both left and right), and applies movement adjustments to the points
-        that fall between them using the movement values of the current MTM point.
-        
-        :param selected_df: The DataFrame containing all points, ordered as required.
-        :return: A DataFrame filtered where 'mtm_dependent' is equal to 'mtm points', both are not NaN,
-                and 'alteration_type' is "X Y MOVE", including adjacent MTM points and intermediate pl_points.
-        """
-        try:
-            # Ensure the relevant columns are numeric
-            selected_df['pl_point_x'] = pd.to_numeric(selected_df['pl_point_x'], errors='coerce')
-            selected_df['pl_point_y'] = pd.to_numeric(selected_df['pl_point_y'], errors='coerce')
-            selected_df['pl_point_altered_x'] = pd.to_numeric(selected_df['pl_point_altered_x'], errors='coerce')
-            selected_df['pl_point_altered_y'] = pd.to_numeric(selected_df['pl_point_altered_y'], errors='coerce')
-            selected_df['movement_x'] = pd.to_numeric(selected_df['movement_x'], errors='coerce')
-            selected_df['movement_y'] = pd.to_numeric(selected_df['movement_y'], errors='coerce')
-
-            # Filter DataFrame where 'mtm_dependent' equals 'mtm points', neither is NaN,
-            # and 'alteration_type' is "X Y MOVE"
-            filtered_df = selected_df[
-                (selected_df['mtm_dependent'] == selected_df['mtm points']) &
-                selected_df['mtm_dependent'].notna() &
-                selected_df['mtm points'].notna() &
-                (selected_df['alteration_type'] == "X Y MOVE")
-            ]
-
-            # Sort the DataFrame by 'mtm points' to ensure proper ordering
-            #selected_df = selected_df.sort_values(by='mtm points').reset_index(drop=True)
-
-            # Loop through the filtered rows and apply the correction
-            for idx, row in filtered_df.iterrows():
-                mtm_point = row['mtm points']
-                movement_x = row['movement_x']
-                movement_y = row['movement_y']
-
-                # Log the movement values for the current MTM point
-                logging.info(f"MTM Point: {mtm_point}, Applying Movement X: {movement_x}, Movement Y: {movement_y}")
-
-                # Find the previous MTM point (largest MTM point smaller than the current one)
-                previous_point = selected_df[selected_df['mtm points'] < mtm_point].iloc[-1] if not selected_df[selected_df['mtm points'] < mtm_point].empty else None
-                
-                # Find the next MTM point (smallest MTM point larger than the current one)
-                next_candidates = selected_df[selected_df['mtm points'] > mtm_point]
-                next_point = next_candidates[next_candidates['mtm points'] == mtm_point + 1].iloc[0] if not next_candidates[next_candidates['mtm points'] == mtm_point + 1].empty else next_candidates.iloc[0] if not next_candidates.empty else None
-
-                # Get the points between previous and next points (excluding the MTM points themselves)
-                if previous_point is not None and next_point is not None:
-                    points_in_range = selected_df[
-                        (selected_df['pl_point_x'] > previous_point['pl_point_x']) &  # Strict inequality to exclude previous_point
-                        (selected_df['pl_point_x'] < next_point['pl_point_x'])  # Strict inequality to exclude next_point
-                    ]
-                else:
-                    points_in_range = pd.DataFrame()  # No points if previous or next are None
-
-                # Apply movement to the points in between (excluding previous and next MTM points)
-                for point_idx, point in points_in_range.iterrows():
-                    current_x = point['pl_point_altered_x'] if pd.notna(point['pl_point_altered_x']) else point['pl_point_x']
-                    current_y = point['pl_point_altered_y'] if pd.notna(point['pl_point_altered_y']) else point['pl_point_y']
-
-                    # Apply the movement using the movement_x and movement_y from the current MTM point
-                    altered_x = current_x + movement_x
-                    altered_y = current_y + movement_y
-
-                    # Update these values directly in selected_df
-                    selected_df.loc[point_idx, 'pl_point_altered_x'] = altered_x
-                    selected_df.loc[point_idx, 'pl_point_altered_y'] = altered_y
-
-                    # Log the movement applied to each in-between point
-                    logging.info(f"Applied to Point {point_idx}: New X: {altered_x}, New Y: {altered_y}")
-
-                # Check if points_in_range is not empty before logging
-                if not points_in_range.empty and 'pl_point_x' in points_in_range.columns and 'pl_point_y' in points_in_range.columns:
-                    logging.info(f"Points in Range Updated: {points_in_range[['pl_point_x', 'pl_point_y']]}")
-                else:
-                    logging.info("No points in range for this MTM point.")
-
-            return selected_df
-
-        except Exception as e:
-            logging.error(f"Failed to apply MTM correction: {e}")
-            return None
 
     def get_notch_points(self, perimeter_threshold=0.1575, tolerance=0.50, angle_threshold=60.0, small_displacement_threshold=0.1):
         """
@@ -1494,7 +1422,7 @@ if __name__ == "__main__":
     ## LGFG-SH-01-CCB-FO
     #debug_alteration_rule = "1LTH-BACK"
     #debug_alteration_rule = "1LTH-FRONT"
-    #debug_alteration_rule = "1LTH-FULL"
+    debug_alteration_rule = "1LTH-FULL"
     #debug_alteration_rule = "2ARMHOLEDN"
     #debug_alteration_rule = "2ARMHOLEIN"
     #debug_alteration_rule = "3-COLLAR"
@@ -1508,7 +1436,7 @@ if __name__ == "__main__":
     #debug_alteration_rule = "7F-BELLY"
     #debug_alteration_rule = "7F-ERECT"
     #debug_alteration_rule = "7F-SH-BKSL"
-    debug_alteration_rule = "7F-SHPOINT"
+    #debug_alteration_rule = "7F-SHPOINT"
     #debug_alteration_rule = "7F-SHSLOPE"
     #debug_alteration_rule = "7F-SHSQUAR"
     #debug_alteration_rule = "7F-STOOPED"
@@ -1521,7 +1449,7 @@ if __name__ == "__main__":
     #debug_alteration_rule = "WAISTSMOTH"
 
 
-    alteration_movement = 5 # INCHES (can be positive or negative)
+    alteration_movement = 0.75 # INCHES (can be positive or negative)
     
     make_alteration = PieceAlterationProcessor(piece_table_path=piece_table_path,
                                                vertices_table_path=vertices_table_path,
