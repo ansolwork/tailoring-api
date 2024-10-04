@@ -201,8 +201,8 @@ class PlotGenerator:
         self.plot_vertices(file_path_vertices, file_path)
 
 if __name__ == "__main__":
-    file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_1LTH-FULL.csv"
-    #file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_4-WAIST.csv"
+    #file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_1LTH-FULL.csv"
+    file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_4-WAIST.csv"
     #file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_7F-SHPOINT.csv"
     #file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_1LTH-FRONT.csv"
 

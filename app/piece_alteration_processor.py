@@ -22,7 +22,6 @@ pd.set_option('display.max_columns', None)   # Display all columns
 pd.set_option('display.width', None)         # No truncation on width
 
 # TODO: Go through the alterations we have done currently
-# TODO: Add limitation check for XY Movem
 # TODO: Start with 1LTH-FULL
 
 class PieceAlterationProcessor:
@@ -395,60 +394,6 @@ class PieceAlterationProcessor:
             else:
                 logging.warning(f"Debug alteration type '{self.debug_alteration_rule}' not found in requested alterations.")
             return  # Early return after processing the debug alteration
-
-        # Full Alteration Process
-        #logging.info("Running Full Alteration Process")
-        #all_altered_dfs = []
-
-        #for alteration_rule in self.alteration_rules:
-        #    altered_df = apply_single_rule(alteration_rule)
-        #    all_altered_dfs.append(altered_df)
-
-            # Optional: Find closest altered point
-            # for index, row in altered_df.iterrows():
-            #     closest_point, closest_distance = self.find_closest_altered_point(row, altered_df)
-            #     if closest_point is not None:
-            #         logging.info(f"Closest altered point to {row['mtm points']} is {closest_point['mtm points']} at distance {closest_distance:.2f}.")
-
-        # Concatenate all the altered DataFrames
-        #self.altered_df = pd.concat(all_altered_dfs, ignore_index=True)
-
-        # Save the final altered DataFrame to CSV
-        #save_filepath = f"{self.save_folder_processed_pieces}/processed_alterations_{self.piece_name}{self.save_file_format}"
-        #self.processing_utils.save_csv(self.altered_df, save_filepath)
-        #logging.info(f"Altered DataFrame saved to {save_filepath}")
-        
-        #logging.info("Running Full Alteration Process")
-        #all_altered_dfs = []
-
-        # Loop through all alteration rules (not types!)
-        #for alteration_rule in self.alteration_rules:
-            #selected_df = self.alteration_dfs[alteration_rule]
-
-            # Apply the alteration to every row in the selected_df
-            #for index, row in selected_df.iterrows():
-                # Apply the alteration and return both row and selected_df
-            #    row, selected_df = self.apply_alteration_to_row(row, selected_df)
-                # Update the row back into selected_df
-            #    selected_df.loc[index] = row
-
-            # Find closest altered Row 
-            #for index, row in selected_df.iterrows():
-            #    closest_point, closest_distance = self.find_closest_altered_point(row, selected_df)
-            #    print(closest_point)
-            #    if closest_point is not None:
-            #        logging.info(f"Closest altered point to {row['mtm points']} is {closest_point['mtm points']} at distance {closest_distance:.2f}.")
-
-            # Append the fully altered DataFrame for this rule
-            #all_altered_dfs.append(selected_df)
-
-        # Concatenate all the altered DataFrames
-        #self.altered_df = pd.concat(all_altered_dfs, ignore_index=True)
-
-        # Save the final altered DataFrame to CSV
-        #save_filepath = f"{self.save_folder_processed_pieces}/proces sed_alterations_{self.piece_name}{self.save_file_format}"
-        #self.processing_utils.save_csv(self.altered_df, save_filepath)
-        #logging.info(f"Altered DataFrame saved to {save_filepath}")
         
     # Get matching points for a particular MTM, now using selected_df instead of start_df
     def get_pl_points(self, matching_pt, df):
@@ -467,161 +412,190 @@ class PieceAlterationProcessor:
         return None, None
     
     def re_adjust_points(self, selected_df):
-        """
-        After applying all CW Ext and CCW Ext, adjust all points that were marked for adjustment.
-        Points that are in the `cw_adjustment_points` and `ccw_adjustment_points` are updated here.
-        
-        :param selected_df: The DataFrame with all altered points.
-        :return: The updated DataFrame after re-adjustments.
-        """
         try:
-            # First, apply adjustments to CW Ext adjustment points
-            if not self.cw_adjustment_points.empty:
-                logging.info("Applying final adjustments to CW Ext adjustment points.")
-                self.cw_adjustment_points = self.apply_adjustment_to_points(
-                    "CW Ext",  # Pass the alteration type for CW Ext
-                    self.cw_adjustment_points,
-                    selected_df
+            logging.info(f"CW adjustment points: {len(self.cw_adjustment_points)}")
+            logging.info(f"CCW adjustment points: {len(self.ccw_adjustment_points)}")
+
+            if not self.cw_adjustment_points.empty and not self.ccw_adjustment_points.empty:
+                # Both CW and CCW extensions occurred
+                logging.info("Applying final adjustments to CW and CCW Ext adjustment points separately.")
+                
+                # Find the common MTM point
+                cw_mtm = self.cw_adjustment_points[self.cw_adjustment_points['alteration_type'] == 'CW Ext'].iloc[0]
+                ccw_mtm = self.ccw_adjustment_points[self.ccw_adjustment_points['alteration_type'] == 'CCW Ext'].iloc[0]
+                
+                if cw_mtm['mtm points'] != ccw_mtm['mtm points']:
+                    logging.warning("CW and CCW MTM points do not match. Using CW MTM point.")
+                
+                mtm_point = cw_mtm
+                
+                # Calculate total movement
+                total_movement = (cw_mtm['movement_y'] + ccw_mtm['movement_y']) / 2
+                
+                # Adjust notch points first
+                self.cw_adjustment_points = self.adjust_notch_points(self.cw_adjustment_points, mtm_point, total_movement)
+                self.ccw_adjustment_points = self.adjust_notch_points(self.ccw_adjustment_points, mtm_point, total_movement)
+                
+                # Adjust points in range
+                self.cw_adjustment_points = self.apply_adjustment_to_points_in_range(
+                    alteration_type="CW Ext",
+                    adjustment_points=self.cw_adjustment_points,
+                    selected_df=selected_df,
+                    total_movement=total_movement,
+                    mtm_point=mtm_point
                 )
                 selected_df.update(self.cw_adjustment_points)
-
-            # Then, apply adjustments to CCW Ext adjustment points
-            if not self.ccw_adjustment_points.empty:
-                logging.info("Applying final adjustments to CCW Ext adjustment points.")
-                self.ccw_adjustment_points = self.apply_adjustment_to_points(
-                    "CCW Ext",  # Pass the alteration type for CCW Ext
-                    self.ccw_adjustment_points,
-                    selected_df
+                
+                self.ccw_adjustment_points = self.apply_adjustment_to_points_in_range(
+                    alteration_type="CCW Ext",
+                    adjustment_points=self.ccw_adjustment_points,
+                    selected_df=selected_df,
+                    total_movement=total_movement,
+                    mtm_point=mtm_point
                 )
                 selected_df.update(self.ccw_adjustment_points)
+            
+            else:
+                # If only one type of extension occurred, proceed as before
+                if not self.cw_adjustment_points.empty:
+                    logging.info("Applying final adjustments to CW Ext adjustment points.")
+                    self.cw_adjustment_points = self.adjust_notch_points(self.cw_adjustment_points, None, None)
+                    self.cw_adjustment_points = self.apply_adjustment_to_points_in_range(
+                        alteration_type="CW Ext",
+                        adjustment_points=self.cw_adjustment_points,
+                        selected_df=selected_df
+                    )
+                    selected_df.update(self.cw_adjustment_points)
+
+                if not self.ccw_adjustment_points.empty:
+                    logging.info("Applying final adjustments to CCW Ext adjustment points.")
+                    self.ccw_adjustment_points = self.adjust_notch_points(self.ccw_adjustment_points, None, None)
+                    self.ccw_adjustment_points = self.apply_adjustment_to_points_in_range(
+                        alteration_type="CCW Ext",
+                        adjustment_points=self.ccw_adjustment_points,
+                        selected_df=selected_df
+                    )
+                    selected_df.update(self.ccw_adjustment_points)
 
             return selected_df
 
         except Exception as e:
             logging.error(f"Error during re-adjustments: {e}")
+            logging.error(f"CW adjustment points: {self.cw_adjustment_points}")
+            logging.error(f"CCW adjustment points: {self.ccw_adjustment_points}")
             return selected_df
 
-    def apply_adjustment_to_points(self, 
-                                   alteration_type, 
-                                   adjustment_points, 
-                                   selected_df,
-                                   notch_point_proximity_margin = 0.2):
-        """
-        Apply movement adjustments to the given adjustment points using a non-linear scaling function (e.g., polynomial).
-        
-        :param alteration_type: The type of alteration being applied (CW Ext or CCW Ext).
-        :param adjustment_points: DataFrame of points that need to be adjusted.
-        :param selected_df: The DataFrame containing all altered points for comparison.
-        """
-        # Find the MTM point where the specific alteration (CW Ext or CCW Ext) exists
-        mtm_row = adjustment_points[adjustment_points['alteration_type'] == alteration_type].iloc[0]
-        mtm_point = mtm_row['mtm points']
-        mtm_dependent = mtm_row['mtm_dependent']
+    def adjust_notch_points(self, adjustment_points, mtm_point=None, total_movement=None, notch_point_proximity_margin=0.2):
+        if mtm_point is None or total_movement is None:
+            mtm_point = adjustment_points[adjustment_points['alteration_type'].isin(['CW Ext', 'CCW Ext'])].iloc[0]
+            total_movement = mtm_point['movement_y']
 
-        # Get the most recent MTM coordinates
-        mtm_coords = (
-            mtm_row[['pl_point_altered_x', 'pl_point_altered_y']].fillna(mtm_row[['pl_point_x', 'pl_point_y']]).to_numpy()
-        )
+        mtm_coords_original = np.array([mtm_point['pl_point_x'], mtm_point['pl_point_y']])
+        mtm_coords_altered = np.array([mtm_point['pl_point_altered_x'], mtm_point['pl_point_altered_y']])
 
-        # Find if there is a more recent update for the same MTM point in the selected_df (from either CW or CCW)
-        more_recent_update = selected_df[(selected_df['mtm points'] == mtm_point) &
-                                        (selected_df['pl_point_altered_x'].notna()) &
-                                        (selected_df['pl_point_altered_y'].notna())]
-
-        if not more_recent_update.empty:
-            logging.info(f"Found more recent update for MTM point {mtm_point}")
-            mtm_coords = more_recent_update[['pl_point_altered_x', 'pl_point_altered_y']].to_numpy()[0]
-
-        # Get the dependent point coordinates (use altered if available, otherwise original)
-        mtm_dependent_row = adjustment_points[adjustment_points['mtm points'] == mtm_dependent].iloc[0]
-        mtm_dependent_coords = (
-            mtm_dependent_row[['pl_point_x', 'pl_point_y']].to_numpy()
-        )
-        movement_x = mtm_row['movement_x']
-        movement_y = mtm_row['movement_y']
-
-        total_distance = np.linalg.norm(mtm_dependent_coords - mtm_coords)
-
-        # Debug prints
-        print("MTM Point:", mtm_point)
-        print("MTM Coords:", mtm_coords)
-        print("MTM Dependent Point:", mtm_dependent)
-        print("MTM Dependent Coords:", mtm_dependent_coords)
-
-        # Ensure the MTM point is not updated again during re-adjustment
-        adjustment_points = adjustment_points[adjustment_points['mtm points'] != mtm_point]
+        def distance_to_mtm(point):
+            return np.linalg.norm(point - mtm_coords_original)
 
         for idx, point in adjustment_points.iterrows():
-            # Identify if this point is a notch point
+            current_coords = point[['pl_point_x', 'pl_point_y']].to_numpy()
+            is_notch = 'notch' in str(point.get('notch_labels', ''))
+            distance_to_mtm_original = distance_to_mtm(current_coords)
+
+            if is_notch and distance_to_mtm_original <= notch_point_proximity_margin:
+                logging.info(f"Notch point found near MTM point {mtm_point['mtm points']}. Moving it directly by the same movement.")
+
+                diff_coords = np.abs(current_coords - mtm_coords_original)
+                altered_coords = mtm_coords_altered - diff_coords
+
+                adjustment_points.loc[idx, 'pl_point_altered_x'] = altered_coords[0]
+                adjustment_points.loc[idx, 'pl_point_altered_y'] = altered_coords[1]
+
+        return adjustment_points
+
+    def apply_adjustment_to_points_in_range(self, 
+                                            alteration_type, 
+                                            adjustment_points, 
+                                            selected_df,
+                                            total_movement=None,
+                                            mtm_point=None):
+        logging.info(f"Applying adjustments for {alteration_type}")
+        logging.info(f"Number of adjustment points: {len(adjustment_points)}")
+        logging.info(f"Total movement: {total_movement}")
+
+        if mtm_point is None or total_movement is None:
+            mtm_point = adjustment_points[adjustment_points['alteration_type'].isin(['CW Ext', 'CCW Ext'])].iloc[0]
+            total_movement = mtm_point['movement_y']
+
+        mtm_coords_original = np.array([mtm_point['pl_point_x'], mtm_point['pl_point_y']])
+        mtm_coords_altered = np.array([mtm_point['pl_point_altered_x'], mtm_point['pl_point_altered_y']])
+
+        logging.info(f"MTM point original coordinates: {mtm_coords_original}")
+        logging.info(f"MTM point altered coordinates: {mtm_coords_altered}")
+
+        def distance_to_mtm(point):
+            return np.linalg.norm(point - mtm_coords_original)
+
+        max_distance = max(distance_to_mtm(point[['pl_point_x', 'pl_point_y']].to_numpy()) for _, point in adjustment_points.iterrows())
+        logging.info(f"Maximum distance from MTM point: {max_distance}")
+
+        def curved_adjustment(relative_distance, curvature=0.5):
+            return 1 - (relative_distance ** curvature)
+
+        def gaussian_smoothing(relative_distance, sigma=0.3):
+            return np.exp(-0.5 * (relative_distance / sigma)**2)
+
+        def cosine_smoothing(relative_distance):
+            return 0.5 * (1 + np.cos(np.pi * relative_distance))
+        
+        def linear_smoothing(relative_distance):
+            return 1 - relative_distance
+
+        def smoothstep(relative_distance):
+            x = np.clip(relative_distance, 0, 1)
+            return 1 - (x * x * (3 - 2 * x))  # Reversed smoothstep
+        
+        def smoothing_function(relative_distance):
+            #return gaussian_smoothing(relative_distance, sigma=0.3)
+            #return cosine_smoothing(relative_distance)
+            #return smoothstep(relative_distance)
+            return linear_smoothing(relative_distance)
+
+        for idx, point in adjustment_points.iterrows():
+            logging.info(f"Processing point {idx}: {point.get('mtm points', 'nan')}")
+            current_coords = point[['pl_point_x', 'pl_point_y']].to_numpy()
+            logging.info(f"  Original coordinates: {current_coords}")
+
+            is_mtm_dependent = not pd.isna(point.get('mtm points'))
             is_notch = 'notch' in str(point.get('notch_labels', ''))
 
-            # Use altered coordinates if available, otherwise use original ones
-            current_x = point['pl_point_altered_x'] if pd.notna(point['pl_point_altered_x']) else point['pl_point_x']
-            current_y = point['pl_point_altered_y'] if pd.notna(point['pl_point_altered_y']) else point['pl_point_y']
+            #if is_mtm_dependent:
+            #    logging.info(f"  MTM-dependent point: Keeping original position.")
+            #     continue
+            if is_notch:
+                logging.info(f"  Notch point: Skipping adjustment.")
+                continue
 
-            # Calculate the distance of the current point from the MTM point
-            point_coords = np.array([current_x, current_y], dtype=np.float64)
+            distance_to_mtm_original = distance_to_mtm(current_coords)
+            relative_distance = distance_to_mtm_original / max_distance
+            adjustment_factor = smoothing_function(relative_distance)
 
-            # Dummy: Calculate temporary "new" point coords based on the altered distance 
+            logging.info(f"  Distance to MTM: {distance_to_mtm_original}")
+            logging.info(f"  Relative distance: {relative_distance}")
+            logging.info(f"  Adjustment factor: {adjustment_factor}")
 
-            distance_to_mtm = np.linalg.norm(point_coords - mtm_coords)
-            distance_to_mtm_original = np.linalg.norm(point_coords - mtm_row[['pl_point_x', 'pl_point_y']].to_numpy())
+            vector_to_point = current_coords - mtm_coords_original
+            new_base_position = mtm_coords_altered + vector_to_point
 
-            # Handle notch points that are near the MTM point (within the proximity_margin)
-            if is_notch and distance_to_mtm_original <= notch_point_proximity_margin:
-                logging.info(f"Notch point found near MTM point {mtm_point}. Moving it directly by the same movement.")
+            point_movement = (new_base_position - current_coords) * adjustment_factor
+            altered_coords = current_coords + point_movement
 
-                # Does this handle both positive and negative?
-                diff_coords = np.abs(point_coords - mtm_row[['pl_point_x', 'pl_point_y']])
+            logging.info(f"  Vector to point: {vector_to_point}")
+            logging.info(f"  New base position: {new_base_position}")
+            logging.info(f"  Point movement: {point_movement}")
+            logging.info(f"  Altered coordinates: {altered_coords}")
 
-                # Convert to NumPy arrays explicitly to avoid any FutureWarning
-                mtm_coords = np.array(mtm_coords)
-                diff_coords = np.array(diff_coords)
-                
-                # Move the notch point by the same movement as the MTM point
-                altered_x = mtm_coords[0] - diff_coords[0]
-                altered_y = mtm_coords[1] - diff_coords[1]
-
-            else:
-                # Example for cubic scaling
-                # adjustment_factor = 1 - (distance_to_mtm / total_distance) ** 3
-                
-                # Apply exponential decay or other scaling function
-                lambda_param = 1.0  # Adjust this for different decay rates
-                adjustment_factor = np.exp(-lambda_param * (distance_to_mtm / total_distance))
-                
-                # Ensure the dependent point stays fixed
-                if np.isclose(distance_to_mtm, total_distance):
-                    adjustment_factor = 0  # Fix the last point (dependent point)
-                
-                # Example for logarithmic scaling
-                #adjustment_factor = 1 - np.log(distance_to_mtm + 1) / np.log(total_distance + 1)
-                
-                # Example for sine scaling
-                # adjustment_factor = np.sin(np.pi / 2 * (distance_to_mtm / total_distance))
-
-                # Example for inverse proportional scaling
-                # k = 1  # You can adjust this value to control the slope
-                # adjustment_factor = 1 / (1 + k * (distance_to_mtm / total_distance))
-                
-                # Example for sigmoid scaling
-                # a, b = 10, 0.5  # Tuning parameters
-                # adjustment_factor = 1 / (1 + np.exp(a * (distance_to_mtm / total_distance - b)))
-
-                if movement_x != 0 and movement_y == 0:
-                    altered_x = current_x + adjustment_factor
-                    altered_y = current_y 
-
-                elif movement_y != 0 and movement_x == 0:
-                    altered_x = current_x 
-                    altered_y = current_y + adjustment_factor
-                else:
-                    altered_x = current_x  + adjustment_factor
-                    altered_y = current_y + adjustment_factor
-
-            # Update the altered values in the DataFrame
-            adjustment_points.loc[idx, 'pl_point_altered_x'] = altered_x
-            adjustment_points.loc[idx, 'pl_point_altered_y'] = altered_y
+            adjustment_points.loc[idx, 'pl_point_altered_x'] = altered_coords[0]
+            adjustment_points.loc[idx, 'pl_point_altered_y'] = altered_coords[1]
 
         return adjustment_points
     
@@ -1430,14 +1404,14 @@ if __name__ == "__main__":
     ## LGFG-SH-01-CCB-FO
     #debug_alteration_rule = "1LTH-BACK"
     #debug_alteration_rule = "1LTH-FRONT"
-    debug_alteration_rule = "1LTH-FULL"
+    #debug_alteration_rule = "1LTH-FULL"
     #debug_alteration_rule = "2ARMHOLEDN"
     #debug_alteration_rule = "2ARMHOLEIN"
     #debug_alteration_rule = "3-COLLAR"
     #debug_alteration_rule = "3-SHOULDER"
     #debug_alteration_rule = "4-CHEST"
     #debug_alteration_rule = "4-HIP"
-    #debug_alteration_rule = "4-WAIST"
+    debug_alteration_rule = "4-WAIST"
     #debug_alteration_rule = "4CHESTACRS" 
     #debug_alteration_rule = "5-DARTBACK"
     #debug_alteration_rule = "6-PLACKET"
@@ -1457,7 +1431,7 @@ if __name__ == "__main__":
     #debug_alteration_rule = "WAISTSMOTH"
 
 
-    alteration_movement = 0.75 # INCHES (can be positive or negative)
+    alteration_movement = 5 # INCHES (can be positive or negative)
     
     make_alteration = PieceAlterationProcessor(piece_table_path=piece_table_path,
                                                vertices_table_path=vertices_table_path,
