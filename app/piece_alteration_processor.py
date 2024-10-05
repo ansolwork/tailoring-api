@@ -941,6 +941,9 @@ class PieceAlterationProcessor:
             for col in numeric_columns:
                 selected_df_copy[col] = pd.to_numeric(selected_df_copy[col], errors='coerce')
 
+            # Get all MTM points
+            all_mtm_points = selected_df_copy[selected_df_copy['mtm points'].notna()]['mtm points'].sort_values()
+
             # Filter DataFrame for the X Y MOVE alteration
             filtered_df = selected_df_copy[
                 (selected_df_copy['mtm_dependent'] == selected_df_copy['mtm points']) &
@@ -951,95 +954,87 @@ class PieceAlterationProcessor:
 
             xy_move_count = filtered_df['alteration_type'].value_counts().get('X Y MOVE', 0)
 
-            if xy_move_count == 1:
-                logging.info(f"1 instance of 'X Y MOVE' found. Proceeding with processing.")
+            if xy_move_count >= 1:
+                logging.info(f"{xy_move_count} instance(s) of 'X Y MOVE' found. Processing each one.")
 
-                mtm_point = filtered_df['mtm points'].iloc[0]
-                mtm_row = filtered_df.iloc[0]
-                
-                # Get the coordinates of the current MTM point (altered if available, otherwise original)
-                mtm_coords = np.array([
-                    mtm_row['pl_point_altered_x'] if pd.notna(mtm_row['pl_point_altered_x']) else mtm_row['pl_point_x'],
-                    mtm_row['pl_point_altered_y'] if pd.notna(mtm_row['pl_point_altered_y']) else mtm_row['pl_point_y']
-                ])
-
-                # Get the movement of the MTM point
-                mtm_movement_x = mtm_row['movement_x']
-                mtm_movement_y = mtm_row['movement_y']
-
-                # Find the previous and next MTM points
-                previous_mtm = selected_df_copy[selected_df_copy['mtm points'].notna() & (selected_df_copy['mtm points'] < mtm_point)]['mtm points'].max()
-                next_mtm = selected_df_copy[selected_df_copy['mtm points'].notna() & (selected_df_copy['mtm points'] > mtm_point)]['mtm points'].min()
-
-                if pd.isna(previous_mtm) or pd.isna(next_mtm):
-                    logging.warning("Either the previous or the next MTM point is missing.")
-                    return selected_df_copy
-
-                logging.info(f"Current MTM: {mtm_point}")
-                logging.info(f"Previous MTM: {previous_mtm}")
-                logging.info(f"Next MTM: {next_mtm}")
-
-                # Get all points between current and next MTM points
-                points_in_range = selected_df_copy[
-                    (selected_df_copy['point_order'] > selected_df_copy[selected_df_copy['mtm points'] == mtm_point]['point_order'].iloc[0]) &
-                    (selected_df_copy['point_order'] < selected_df_copy[selected_df_copy['mtm points'] == next_mtm]['point_order'].iloc[0])
-                ]
-
-                # Find the notch point associated with the current MTM point, if it exists
-                notch_point = selected_df_copy[
-                    (selected_df_copy['point_order'] > selected_df_copy[selected_df_copy['mtm points'] == mtm_point]['point_order'].iloc[0]) &
-                    (selected_df_copy['point_order'] < selected_df_copy[selected_df_copy['mtm points'] == next_mtm]['point_order'].iloc[0]) &
-                    (selected_df_copy['notch_labels'].notna())
-                ].iloc[0] if not points_in_range[points_in_range['notch_labels'].notna()].empty else None
-
-                # Calculate the alteration vector
-                alteration_vector = np.array([mtm_movement_x, mtm_movement_y]) * self.alteration_movement
-
-                # Apply movement to points
-                for idx, point in points_in_range.iterrows():
-                    current_x = point['pl_point_altered_x'] if pd.notna(point['pl_point_altered_x']) else point['pl_point_x']
-                    current_y = point['pl_point_altered_y'] if pd.notna(point['pl_point_altered_y']) else point['pl_point_y']
+                for _, mtm_row in filtered_df.iterrows():
+                    mtm_point = mtm_row['mtm points']
                     
-                    if pd.isna(current_x) or pd.isna(current_y):
-                        logging.warning(f"Point {point['point_order']} has NaN coordinates. Skipping.")
-                        continue
+                    # Get the coordinates of the current MTM point (altered if available, otherwise original)
+                    mtm_coords = np.array([
+                        mtm_row['pl_point_altered_x'] if pd.notna(mtm_row['pl_point_altered_x']) else mtm_row['pl_point_x'],
+                        mtm_row['pl_point_altered_y'] if pd.notna(mtm_row['pl_point_altered_y']) else mtm_row['pl_point_y']
+                    ])
 
-                    # Apply the same alteration movement to all points
-                    new_x = current_x + alteration_vector[0]
-                    new_y = current_y + alteration_vector[1]
-                    
-                    selected_df_copy.loc[idx, 'pl_point_altered_x'] = new_x
-                    selected_df_copy.loc[idx, 'pl_point_altered_y'] = new_y
+                    # Get the movement of the MTM point
+                    mtm_movement = np.array([mtm_row['movement_x'], mtm_row['movement_y']]) * self.alteration_movement
 
-                    # Log the movement
-                    original_coords = np.array([current_x, current_y])
-                    new_coords = np.array([new_x, new_y])
-                    movement = new_coords - original_coords
-                    logging.info(f"Point {point['point_order']} moved by {movement}")
+                    # Find the previous and next MTM points
+                    previous_mtm = all_mtm_points[all_mtm_points < mtm_point].max()
+                    next_mtm = all_mtm_points[all_mtm_points > mtm_point].min()
 
-                # Update the MTM point itself
-                selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_point, 'pl_point_altered_x'] = mtm_coords[0]
-                selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_point, 'pl_point_altered_y'] = mtm_coords[1]
+                    logging.info(f"Processing MTM: {mtm_point}")
+                    logging.info(f"Previous MTM: {previous_mtm}")
+                    logging.info(f"Next MTM: {next_mtm}")
 
-                # Update the notch point if it exists
-                if notch_point is not None:
-                    notch_idx = notch_point.name
-                    notch_x = notch_point['pl_point_altered_x'] if pd.notna(notch_point['pl_point_altered_x']) else notch_point['pl_point_x']
-                    notch_y = notch_point['pl_point_altered_y'] if pd.notna(notch_point['pl_point_altered_y']) else notch_point['pl_point_y']
-                    
-                    new_notch_x = notch_x + alteration_vector[0]
-                    new_notch_y = notch_y + alteration_vector[1]
-                    
-                    selected_df_copy.loc[notch_idx, 'pl_point_altered_x'] = new_notch_x
-                    selected_df_copy.loc[notch_idx, 'pl_point_altered_y'] = new_notch_y
-                    
-                    logging.info(f"Notch point {notch_point['point_order']} moved by {alteration_vector}")
+                    # Get all points between previous and next MTM points
+                    points_in_range = selected_df_copy[
+                        (selected_df_copy['point_order'] > selected_df_copy[selected_df_copy['mtm points'] == previous_mtm]['point_order'].iloc[0] if pd.notna(previous_mtm) else selected_df_copy['point_order'].min()) &
+                        (selected_df_copy['point_order'] < selected_df_copy[selected_df_copy['mtm points'] == next_mtm]['point_order'].iloc[0] if pd.notna(next_mtm) else selected_df_copy['point_order'].max())
+                    ]
 
-                return selected_df_copy
+                    # Get coordinates of previous and next MTM points
+                    prev_mtm_coords = selected_df_copy[selected_df_copy['mtm points'] == previous_mtm][['pl_point_x', 'pl_point_y']].iloc[0].values if pd.notna(previous_mtm) else None
+                    next_mtm_coords = selected_df_copy[selected_df_copy['mtm points'] == next_mtm][['pl_point_x', 'pl_point_y']].iloc[0].values if pd.notna(next_mtm) else None
 
-            elif xy_move_count > 1:
-                logging.warning(f"More than 1 instance of 'X Y MOVE' found: {xy_move_count} instances.")
-                # Handle multiple X Y MOVE instances if needed
+                    # Apply movement to points with compression
+                    for idx, point in points_in_range.iterrows():
+                        current_coords = np.array([
+                            point['pl_point_altered_x'] if pd.notna(point['pl_point_altered_x']) else point['pl_point_x'],
+                            point['pl_point_altered_y'] if pd.notna(point['pl_point_altered_y']) else point['pl_point_y']
+                        ])
+                        
+                        if np.isnan(current_coords).any():
+                            logging.warning(f"Point {point['point_order']} has NaN coordinates. Skipping.")
+                            continue
+
+                        # Calculate distance ratio for compression
+                        if point['point_order'] < mtm_row['point_order']:
+                            # Point is before the current MTM point
+                            total_distance = np.linalg.norm(mtm_coords - prev_mtm_coords) if prev_mtm_coords is not None else np.linalg.norm(mtm_coords - current_coords)
+                            point_distance = np.linalg.norm(mtm_coords - current_coords)
+                        else:
+                            # Point is after the current MTM point
+                            total_distance = np.linalg.norm(next_mtm_coords - mtm_coords) if next_mtm_coords is not None else np.linalg.norm(current_coords - mtm_coords)
+                            point_distance = np.linalg.norm(current_coords - mtm_coords)
+
+                        distance_ratio = point_distance / total_distance if total_distance != 0 else 0
+
+                        # Apply compressed movement
+                        new_coords = current_coords + mtm_movement * (1 - distance_ratio)
+
+                        # Check if the new position goes beyond the previous or next MTM point
+                        if prev_mtm_coords is not None and point['point_order'] < mtm_row['point_order']:
+                            if np.dot(new_coords - prev_mtm_coords, mtm_coords - prev_mtm_coords) < 0:
+                                # Compress towards previous MTM point
+                                new_coords = prev_mtm_coords + (mtm_coords - prev_mtm_coords) * distance_ratio
+                        elif next_mtm_coords is not None and point['point_order'] > mtm_row['point_order']:
+                            if np.dot(new_coords - mtm_coords, next_mtm_coords - mtm_coords) < 0:
+                                # Compress towards next MTM point
+                                new_coords = mtm_coords + (next_mtm_coords - mtm_coords) * distance_ratio
+
+                        selected_df_copy.loc[idx, 'pl_point_altered_x'] = new_coords[0]
+                        selected_df_copy.loc[idx, 'pl_point_altered_y'] = new_coords[1]
+
+                        # Log the movement
+                        movement = new_coords - current_coords
+                        logging.info(f"Point {point['point_order']} moved by {movement}")
+
+                    # Update the MTM point itself
+                    new_mtm_coords = mtm_coords + mtm_movement
+                    selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_point, 'pl_point_altered_x'] = new_mtm_coords[0]
+                    selected_df_copy.loc[selected_df_copy['mtm points'] == mtm_point, 'pl_point_altered_y'] = new_mtm_coords[1]
+
                 return selected_df_copy
 
         except Exception as e:
@@ -1405,13 +1400,13 @@ if __name__ == "__main__":
     #debug_alteration_rule = "1LTH-BACK"
     #debug_alteration_rule = "1LTH-FRONT"
     #debug_alteration_rule = "1LTH-FULL"
-    #debug_alteration_rule = "2ARMHOLEDN"
+    debug_alteration_rule = "2ARMHOLEDN"
     #debug_alteration_rule = "2ARMHOLEIN"
     #debug_alteration_rule = "3-COLLAR"
     #debug_alteration_rule = "3-SHOULDER"
     #debug_alteration_rule = "4-CHEST"
     #debug_alteration_rule = "4-HIP"
-    debug_alteration_rule = "4-WAIST"
+    #debug_alteration_rule = "4-WAIST"
     #debug_alteration_rule = "4CHESTACRS" 
     #debug_alteration_rule = "5-DARTBACK"
     #debug_alteration_rule = "6-PLACKET"
@@ -1431,7 +1426,7 @@ if __name__ == "__main__":
     #debug_alteration_rule = "WAISTSMOTH"
 
 
-    alteration_movement = 5 # INCHES (can be positive or negative)
+    alteration_movement = 0.75 # INCHES (can be positive or negative)
     
     make_alteration = PieceAlterationProcessor(piece_table_path=piece_table_path,
                                                vertices_table_path=vertices_table_path,

@@ -202,9 +202,10 @@ class PlotGenerator:
 
 if __name__ == "__main__":
     #file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_1LTH-FULL.csv"
-    file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_4-WAIST.csv"
+    #file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_4-WAIST.csv"
     #file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_7F-SHPOINT.csv"
     #file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_1LTH-FRONT.csv"
+    file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_2ARMHOLEDN.csv"
 
     file_path_vertices = "data/staging_processed/processed_vertices_by_piece/processed_vertices_LGFG-SH-01-CCB-FO.csv"
     
