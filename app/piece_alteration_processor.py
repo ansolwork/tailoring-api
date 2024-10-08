@@ -374,7 +374,8 @@ class PieceAlterationProcessor:
 
             # Check for further alteration points
             if self.xy_move_step_counter > 0 and self.xy_move_step_counter == self.xy_move_count:
-                processed_df = self.xy_move_correction(processed_df)
+                #processed_df = self.xy_move_correction(processed_df)
+                processed_df = self.post_alteration_point_shift(processed_df)
             
             processed_df = self.remove_empty_rows(processed_df)
             processed_df = self.re_adjust_points(processed_df)
@@ -762,6 +763,131 @@ class PieceAlterationProcessor:
         except Exception as e:
             logging.error(f"Failed to apply {extension_type} Ext alteration: {e}")
             return row, selected_df_copy
+        
+    def post_alteration_point_shift(self, selected_df):
+        logging.info("Starting post-alteration point shift")
+        selected_df_copy = selected_df.copy()
+
+        # Get all alteration types
+        alteration_types = selected_df_copy[selected_df_copy['alteration_type'].notna()]['alteration_type'].unique()
+
+        # Group notch points
+        notch_groups = self._group_notch_points(selected_df_copy)
+
+        for alteration_type in alteration_types:
+            logging.info(f"Processing alteration: {alteration_type}")
+
+            relevant_mtm_points = selected_df_copy[
+                (selected_df_copy['alteration_type'] == alteration_type) & 
+                (selected_df_copy['mtm points'].notna())
+            ]['mtm points'].unique()
+            
+            logging.info(f"Relevant MTM points for {alteration_type}: {relevant_mtm_points}")
+
+            for i in range(len(relevant_mtm_points) - 1):
+                mtm_point1 = relevant_mtm_points[i]
+                mtm_point2 = relevant_mtm_points[i + 1]
+                
+                mtm1_data = selected_df_copy[selected_df_copy['mtm points'] == mtm_point1].iloc[0]
+                mtm2_data = selected_df_copy[selected_df_copy['mtm points'] == mtm_point2].iloc[0]
+                
+                order1 = mtm1_data['point_order']
+                order2 = mtm2_data['point_order']
+                
+                movement1_x = mtm1_data['pl_point_altered_x'] - mtm1_data['pl_point_x']
+                movement1_y = mtm1_data['pl_point_altered_y'] - mtm1_data['pl_point_y']
+                movement2_x = mtm2_data['pl_point_altered_x'] - mtm2_data['pl_point_x']
+                movement2_y = mtm2_data['pl_point_altered_y'] - mtm2_data['pl_point_y']
+
+                # Get points in range, excluding MTM points
+                points_in_range = selected_df_copy[
+                    (selected_df_copy['point_order'] > order1) & 
+                    (selected_df_copy['point_order'] < order2) &
+                    (selected_df_copy['mtm points'].isna())
+                ]
+                
+                logging.info(f"Processing points between MTM points: {mtm_point1} and {mtm_point2}")
+                logging.info(f"  Point order range: {order1} to {order2}")
+                logging.info(f"  Number of points in range: {len(points_in_range)}")
+                logging.info(f"  Movement at MTM1: ({movement1_x}, {movement1_y})")
+                logging.info(f"  Movement at MTM2: ({movement2_x}, {movement2_y})")
+
+                # Process regular points
+                for idx, point in points_in_range.iterrows():
+                    if 'notch' not in str(point.get('notch_labels', '')):
+                        t = (point['point_order'] - order1) / (order2 - order1)
+                        shift_x = self.cubic_interpolation(t, movement1_x, movement2_x)
+                        shift_y = self.cubic_interpolation(t, movement1_y, movement2_y)
+                        
+                        selected_df_copy.loc[idx, 'pl_point_altered_x'] = point['pl_point_x'] + shift_x
+                        selected_df_copy.loc[idx, 'pl_point_altered_y'] = point['pl_point_y'] + shift_y
+                        
+                        logging.info(f"  Point {point['point_order']} shifted by ({shift_x}, {shift_y})")
+
+                # Process notch groups
+                for group in notch_groups:
+                    if any(order1 < point['point_order'] < order2 for point in group):
+                        self._move_notch_group(group, selected_df_copy, movement1_x, movement1_y)
+
+        # Verify changes
+        changed_points = selected_df_copy[
+            (selected_df_copy['pl_point_altered_x'] != selected_df_copy['pl_point_x']) |
+            (selected_df_copy['pl_point_altered_y'] != selected_df_copy['pl_point_y'])
+        ]
+        logging.info(f"Total points changed: {len(changed_points)}")
+
+        return selected_df_copy
+
+    def _group_notch_points(self, df):
+        notch_groups = []
+        notch_points = df[df['notch_labels'].str.contains('notch', na=False)].sort_values('point_order')
+        
+        for k, g in groupby(enumerate(notch_points.iterrows()), lambda ix: ix[0] - ix[1][1]['point_order']):
+            group = list(map(lambda x: x[1][1], g))
+            if len(group) >= 3:  # Assuming a notch consists of at least 3 points
+                notch_groups.append(group)
+        
+        return notch_groups
+
+    def _move_notch_group(self, group, df, movement_x, movement_y):
+        for point in group:
+            idx = point.name
+            df.loc[idx, 'pl_point_altered_x'] = point['pl_point_x'] + movement_x
+            df.loc[idx, 'pl_point_altered_y'] = point['pl_point_y'] + movement_y
+        
+        logging.info(f"Moved notch group (size: {len(group)}) by ({movement_x}, {movement_y})")
+
+    def cubic_interpolation(self, t, start, end):
+        # Cubic function: f(t) = -2t^3 + 3t^2
+        # This gives a smooth S-curve interpolation
+        t = -2 * t**3 + 3 * t**2
+        return start + (end - start) * t
+
+    def cubic_interpolation(self, t, start, end):
+        # Cubic function: f(t) = -2t^3 + 3t^2
+        # This gives a smooth S-curve interpolation
+        t = -2 * t**3 + 3 * t**2
+        return start + (end - start) * t
+
+    def _group_notch_points(self, df):
+        notch_groups = []
+        notch_points = df[df['notch_labels'].str.contains('notch', na=False)].sort_values('point_order')
+        
+        for k, g in groupby(enumerate(notch_points.iterrows()), lambda ix: ix[0] - ix[1][1]['point_order']):
+            group = list(map(lambda x: x[1][1], g))
+            if len(group) >= 3:  # Assuming a notch consists of at least 3 points
+                notch_groups.append(group)
+        
+        return notch_groups
+
+    def _move_notch_group(self, group, df, movement_x, movement_y):
+        for point in group:
+            idx = point.name
+            df.loc[idx, 'pl_point_altered_x'] = point['pl_point_x'] + movement_x
+            df.loc[idx, 'pl_point_altered_y'] = point['pl_point_y'] + movement_y
+        
+        logging.info(f"Moved notch group (size: {len(group)}) by ({movement_x}, {movement_y})")
+
 
     def apply_xy_coordinate_adjustment(self, row, selected_df, tolerance = 0):
         """
@@ -973,9 +1099,9 @@ class PieceAlterationProcessor:
                     previous_mtm = all_mtm_points[all_mtm_points < mtm_point].max()
                     next_mtm = all_mtm_points[all_mtm_points > mtm_point].min()
 
-                    logging.info(f"Processing MTM: {mtm_point}")
-                    logging.info(f"Previous MTM: {previous_mtm}")
-                    logging.info(f"Next MTM: {next_mtm}")
+                    #logging.info(f"Processing MTM: {mtm_point}")
+                    #logging.info(f"Previous MTM: {previous_mtm}")
+                    #logging.info(f"Next MTM: {next_mtm}")
 
                     # Get all points between previous and next MTM points
                     points_in_range = selected_df_copy[
@@ -1028,7 +1154,7 @@ class PieceAlterationProcessor:
 
                         # Log the movement
                         movement = new_coords - current_coords
-                        logging.info(f"Point {point['point_order']} moved by {movement}")
+                        #logging.info(f"Point {point['point_order']} moved by {movement}")
 
                     # Update the MTM point itself
                     new_mtm_coords = mtm_coords + mtm_movement
@@ -1132,16 +1258,157 @@ class PieceAlterationProcessor:
             logging.error(f"Error in force-directed algorithm: {str(e)}")
             return None
 
-    def _group_notch_points(self, G):
+    def _group_notch_points(self, df):
         notch_groups = []
-        notch_nodes = [node for node, data in G.nodes(data=True) if data['is_notch']]
+        notch_points = df[df['notch_labels'].str.contains('notch', na=False, case=False)].sort_values('point_order')
         
-        for k, g in groupby(enumerate(notch_nodes), lambda ix: ix[0] - ix[1]):
-            group = list(map(lambda x: x[1], g))
-            if len(group) >= 3:  # Assuming a notch consists of at least 3 points
-                notch_groups.append(group)
-        
+        if notch_points.empty:
+            return notch_groups
+
+        current_group = []
+        prev_order = None
+
+        for _, point in notch_points.iterrows():
+            if prev_order is None or point['point_order'] - prev_order <= 1:
+                current_group.append(point)
+            else:
+                if len(current_group) >= 3:  # Assuming a notch consists of at least 3 points
+                    notch_groups.append(current_group)
+                current_group = [point]
+            prev_order = point['point_order']
+
+        # Add the last group if it meets the criteria
+        if len(current_group) >= 3:
+            notch_groups.append(current_group)
+
         return notch_groups
+
+    def post_alteration_point_shift(self, selected_df):
+        logging.info("Starting post-alteration point shift")
+        selected_df_copy = selected_df.copy()
+
+        # Get all alteration types
+        alteration_types = selected_df_copy[selected_df_copy['alteration_type'].notna()]['alteration_type'].unique()
+
+        # Group notch points
+        notch_groups = self._group_notch_points(selected_df_copy)
+
+        for alteration_type in alteration_types:
+            logging.info(f"Processing alteration: {alteration_type}")
+
+            relevant_mtm_points = selected_df_copy[
+                (selected_df_copy['alteration_type'] == alteration_type) & 
+                (selected_df_copy['mtm points'].notna())
+            ]['mtm points'].unique()
+            
+            logging.info(f"Relevant MTM points for {alteration_type}: {relevant_mtm_points}")
+
+            for i in range(len(relevant_mtm_points) - 1):
+                mtm_point1 = relevant_mtm_points[i]
+                mtm_point2 = relevant_mtm_points[i + 1]
+                
+                mtm1_data = selected_df_copy[selected_df_copy['mtm points'] == mtm_point1].iloc[0]
+                mtm2_data = selected_df_copy[selected_df_copy['mtm points'] == mtm_point2].iloc[0]
+                
+                order1 = mtm1_data['point_order']
+                order2 = mtm2_data['point_order']
+                
+                movement1_x = mtm1_data['pl_point_altered_x'] - mtm1_data['pl_point_x']
+                movement1_y = mtm1_data['pl_point_altered_y'] - mtm1_data['pl_point_y']
+                movement2_x = mtm2_data['pl_point_altered_x'] - mtm2_data['pl_point_x']
+                movement2_y = mtm2_data['pl_point_altered_y'] - mtm2_data['pl_point_y']
+
+                # Get points in range, excluding MTM points
+                points_in_range = selected_df_copy[
+                    (selected_df_copy['point_order'] > order1) & 
+                    (selected_df_copy['point_order'] < order2) &
+                    (selected_df_copy['mtm points'].isna())
+                ]
+                
+                logging.info(f"Processing points between MTM points: {mtm_point1} and {mtm_point2}")
+                logging.info(f"  Point order range: {order1} to {order2}")
+                logging.info(f"  Number of points in range: {len(points_in_range)}")
+                logging.info(f"  Movement at MTM1: ({movement1_x}, {movement1_y})")
+                logging.info(f"  Movement at MTM2: ({movement2_x}, {movement2_y})")
+
+                # Process regular points
+                for idx, point in points_in_range.iterrows():
+                    if 'notch' not in str(point.get('notch_labels', '')).lower():
+                        t = (point['point_order'] - order1) / (order2 - order1)
+                        shift_x = self.cubic_interpolation(t, movement1_x, movement2_x)
+                        shift_y = self.cubic_interpolation(t, movement1_y, movement2_y)
+                        
+                        selected_df_copy.loc[idx, 'pl_point_altered_x'] = point['pl_point_x'] + shift_x
+                        selected_df_copy.loc[idx, 'pl_point_altered_y'] = point['pl_point_y'] + shift_y
+                        
+                        logging.info(f"  Point {point['point_order']} shifted by ({shift_x}, {shift_y})")
+
+                # Process notch groups
+                for group in notch_groups:
+                    if any(order1 < point['point_order'] < order2 for point in group):
+                        self._move_notch_group(group, selected_df_copy, movement1_x, movement1_y)
+
+        # Verify changes
+        changed_points = selected_df_copy[
+            (selected_df_copy['pl_point_altered_x'] != selected_df_copy['pl_point_x']) |
+            (selected_df_copy['pl_point_altered_y'] != selected_df_copy['pl_point_y'])
+        ]
+        logging.info(f"Total points changed: {len(changed_points)}")
+
+        return selected_df_copy
+
+    def _group_notch_points(self, df):
+        notch_groups = []
+        notch_points = df[df['notch_labels'].str.contains('notch', na=False, case=False)].sort_values('point_order')
+        
+        if notch_points.empty:
+            return notch_groups
+
+        current_group = []
+        prev_order = None
+
+        for _, point in notch_points.iterrows():
+            if prev_order is None or point['point_order'] - prev_order <= 1:
+                current_group.append(point)
+            else:
+                if len(current_group) >= 3:  # Assuming a notch consists of at least 3 points
+                    notch_groups.append(current_group)
+                current_group = [point]
+            prev_order = point['point_order']
+
+        # Add the last group if it meets the criteria
+        if len(current_group) >= 3:
+            notch_groups.append(current_group)
+
+        return notch_groups
+
+    def _move_notch_group(self, group, df, movement_x, movement_y):
+        for point in group:
+            idx = point.name
+            df.loc[idx, 'pl_point_altered_x'] = point['pl_point_x'] + movement_x
+            df.loc[idx, 'pl_point_altered_y'] = point['pl_point_y'] + movement_y
+        
+        logging.info(f"Moved notch group (size: {len(group)}) by ({movement_x}, {movement_y})")
+
+    def cubic_interpolation(self, t, start, end):
+        # Cubic function: f(t) = -2t^3 + 3t^2
+        # This gives a smooth S-curve interpolation
+        t = -2 * t**3 + 3 * t**2
+        return start + (end - start) * t
+
+    def _move_notch_group(self, group, df, movement_x, movement_y):
+        for point in group:
+            idx = point.name
+            df.loc[idx, 'pl_point_altered_x'] = point['pl_point_x'] + movement_x
+            df.loc[idx, 'pl_point_altered_y'] = point['pl_point_y'] + movement_y
+        
+        logging.info(f"Moved notch group (size: {len(group)}) by ({movement_x}, {movement_y})")
+
+    def cubic_interpolation(self, t, start, end):
+        # Cubic function: f(t) = -2t^3 + 3t^2
+        # This gives a smooth S-curve interpolation
+        t = -2 * t**3 + 3 * t**2
+        return start + (end - start) * t
 
     def _move_notch_groups(self, notch_groups, pos_array, G):
         for group in notch_groups:
@@ -1186,6 +1453,119 @@ class PieceAlterationProcessor:
             new_y = point['pl_point_y'] + avg_movement[1]
             df.loc[df['point_order'] == point['point_order'], 'pl_point_altered_x'] = new_x
             df.loc[df['point_order'] == point['point_order'], 'pl_point_altered_y'] = new_y
+
+    def _group_notch_points(self, df):
+        notch_groups = []
+        notch_points = df[df['notch_labels'].str.contains('notch', na=False, case=False)].sort_values('point_order')
+        
+        if notch_points.empty:
+            return notch_groups
+
+        current_group = []
+        prev_order = None
+
+        for _, point in notch_points.iterrows():
+            if prev_order is None or point['point_order'] - prev_order <= 1:
+                current_group.append(point)
+            else:
+                if len(current_group) >= 3:  # Assuming a notch consists of at least 3 points
+                    notch_groups.append(current_group)
+                current_group = [point]
+            prev_order = point['point_order']
+
+        # Add the last group if it meets the criteria
+        if len(current_group) >= 3:
+            notch_groups.append(current_group)
+
+        return notch_groups
+
+    def post_alteration_point_shift(self, selected_df):
+        logging.info("Starting post-alteration point shift")
+        selected_df_copy = selected_df.copy()
+
+        # Get all alteration types
+        alteration_types = selected_df_copy[selected_df_copy['alteration_type'].notna()]['alteration_type'].unique()
+
+        # Group notch points
+        notch_groups = self._group_notch_points(selected_df_copy)
+
+        for alteration_type in alteration_types:
+            logging.info(f"Processing alteration: {alteration_type}")
+
+            relevant_mtm_points = selected_df_copy[
+                (selected_df_copy['alteration_type'] == alteration_type) & 
+                (selected_df_copy['mtm points'].notna())
+            ]['mtm points'].unique()
+            
+            logging.info(f"Relevant MTM points for {alteration_type}: {relevant_mtm_points}")
+
+            for i in range(len(relevant_mtm_points) - 1):
+                mtm_point1 = relevant_mtm_points[i]
+                mtm_point2 = relevant_mtm_points[i + 1]
+                
+                mtm1_data = selected_df_copy[selected_df_copy['mtm points'] == mtm_point1].iloc[0]
+                mtm2_data = selected_df_copy[selected_df_copy['mtm points'] == mtm_point2].iloc[0]
+                
+                order1 = mtm1_data['point_order']
+                order2 = mtm2_data['point_order']
+                
+                movement1_x = mtm1_data['pl_point_altered_x'] - mtm1_data['pl_point_x']
+                movement1_y = mtm1_data['pl_point_altered_y'] - mtm1_data['pl_point_y']
+                movement2_x = mtm2_data['pl_point_altered_x'] - mtm2_data['pl_point_x']
+                movement2_y = mtm2_data['pl_point_altered_y'] - mtm2_data['pl_point_y']
+
+                # Get points in range, excluding MTM points
+                points_in_range = selected_df_copy[
+                    (selected_df_copy['point_order'] > order1) & 
+                    (selected_df_copy['point_order'] < order2) &
+                    (selected_df_copy['mtm points'].isna())
+                ]
+                
+                logging.info(f"Processing points between MTM points: {mtm_point1} and {mtm_point2}")
+                logging.info(f"  Point order range: {order1} to {order2}")
+                logging.info(f"  Number of points in range: {len(points_in_range)}")
+                logging.info(f"  Movement at MTM1: ({movement1_x}, {movement1_y})")
+                logging.info(f"  Movement at MTM2: ({movement2_x}, {movement2_y})")
+
+                # Process regular points
+                for idx, point in points_in_range.iterrows():
+                    if 'notch' not in str(point.get('notch_labels', '')).lower():
+                        t = (point['point_order'] - order1) / (order2 - order1)
+                        shift_x = self.cubic_interpolation(t, movement1_x, movement2_x)
+                        shift_y = self.cubic_interpolation(t, movement1_y, movement2_y)
+                        
+                        selected_df_copy.loc[idx, 'pl_point_altered_x'] = point['pl_point_x'] + shift_x
+                        selected_df_copy.loc[idx, 'pl_point_altered_y'] = point['pl_point_y'] + shift_y
+                        
+                        logging.info(f"  Point {point['point_order']} shifted by ({shift_x}, {shift_y})")
+
+                # Process notch groups
+                for group in notch_groups:
+                    if any(order1 < point['point_order'] < order2 for point in group):
+                        self._move_notch_group(group, selected_df_copy, movement1_x, movement1_y)
+
+        # Verify changes
+        changed_points = selected_df_copy[
+            (selected_df_copy['pl_point_altered_x'] != selected_df_copy['pl_point_x']) |
+            (selected_df_copy['pl_point_altered_y'] != selected_df_copy['pl_point_y'])
+        ]
+        logging.info(f"Total points changed: {len(changed_points)}")
+
+        return selected_df_copy
+
+    def _move_notch_group(self, group, df, movement_x, movement_y):
+        for point in group:
+            idx = point.name
+            df.loc[idx, 'pl_point_altered_x'] = point['pl_point_x'] + movement_x
+            df.loc[idx, 'pl_point_altered_y'] = point['pl_point_y'] + movement_y
+        
+        logging.info(f"Moved notch group (size: {len(group)}) by ({movement_x}, {movement_y})")
+
+    def cubic_interpolation(self, t, start, end):
+        # Cubic function: f(t) = -2t^3 + 3t^2
+        # This gives a smooth S-curve interpolation
+        t = -2 * t**3 + 3 * t**2
+        return start + (end - start) * t
 
     def _find_nearby_points(self, group, df, new_positions):
         group_center = group[['pl_point_x', 'pl_point_y']].mean()
@@ -1398,9 +1778,9 @@ if __name__ == "__main__":
 
     ## LGFG-SH-01-CCB-FO
     #debug_alteration_rule = "1LTH-BACK"
-    #debug_alteration_rule = "1LTH-FRONT"
+    debug_alteration_rule = "1LTH-FRONT"
     #debug_alteration_rule = "1LTH-FULL"
-    debug_alteration_rule = "2ARMHOLEDN"
+    #debug_alteration_rule = "2ARMHOLEDN"
     #debug_alteration_rule = "2ARMHOLEIN"
     #debug_alteration_rule = "3-COLLAR"
     #debug_alteration_rule = "3-SHOULDER"
