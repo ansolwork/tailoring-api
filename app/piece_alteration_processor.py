@@ -375,9 +375,9 @@ class PieceAlterationProcessor:
             processed_df.to_csv("data/processed_df.csv", index=False)
 
             # Check for further alteration points
-            #if self.xy_move_step_counter > 0 and self.xy_move_step_counter == self.xy_move_count:
+            if self.xy_move_step_counter > 0 and self.xy_move_step_counter == self.xy_move_count:
                 #processed_df = self.xy_move_correction(processed_df)
-                #processed_df = self.post_alteration_point_shift(processed_df)
+                processed_df = self.post_alteration_point_shift(processed_df)
             
             processed_df = self.remove_empty_rows(processed_df)
             processed_df = self.re_adjust_points(processed_df)
@@ -1228,33 +1228,22 @@ class PieceAlterationProcessor:
             ]
 
             for idx, point in points_in_range.iterrows():
-                if pd.notna(point['mtm points']):
-                    # This is an MTM point, use its existing alteration
-                    shift_x = point['pl_point_altered_x'] - point['pl_point_x']
-                    shift_y = point['pl_point_altered_y'] - point['pl_point_y']
-                    
-                    # Check for associated notch points
-                    notch_points = selected_df_copy[
-                        (selected_df_copy['point_order'] > point['point_order']) &
-                        (selected_df_copy['point_order'] < point['point_order'] + 5) &  # Adjust this range as needed
-                        (selected_df_copy['notch_labels'].notna()) &
-                        (selected_df_copy['notch_labels'].str.contains('notch', case=False))
-                    ]
-                    
-                    # Apply the same shift to associated notch points
-                    for notch_idx, notch_point in notch_points.iterrows():
-                        selected_df_copy.loc[notch_idx, 'pl_point_altered_x'] = notch_point['pl_point_x'] + shift_x
-                        selected_df_copy.loc[notch_idx, 'pl_point_altered_y'] = notch_point['pl_point_y'] + shift_y
-                        logging.info(f"    Associated notch point {notch_point['point_order']}: shift ({shift_x:.4f}, {shift_y:.4f})")
-                    
-                elif pd.notna(point['mtm_dependent']):
-                    # This is a dependent point, use its existing alteration
+                if pd.notna(point['mtm points']) or pd.notna(point['mtm_dependent']):
+                    # This is an MTM point or dependent point, use its existing alteration
                     shift_x = point['pl_point_altered_x'] - point['pl_point_x']
                     shift_y = point['pl_point_altered_y'] - point['pl_point_y']
                 elif 'notch' in str(point.get('notch_labels', '')).lower():
-                    # This is a notch point, move it to the position of the current point
-                    shift_x = movement1_x
-                    shift_y = movement1_y
+                    # This is a notch point, check if it was already moved
+                    if pd.notna(point['pl_point_altered_x']) and pd.notna(point['pl_point_altered_y']):
+                        # Notch point was already moved, keep its current position
+                        shift_x = point['pl_point_altered_x'] - point['pl_point_x']
+                        shift_y = point['pl_point_altered_y'] - point['pl_point_y']
+                        logging.info(f"    Preserving previously moved notch point {point['point_order']}")
+                    else:
+                        # Notch point wasn't moved, interpolate its movement
+                        t = (point['point_order'] - order1) / (order2 - order1)
+                        shift_x = self.cubic_interpolation(t, movement1_x, movement2_x)
+                        shift_y = self.cubic_interpolation(t, movement1_y, movement2_y)
                 else:
                     # This is a regular point, interpolate its movement
                     t = (point['point_order'] - order1) / (order2 - order1)
@@ -1524,7 +1513,7 @@ if __name__ == "__main__":
 
     ## LGFG-SH-01-CCB-FO
     #debug_alteration_rule = "1LTH-BACK"
-   #debug_alteration_rule = "1LTH-FRONT"
+    debug_alteration_rule = "1LTH-FRONT"
     #debug_alteration_rule = "1LTH-FULL"
     #debug_alteration_rule = "2ARMHOLEDN"
     #debug_alteration_rule = "2ARMHOLEIN"
@@ -1532,7 +1521,7 @@ if __name__ == "__main__":
     #debug_alteration_rule = "3-SHOULDER"
     #debug_alteration_rule = "4-CHEST"
     #debug_alteration_rule = "4-HIP"
-    debug_alteration_rule = "4-WAIST"
+    #debug_alteration_rule = "4-WAIST"
     #debug_alteration_rule = "4CHESTACRS" 
     #debug_alteration_rule = "5-DARTBACK"
     #debug_alteration_rule = "6-PLACKET"
