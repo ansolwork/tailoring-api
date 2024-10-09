@@ -1193,13 +1193,13 @@ class PieceAlterationProcessor:
         logging.info("Starting post-alteration point shift")
         selected_df_copy = selected_df.copy()
 
-        # Get all MTM points and their dependents
+        # Get all MTM points and their dependents that have alterations
         all_key_points = selected_df_copy[
-            (selected_df_copy['mtm points'].notna()) | 
-            (selected_df_copy['mtm_dependent'].notna())
+            ((selected_df_copy['mtm points'].notna()) | (selected_df_copy['mtm_dependent'].notna())) &
+            (selected_df_copy['alteration_type'].notna())
         ].sort_values('point_order')
         
-        logging.info(f"All MTM points and dependents: {all_key_points['mtm points'].fillna(all_key_points['mtm_dependent']).tolist()}")
+        logging.info(f"All MTM points with alterations: {all_key_points['mtm points'].fillna(all_key_points['mtm_dependent']).tolist()}")
 
         for i in range(len(all_key_points) - 1):
             current_point = all_key_points.iloc[i]
@@ -1228,8 +1228,8 @@ class PieceAlterationProcessor:
             ]
 
             for idx, point in points_in_range.iterrows():
-                if pd.notna(point['mtm points']) or pd.notna(point['mtm_dependent']):
-                    # This is an MTM point or dependent point, use its existing alteration
+                if pd.notna(point['alteration_type']):
+                    # This is an alteration point, use its existing alteration
                     shift_x = point['pl_point_altered_x'] - point['pl_point_x']
                     shift_y = point['pl_point_altered_y'] - point['pl_point_y']
                 elif 'notch' in str(point.get('notch_labels', '')).lower():
@@ -1254,7 +1254,7 @@ class PieceAlterationProcessor:
                 selected_df_copy.loc[idx, 'pl_point_altered_x'] = point['pl_point_x'] + shift_x
                 selected_df_copy.loc[idx, 'pl_point_altered_y'] = point['pl_point_y'] + shift_y
                 
-                point_type = 'MTM' if pd.notna(point['mtm points']) else 'Dependent' if pd.notna(point['mtm_dependent']) else 'Regular'
+                point_type = 'Alteration' if pd.notna(point['alteration_type']) else 'Regular'
                 logging.info(f"    Point order {point['point_order']} ({point_type}, Notch: {point['notch_labels']}): shift ({shift_x:.4f}, {shift_y:.4f})")
 
         # Verify changes
@@ -1265,9 +1265,9 @@ class PieceAlterationProcessor:
         logging.info(f"Total points changed: {len(changed_points)}")
 
         # Create debug DataFrame
-        debug_columns = ['point_order', 'mtm points', 'mtm_dependent', 'notch_labels', 'pl_point_x', 'pl_point_y', 
+        debug_columns = ['point_order', 'mtm points', 'mtm_dependent', 'notch_labels', 'alteration_type', 'pl_point_x', 'pl_point_y', 
                         'pl_point_altered_x', 'pl_point_altered_y']
-        debug_df = selected_df_copy[debug_columns].copy()  # Create an explicit copy
+        debug_df = selected_df_copy[debug_columns].copy()
 
         # Calculate movements using vectorized operations
         debug_df.loc[:, 'movement_x'] = debug_df['pl_point_altered_x'] - debug_df['pl_point_x']
