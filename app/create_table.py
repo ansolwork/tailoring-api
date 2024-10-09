@@ -234,7 +234,7 @@ class CreateTable:
 
 if __name__ == "__main__":
     alteration_filepath = "data/input/mtm_points.xlsx"
-    combined_entities_folder = "data/input/mtm-combined-entities/"
+    combined_entities_folder = "data/input/mtm_combined_entities_labeled/"
     create_table = CreateTable(alteration_filepath, combined_entities_folder)
     
     # Process the sheets and get the combined DataFrame
