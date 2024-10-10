@@ -376,8 +376,9 @@ class PieceAlterationProcessor:
 
             # Check for further alteration points
             if self.xy_move_step_counter > 0 and self.xy_move_step_counter == self.xy_move_count:
-                #processed_df = self.xy_move_correction(processed_df)
                 processed_df = self.post_alteration_point_shift(processed_df)
+                processed_df = self.xy_move_correction(processed_df)
+                processed_df.to_csv("data/processed_df_after_xy_move_correction.csv", index=False)
             
             processed_df = self.remove_empty_rows(processed_df)
             processed_df = self.re_adjust_points(processed_df)
@@ -1597,7 +1598,7 @@ if __name__ == "__main__":
     #debug_alteration_rule = "WAISTSMOTH"
 
 
-    alteration_movement = 0.75 # INCHES (can be positive or negative)
+    alteration_movement = 5.0 # INCHES (can be positive or negative)
     
     make_alteration = PieceAlterationProcessor(piece_table_path=piece_table_path,
                                                vertices_table_path=vertices_table_path,
