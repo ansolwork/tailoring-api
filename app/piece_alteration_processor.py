@@ -816,22 +816,44 @@ class PieceAlterationProcessor:
                 points_in_range = self._get_points_in_range(selected_df_copy, start_point_order, end_point_order, tolerance, mtm_point, mtm_dependent)           
                 
                 logging.info(f"XY Move (movement_x, movement_y): {(movement_x, movement_y)}")
-                # Apply XY movement to points between mtm_point and mtm_dependent
-                for idx, point in points_in_range.iterrows():
-                    # Use the index of the row in selected_df_copy, not the idx from points_in_range
-                    copy_idx = point.name  # This gets the correct index for selected_df_copy
+                
+                # Identify all notch points in the range
+                notch_points = points_in_range[points_in_range['notch_labels'].notna() & 
+                                               points_in_range['notch_labels'].str.contains('notch', case=False)]
+                
+                if not notch_points.empty:
+                    logging.info(f"Detected notch points in range:")
+                    for _, notch in notch_points.iterrows():
+                        logging.info(f"  Notch point: Order {notch['point_order']}, "
+                                     f"Label: {notch['notch_labels']}, "
+                                     f"Coordinates: ({notch['pl_point_x']:.4f}, {notch['pl_point_y']:.4f})")
                     
-                    # Use altered coordinates if available, otherwise use original ones
-                    current_x = point['pl_point_altered_x'] if pd.notna(point['pl_point_altered_x']) and point['pl_point_altered_x'] != "" else point['pl_point_x']
-                    current_y = point['pl_point_altered_y'] if pd.notna(point['pl_point_altered_y']) and point['pl_point_altered_y'] != "" else point['pl_point_y']
+                    # Move all notch points together
+                    for idx, notch in notch_points.iterrows():
+                        current_x = notch['pl_point_altered_x'] if pd.notna(notch['pl_point_altered_x']) and notch['pl_point_altered_x'] != "" else notch['pl_point_x']
+                        current_y = notch['pl_point_altered_y'] if pd.notna(notch['pl_point_altered_y']) and notch['pl_point_altered_y'] != "" else notch['pl_point_y']
+                        
+                        altered_x = current_x + (self.alteration_movement * movement_x)
+                        altered_y = current_y + (self.alteration_movement * movement_y)
+                        
+                        selected_df_copy.loc[idx, 'pl_point_altered_x'] = altered_x
+                        selected_df_copy.loc[idx, 'pl_point_altered_y'] = altered_y
+                        
+                        logging.info(f"  Moved notch point {notch['point_order']} to new coordinates: ({altered_x:.4f}, {altered_y:.4f})")
+                else:
+                    logging.info("No notch points detected in the range.")
 
-                    # Apply the movement
-                    altered_x = current_x + (self.alteration_movement * movement_x)
-                    altered_y = current_y + (self.alteration_movement * movement_y)
+                # Apply XY movement to non-notch points between mtm_point and mtm_dependent
+                for idx, point in points_in_range.iterrows():
+                    if idx not in notch_points.index:  # Skip notch points as they've already been moved
+                        current_x = point['pl_point_altered_x'] if pd.notna(point['pl_point_altered_x']) and point['pl_point_altered_x'] != "" else point['pl_point_x']
+                        current_y = point['pl_point_altered_y'] if pd.notna(point['pl_point_altered_y']) and point['pl_point_altered_y'] != "" else point['pl_point_y']
 
-                    # Update these values directly in selected_df_copy using the correct index
-                    selected_df_copy.loc[copy_idx, 'pl_point_altered_x'] = altered_x
-                    selected_df_copy.loc[copy_idx, 'pl_point_altered_y'] = altered_y
+                        altered_x = current_x + (self.alteration_movement * movement_x)
+                        altered_y = current_y + (self.alteration_movement * movement_y)
+                        
+                        selected_df_copy.loc[idx, 'pl_point_altered_x'] = altered_x
+                        selected_df_copy.loc[idx, 'pl_point_altered_y'] = altered_y
 
                 # Update counter
                 self.xy_move_step_counter +=1
@@ -841,6 +863,26 @@ class PieceAlterationProcessor:
         except Exception as e:
             logging.error(f"Failed to apply XY adjustment: {e}")
             return row, selected_df
+
+    def has_adjacent_notch(self, point, selected_df, mtm_point, order_range=3):
+        point_order = point['point_order']
+        mtm_point_order = selected_df[selected_df['mtm points'] == mtm_point]['point_order'].iloc[0]
+        
+        nearby_points = selected_df[
+            (selected_df['point_order'] >= point_order - order_range) & 
+            (selected_df['point_order'] <= point_order + order_range) &
+            (selected_df['point_order'] != point_order) &
+            (selected_df['point_order'] != mtm_point_order)  # Exclude the MTM point
+        ]
+        
+        adjacent_notches = nearby_points[nearby_points['notch_labels'].str.contains('notch', case=False, na=False)]
+        
+        if not adjacent_notches.empty:
+            for _, notch in adjacent_notches.iterrows():
+                logging.info(f"Adjacent notch found: Point {notch['point_order']}, Label: {notch['notch_labels']}")
+            return True
+        
+        return False
         
     def _apply_single_point_move(self, row, selected_df, mtm_point):
         selected_df_copy = selected_df.copy()
@@ -883,14 +925,28 @@ class PieceAlterationProcessor:
                     abs(point1[1] - point2[1]) <= threshold)
 
         def has_adjacent_notch(point):
-            prev_point = selected_df_copy[selected_df_copy['point_order'] == point['point_order'] - 1]
-            next_point = selected_df_copy[selected_df_copy['point_order'] == point['point_order'] + 1]
-            return ('notch' in str(prev_point['notch_labels'].values[0]) if not prev_point.empty else False) or \
-                   ('notch' in str(next_point['notch_labels'].values[0]) if not next_point.empty else False)
+            point_order = point['point_order']
+            mtm_point_order = selected_df_copy[selected_df_copy['mtm points'] == mtm_point]['point_order'].iloc[0]
+            
+            nearby_points = selected_df_copy[
+                (selected_df_copy['point_order'] >= point_order - 3) & 
+                (selected_df_copy['point_order'] <= point_order + 3) &
+                (selected_df_copy['point_order'] != point_order) &
+                (selected_df_copy['point_order'] != mtm_point_order)  # Exclude the MTM point
+            ]
+            
+            adjacent_notches = nearby_points[nearby_points['notch_labels'].str.contains('notch', case=False, na=False)]
+            
+            if not adjacent_notches.empty:
+                for _, notch in adjacent_notches.iterrows():
+                    logging.info(f"Adjacent notch found: Point {notch['point_order']}, Label: {notch['notch_labels']}")
+                return True
+            
+            return False
 
         def move_if_notch(adjacent_point, direction):
             if adjacent_point is not None:
-                logging.info(f"Adjacent {direction} point: {adjacent_point['mtm points']}")
+                logging.info(f"Adjacent {direction} point: {adjacent_point['point_order']}")
                 if 'notch' in str(adjacent_point['notch_labels']):
                     adjacent_x = adjacent_point['pl_point_altered_x'] if pd.notna(adjacent_point['pl_point_altered_x']) and adjacent_point['pl_point_altered_x'] != "" else adjacent_point['pl_point_x']
                     adjacent_y = adjacent_point['pl_point_altered_y'] if pd.notna(adjacent_point['pl_point_altered_y']) and adjacent_point['pl_point_altered_y'] != "" else adjacent_point['pl_point_y']
@@ -1236,9 +1292,8 @@ class PieceAlterationProcessor:
                     # This is a notch point, check if it was already moved
                     if pd.notna(point['pl_point_altered_x']) and pd.notna(point['pl_point_altered_y']):
                         # Notch point was already moved, keep its current position
-                        shift_x = point['pl_point_altered_x'] - point['pl_point_x']
-                        shift_y = point['pl_point_altered_y'] - point['pl_point_y']
                         logging.info(f"    Preserving previously moved notch point {point['point_order']}")
+                        continue  # Skip to the next point without applying any shift
                     else:
                         # Notch point wasn't moved, interpolate its movement
                         t = (point['point_order'] - order1) / (order2 - order1)
@@ -1250,9 +1305,10 @@ class PieceAlterationProcessor:
                     shift_x = self.cubic_interpolation(t, movement1_x, movement2_x)
                     shift_y = self.cubic_interpolation(t, movement1_y, movement2_y)
                 
-                # Apply the shift
-                selected_df_copy.loc[idx, 'pl_point_altered_x'] = point['pl_point_x'] + shift_x
-                selected_df_copy.loc[idx, 'pl_point_altered_y'] = point['pl_point_y'] + shift_y
+                # Apply the shift only if it hasn't been altered before
+                if pd.isna(point['pl_point_altered_x']) or pd.isna(point['pl_point_altered_y']):
+                    selected_df_copy.loc[idx, 'pl_point_altered_x'] = point['pl_point_x'] + shift_x
+                    selected_df_copy.loc[idx, 'pl_point_altered_y'] = point['pl_point_y'] + shift_y
                 
                 point_type = 'Alteration' if pd.notna(point['alteration_type']) else 'Regular'
                 logging.info(f"    Point order {point['point_order']} ({point_type}, Notch: {point['notch_labels']}): shift ({shift_x:.4f}, {shift_y:.4f})")
@@ -1513,8 +1569,8 @@ if __name__ == "__main__":
 
     ## LGFG-SH-01-CCB-FO
     #debug_alteration_rule = "1LTH-BACK"
-    debug_alteration_rule = "1LTH-FRONT"
-    #debug_alteration_rule = "1LTH-FULL"
+    #debug_alteration_rule = "1LTH-FRONT"
+    debug_alteration_rule = "1LTH-FULL"
     #debug_alteration_rule = "2ARMHOLEDN"
     #debug_alteration_rule = "2ARMHOLEIN"
     #debug_alteration_rule = "3-COLLAR"
