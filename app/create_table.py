@@ -139,7 +139,6 @@ class CreateTable:
             print(f"CSV files saved to {output_table_path}")
 
     def save_table_csv_by_piece_name(self, output_filename_prefix="combined_table"):
-
         output_table_path = self.output_table_path_by_piece
 
         # Ensure the output directory exists
@@ -147,7 +146,7 @@ class CreateTable:
 
         self.merged_df['piece_name'] = self.merged_df['piece_name'].str.replace(".dxf", "", regex=False)
 
-        # Group the DataFrame by 'alteration_rule'
+        # Group the DataFrame by 'piece_name'
         grouped = self.merged_df.groupby('piece_name')
 
         for piece_name, group_df in grouped:
@@ -163,13 +162,19 @@ class CreateTable:
             group_df = group_df.sort_values(by='mtm points')
             group_df = group_df.drop('vertices', axis=1)
 
-            # Add labels to each row - since they are ordered
+            # Drop duplicate rows
+            group_df = group_df.drop_duplicates()
+
+            # Remove rows that are all NaNs or empty (excluding 'piece_name' column)
+            group_df = group_df.dropna(how='all', subset=[col for col in group_df.columns if col != 'piece_name'])
+
+            # Reset the index and add point_order starting from 0
             group_df['point_order'] = group_df.index
             
             # Save the group as a CSV file
             group_df.to_csv(output_file_path, index=False)
 
-            print(f"CSV files saved to {output_table_path}")        
+            print(f"CSV file saved to {output_file_path}")        
 
     def add_other_mtm_points(self):
         for filename in os.listdir(self.output_table_path):
@@ -198,7 +203,7 @@ class CreateTable:
                 # Save the updated DataFrame back to CSV
                 df.to_csv(load_path, index=False)
 
-                print(f"Updated DataFrame saved to {load_path}")
+               #print(f"Updated DataFrame saved to {load_path}")
 
     def create_vertices_df(self):
         # Base directory where all piece_name directories will be created

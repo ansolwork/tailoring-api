@@ -372,13 +372,14 @@ class PieceAlterationProcessor:
 
             # Update the row in processed_df
             processed_df = processed_df.map(lambda x: np.nan if x == "" else x)
-            processed_df.to_csv("data/processed_df.csv", index=False)
 
             # Check for further alteration points
             if self.xy_move_step_counter > 0 and self.xy_move_step_counter == self.xy_move_count:
-                processed_df = self.post_alteration_point_shift(processed_df)
-                processed_df = self.xy_move_correction(processed_df)
-                processed_df.to_csv("data/processed_df_after_xy_move_correction.csv", index=False)
+                    processed_df.to_csv("data/processed_df.csv", index=False)
+                    processed_df = self.alter_unaltered_notch_groups_near_mtm(processed_df)
+                    processed_df = self.post_alteration_point_shift(processed_df)
+                    #processed_df = self.xy_move_correction(processed_df)
+                #processed_df.to_csv("data/processed_df_after_xy_move_correction.csv", index=False)
             
             processed_df = self.remove_empty_rows(processed_df)
             processed_df = self.re_adjust_points(processed_df)
@@ -398,7 +399,80 @@ class PieceAlterationProcessor:
             else:
                 logging.warning(f"Debug alteration type '{self.debug_alteration_rule}' not found in requested alterations.")
             return  # Early return after processing the debug alteration
+
+    def alter_unaltered_notch_groups_near_mtm(self, processed_df):
+        logging.info("Altering unaltered notch groups near altered MTM points")
         
+        processed_df_copy = processed_df.copy().sort_values('point_order').reset_index(drop=True)
+        
+        # Get all altered MTM points
+        altered_mtm_points = processed_df_copy[
+            (processed_df_copy['mtm points'].notna()) & 
+            (processed_df_copy['pl_point_altered_x'].notna()) & 
+            (processed_df_copy['pl_point_altered_y'].notna())
+        ]
+        
+        logging.info(f"Total altered MTM points: {len(altered_mtm_points)}")
+
+        def get_nearby_unaltered_notch_points(df, mtm_order, direction, max_count=3, max_order_diff=10):
+            notch_points = []
+            current_idx = df[df['point_order'] == mtm_order].index[0]
+            while len(notch_points) < max_count:
+                current_idx += direction
+                if current_idx < 0 or current_idx >= len(df):
+                    break
+                point = df.iloc[current_idx]
+                if abs(point['point_order'] - mtm_order) > max_order_diff:
+                    break
+                if 'notch' in str(point.get('notch_labels', '')).lower():
+                    if pd.isna(point['pl_point_altered_x']) and pd.isna(point['pl_point_altered_y']):
+                        notch_points.append(current_idx)
+                elif len(notch_points) > 0:
+                    break
+            return notch_points
+
+        for _, mtm_point in altered_mtm_points.iterrows():
+            mtm_order = mtm_point['point_order']
+            movement_x = mtm_point['movement_x']
+            movement_y = mtm_point['movement_y']
+
+            # Check if this mtm point exists as a dependent somewhere else as well
+            # Then use the movement_x / y from that instead (otherwise it will be)
+            
+            logging.info(f"Processing altered MTM point {mtm_point['mtm points']} (order: {mtm_order})")
+            logging.info(f"Movement: x={movement_x}, y={movement_y}")
+            
+            before_notch_points = get_nearby_unaltered_notch_points(processed_df_copy, mtm_order, -1)
+            after_notch_points = get_nearby_unaltered_notch_points(processed_df_copy, mtm_order, 1)
+
+            all_nearby_notch_points = before_notch_points[::-1] + after_notch_points
+
+            logging.info(f"Nearby unaltered notch points: before={before_notch_points}, after={after_notch_points}")
+
+            if all_nearby_notch_points:
+                logging.info(f"Altering unaltered notch points near MTM point {mtm_point['mtm points']} (order: {mtm_order}):")
+                logging.info(f"  Total nearby unaltered notch points: {len(all_nearby_notch_points)}")
+                
+                for idx in all_nearby_notch_points:
+                    point = processed_df_copy.iloc[idx]
+                    old_x, old_y = point['pl_point_x'], point['pl_point_y']
+                    new_x = old_x + (self.alteration_movement * movement_x)
+                    new_y = old_y + (self.alteration_movement * movement_y)
+                    
+                    processed_df_copy.iloc[idx, processed_df_copy.columns.get_loc('pl_point_altered_x')] = new_x
+                    processed_df_copy.iloc[idx, processed_df_copy.columns.get_loc('pl_point_altered_y')] = new_y
+                    
+                    logging.info(f"    Altered notch point {point['point_order']}: "
+                                f"({old_x:.4f}, {old_y:.4f}) -> ({new_x:.4f}, {new_y:.4f})")
+            else:
+                logging.info(f"No nearby unaltered notch points found for altered MTM point {mtm_point['mtm points']} (order: {mtm_order})")
+
+        return processed_df_copy.sort_values('point_order')
+
+    def _get_point_coordinates(self, point_id, df):
+        row = df[df['mtm points'] == point_id].iloc[0]
+        return row['pl_point_x'], row['pl_point_y']
+
     # Get matching points for a particular MTM, now using selected_df instead of start_df
     def get_pl_points(self, matching_pt, df):
         """
@@ -805,6 +879,13 @@ class PieceAlterationProcessor:
                 p1, p2 = self._get_point_coordinates(mtm_point, mtm_dependent, selected_df_copy)
                 movement_x, movement_y = row['movement_x'], row['movement_y']
                 dependent_row = selected_df_copy[selected_df_copy['mtm points'] == mtm_dependent].iloc[0]
+                dependent_idx = selected_df_copy[selected_df_copy['mtm points'] == mtm_dependent].index[0]
+
+                # Update the movement values in the dependent row
+                selected_df_copy.loc[dependent_idx, 'movement_x'] = movement_x
+                selected_df_copy.loc[dependent_idx, 'movement_y'] = movement_y
+                
+                print(dependent_row)
 
                 # Calculate point orders
                 start_point_order = self._get_point_order(mtm_point, selected_df_copy)
@@ -1161,34 +1242,45 @@ class PieceAlterationProcessor:
             pos = {n: data['pos'] for n, data in G.nodes(data=True)}
             
             # Define fixed points
-            fixed_points = [mtm_point]
+            fixed_points = [mtm_point] + list(moved_notch_points)
             if prev_mtm_coords is not None:
-                fixed_points.append(min(G.nodes()))  # Assume the first node is the previous MTM point
+                fixed_points.append(min(G.nodes()))
                 pos[min(G.nodes())] = prev_mtm_coords
             if next_mtm_coords is not None:
-                fixed_points.append(max(G.nodes()))  # Assume the last node is the next MTM point
+                fixed_points.append(max(G.nodes()))
                 pos[max(G.nodes())] = next_mtm_coords
 
+            # Group notch points
+            notch_groups = self._group_notch_points(G)
+
             for _ in range(iterations):
+                # Calculate forces for individual points and notch groups
+                forces = {}
                 for node in G.nodes():
-                    if node not in fixed_points and node not in moved_notch_points:
-                        # Calculate forces
+                    if node not in fixed_points and not G.nodes[node].get('is_altered', False):
                         force = np.zeros(2)
                         for neighbor in G.neighbors(node):
                             diff = np.array(pos[neighbor]) - np.array(pos[node])
                             distance = np.linalg.norm(diff)
                             if distance > 0:
                                 force += k * diff / distance  # Spring force
-                        
-                        # Apply force
-                        new_pos = np.array(pos[node]) + force
-                        
-                        # Ensure the point doesn't move below the previous MTM point
-                        if prev_mtm_coords is not None:
-                            new_pos[1] = max(new_pos[1], prev_mtm_coords[1])
-                        
-                        # Update position
-                        pos[node] = tuple(new_pos)
+                        forces[node] = force
+
+                # Calculate average force for each notch group
+                for group in notch_groups:
+                    group_force = np.mean([forces.get(node, np.zeros(2)) for node in group], axis=0)
+                    for node in group:
+                        forces[node] = group_force
+
+                # Apply forces
+                for node, force in forces.items():
+                    new_pos = np.array(pos[node]) + force
+                    
+                    # Ensure the point doesn't move below the previous MTM point
+                    if prev_mtm_coords is not None:
+                        new_pos[1] = max(new_pos[1], prev_mtm_coords[1])
+                    
+                    pos[node] = tuple(new_pos)
 
                 # Adjust positions to maintain string-like behavior
                 sorted_nodes = sorted(G.nodes())
@@ -1197,15 +1289,16 @@ class PieceAlterationProcessor:
                     curr_node = sorted_nodes[i]
                     next_node = sorted_nodes[i+1]
                     
-                    prev_pos = np.array(pos[prev_node])
-                    curr_pos = np.array(pos[curr_node])
-                    next_pos = np.array(pos[next_node])
-                    
-                    # Calculate the ideal position based on neighbors
-                    ideal_pos = (prev_pos + next_pos) / 2
-                    
-                    # Move the current point towards the ideal position
-                    pos[curr_node] = tuple(curr_pos + 0.1 * (ideal_pos - curr_pos))
+                    if curr_node not in fixed_points and not G.nodes[curr_node].get('is_altered', False):
+                        prev_pos = np.array(pos[prev_node])
+                        curr_pos = np.array(pos[curr_node])
+                        next_pos = np.array(pos[next_node])
+                        
+                        # Calculate the ideal position based on neighbors
+                        ideal_pos = (prev_pos + next_pos) / 2
+                        
+                        # Move the current point towards the ideal position
+                        pos[curr_node] = tuple(curr_pos + 0.1 * (ideal_pos - curr_pos))
 
             # Handle NaN values
             nan_mask = np.array([np.isnan(pos[node]).any() for node in G.nodes()])
@@ -1221,29 +1314,124 @@ class PieceAlterationProcessor:
             logging.error(f"Error in force-directed algorithm: {str(e)}")
             return None
 
-    def _group_notch_points(self, df):
+    def _group_notch_points(self, G):
         notch_groups = []
-        notch_points = df[df['notch_labels'].str.contains('notch', na=False, case=False)].sort_values('point_order')
-        
-        if notch_points.empty:
-            return notch_groups
-
         current_group = []
-        prev_order = None
-
-        for _, point in notch_points.iterrows():
-            if prev_order is None or point['point_order'] - prev_order <= 1:
-                current_group.append(point)
+        sorted_nodes = sorted(G.nodes())
+        
+        for node in sorted_nodes:
+            if G.nodes[node].get('is_notch', False):
+                current_group.append(node)
             else:
                 if len(current_group) >= 3:  # Assuming a notch consists of at least 3 points
                     notch_groups.append(current_group)
-                current_group = [point]
-            prev_order = point['point_order']
-
+                current_group = []
+        
         # Add the last group if it meets the criteria
         if len(current_group) >= 3:
             notch_groups.append(current_group)
+        
+        return notch_groups
 
+    def _apply_force_directed_algorithm(self, G, mtm_point, mtm_coords, prev_mtm_coords, next_mtm_coords, moved_notch_points, iterations=50, k=0.1):
+        if len(G) <= 1:
+            logging.warning(f"Graph has {len(G)} nodes. Skipping force-directed algorithm.")
+            return {node: data['pos'] for node, data in G.nodes(data=True)}
+
+        try:
+            # Initialize positions
+            pos = {n: data['pos'] for n, data in G.nodes(data=True)}
+            
+            # Define fixed points
+            fixed_points = [mtm_point] + list(moved_notch_points)
+            if prev_mtm_coords is not None:
+                fixed_points.append(min(G.nodes()))
+                pos[min(G.nodes())] = prev_mtm_coords
+            if next_mtm_coords is not None:
+                fixed_points.append(max(G.nodes()))
+                pos[max(G.nodes())] = next_mtm_coords
+
+            # Group notch points
+            notch_groups = self._group_notch_points(G)
+
+            for _ in range(iterations):
+                # Calculate forces for individual points and notch groups
+                forces = {}
+                for node in G.nodes():
+                    if node not in fixed_points and not G.nodes[node].get('is_altered', False):
+                        force = np.zeros(2)
+                        for neighbor in G.neighbors(node):
+                            diff = np.array(pos[neighbor]) - np.array(pos[node])
+                            distance = np.linalg.norm(diff)
+                            if distance > 0:
+                                force += k * diff / distance  # Spring force
+                        forces[node] = force
+
+                # Calculate average force for each notch group
+                for group in notch_groups:
+                    group_force = np.mean([forces.get(node, np.zeros(2)) for node in group], axis=0)
+                    for node in group:
+                        forces[node] = group_force
+
+                # Apply forces
+                for node, force in forces.items():
+                    new_pos = np.array(pos[node]) + force
+                    
+                    # Ensure the point doesn't move below the previous MTM point
+                    if prev_mtm_coords is not None:
+                        new_pos[1] = max(new_pos[1], prev_mtm_coords[1])
+                    
+                    pos[node] = tuple(new_pos)
+
+                # Adjust positions to maintain string-like behavior
+                sorted_nodes = sorted(G.nodes())
+                for i in range(1, len(sorted_nodes) - 1):
+                    prev_node = sorted_nodes[i-1]
+                    curr_node = sorted_nodes[i]
+                    next_node = sorted_nodes[i+1]
+                    
+                    if curr_node not in fixed_points and not G.nodes[curr_node].get('is_altered', False):
+                        prev_pos = np.array(pos[prev_node])
+                        curr_pos = np.array(pos[curr_node])
+                        next_pos = np.array(pos[next_node])
+                        
+                        # Calculate the ideal position based on neighbors
+                        ideal_pos = (prev_pos + next_pos) / 2
+                        
+                        # Move the current point towards the ideal position
+                        pos[curr_node] = tuple(curr_pos + 0.1 * (ideal_pos - curr_pos))
+
+            # Handle NaN values
+            nan_mask = np.array([np.isnan(pos[node]).any() for node in G.nodes()])
+            if nan_mask.any():
+                logging.warning(f"NaN values detected in {nan_mask.sum()} positions. Replacing with original positions.")
+                for node in G.nodes():
+                    if np.isnan(pos[node]).any():
+                        pos[node] = G.nodes[node]['pos']
+
+            return pos
+
+        except Exception as e:
+            logging.error(f"Error in force-directed algorithm: {str(e)}")
+            return None
+
+    def _group_notch_points(self, G):
+        notch_groups = []
+        current_group = []
+        sorted_nodes = sorted(G.nodes())
+        
+        for node in sorted_nodes:
+            if G.nodes[node].get('is_notch', False):
+                current_group.append(node)
+            else:
+                if len(current_group) >= 3:  # Assuming a notch consists of at least 3 points
+                    notch_groups.append(current_group)
+                current_group = []
+        
+        # Add the last group if it meets the criteria
+        if len(current_group) >= 3:
+            notch_groups.append(current_group)
+        
         return notch_groups
 
     def post_alteration_point_shift(self, selected_df):
@@ -1547,8 +1735,8 @@ class PieceAlterationProcessor:
 
 if __name__ == "__main__":
 
-    piece_table_path = "data/staging/alteration_by_piece/combined_table_LGFG-SH-01-CCB-FO.csv"
-    vertices_table_path = "data/staging/vertices/vertices_LGFG-SH-01-CCB-FO.csv"
+    piece_table_path = "data/staging/alteration_by_piece/combined_table_LGFG-SH-01-CCB-FOA.csv"
+    vertices_table_path = "data/staging/vertices/vertices_LGFG-SH-01-CCB-FOA.csv"
 
     #piece_table_path = "data/staging/alteration_by_piece/combined_table_CIRCLE-12BY12-INCH.csv"
     #vertices_table_path = "data/staging/vertices/vertices_CIRCLE-12BY12-INCH.csv"
