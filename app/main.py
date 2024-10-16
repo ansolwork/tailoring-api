@@ -1,6 +1,6 @@
 from app.create_table import CreateTable
-from app.make_alteration_old import MakeAlteration  # Assuming this is in a separate file named 'make_alteration.py'
-from app.generate_plots import GeneratePlots  # Import the visualization class
+#from app.make_alteration_old import MakeAlteration  # Assuming this is in a separate file named 'make_alteration.py'
+#from app.generate_plots import GeneratePlots  # Import the visualization class
 import os
 import pandas as pd
 
@@ -10,7 +10,7 @@ class Main:
                  staging_2_alteration, staging_2_vertices
                  ):
         self.create_table = CreateTable(alteration_filepath, combined_entities_folder)
-        self.make_alteration = MakeAlteration(input_folder_alteration=staging_1_alteration, input_folder_vertices=staging_1_vertices)
+        #self.make_alteration = MakeAlteration(input_folder_alteration=staging_1_alteration, input_folder_vertices=staging_1_vertices)
         #self.visualize_alteration = VisualizeAlteration(processed_alterations_path, processed_vertices_path)
 
     def create_tables(self):

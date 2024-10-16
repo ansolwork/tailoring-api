@@ -180,6 +180,19 @@ def upload_file():
             # return render_template("download.html", download_url=presigned_url)
             return render_template("display_and_download_dxf.html", plot_url=presigned_plot_url,
                                    csv_url=presigned_csv_url)
+        
+        if typeform.lower() == 'graded_dxf_file':
+            print(f"Processing Graded DXF file: {file.filename}")
+            # Create a temp file with the same name as the uploaded file
+            temp_file_path = os.path.join(tmpdirname, file.filename)
+
+            # Save the uploaded file to the temp file
+            file.save(temp_file_path)
+
+            dxf_loader.load_dxf(temp_file_path)
+
+            # Convert DXF entities to a Pandas DataFrame
+            df = dxf_loader.entities_to_dataframe()
 
         if typeform.lower() == 'mtm_points_file':
             print(f"Processing MTM points file: {file.filename}")
