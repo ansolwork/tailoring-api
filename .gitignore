@@ -10,6 +10,9 @@ archive/
 app/templates/
 static/*
 
+# MacOS local store
+.DS_Store
+
 # Don't include documents
 technical_book.*
 

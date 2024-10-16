@@ -2,6 +2,11 @@ import pandas as pd
 import os
 import numpy as np
 
+# TODO: Fix issue why we are not getting enough Alteration Rules in the output
+# TODO: Mark Line Points
+# Join with point specification Table 
+# IMplement sorting of MTM Points
+
 class CreateTable:
     def __init__(self, alteration_filepath, combined_entities_folder):
         self.alteration_filepath = alteration_filepath
@@ -10,8 +15,9 @@ class CreateTable:
         self.alteration_joined_df = pd.DataFrame()
         self.combined_entities_joined_df = pd.DataFrame()
         self.merged_df = pd.DataFrame()
-        self.output_dir = "../data/staging_1"
-        self.output_table_path = "../data/staging_1/combined_alteration_tables"
+        self.output_dir = "data/staging"
+        self.output_table_path = "data/staging/combined_alteration_tables"
+        self.output_table_path_by_piece = "data/staging/alteration_by_piece"
 
         # Add more sheets if necessary
         self.sheet_list = ["SHIRT-FRONT", "SHIRT-BACK", "SHIRT-YOKE", "SHIRT-SLEEVE", 
@@ -27,15 +33,37 @@ class CreateTable:
         df_csv = pd.read_csv(filepath)
         return df_csv
     
+    def join_mtm_details(self):
+        # Load MTM point details from the dictionary
+        mtm_point_details = self.df_dict["MTM POINT NUMBERS"]
+
+        # Ensure 'mtm points' are floats, and drop NaNs or invalid values before processing
+        self.alteration_joined_df = self.alteration_joined_df[self.alteration_joined_df['mtm points'].notna()]
+
+        # Convert the 'mtm points' to integers by extracting the whole number part
+        self.alteration_joined_df['mtm points'] = self.alteration_joined_df['mtm points'].astype(int)
+
+        # Now extract the first two digits of 'mtm points' to match with 'mtm_group'
+        self.alteration_joined_df['mtm_group'] = self.alteration_joined_df['mtm points'].astype(str).str[:2].astype(int)
+
+        # Merge MTM point details with alteration_joined_df based on 'mtm_group'
+        self.alteration_joined_df = pd.merge(
+            self.alteration_joined_df, 
+            mtm_point_details, 
+            on='mtm_group', 
+            how='left'
+        )
+    
     def process_table(self):
         # Filter the sheets dictionary to only include the specified sheets
         selected_sheets = {name: self.df_dict[name] for name in self.sheet_list if name in self.df_dict}
-        
+
         # Concatenate the DataFrames into a single DataFrame
         big_df = pd.concat(selected_sheets.values(), ignore_index=True)
         big_df = big_df.rename(columns={'mtm_alteration': 'mtm points'})
 
         self.alteration_joined_df = big_df
+        self.join_mtm_details()
     
     def process_combined_entities(self):
         combined_df_list = []
@@ -44,7 +72,6 @@ class CreateTable:
         for filename in os.listdir(self.combined_entities_folder):
             if filename.endswith(".xlsx"):
                 filepath = os.path.join(self.combined_entities_folder, filename)
-                #print(f"Processing file: {filepath}")
                 
                 # Load the current Excel file
                 combined_df = pd.read_excel(filepath)
@@ -84,9 +111,9 @@ class CreateTable:
             how='right'
         )
 
-        self.merged_df.to_csv("../data/staging_1/merged_df.csv")
+        #self.merged_df.to_csv("data/staging/all_combined_tables.csv")
 
-    def save_table_csv(self, output_filename_prefix="combined_table"):
+    def save_table_csv_by_alteration_rule(self, output_filename_prefix="combined_table"):
         
         output_table_path = self.output_table_path
 
@@ -101,17 +128,53 @@ class CreateTable:
         for alteration_rule, group_df in grouped:
             # Convert all column headers to lowercase
             group_df.columns = group_df.columns.str.lower()
-            
-            #print(f"Piece Names:\n{self.merged_df['piece_name'].unique()}")
-            
+                        
             # Create a sanitized file name for each alteration_rule
             safe_alteration_rule = str(alteration_rule).replace(" ", "_").replace("/", "_")  # Ensure no illegal filename characters
             output_file_path = os.path.join(output_table_path, f"{output_filename_prefix}_{safe_alteration_rule}.csv")
             
             # Save the group as a CSV file
             group_df.to_csv(output_file_path, index=False)
-        
-        print(f"CSV files saved to {output_table_path}")
+
+            print(f"CSV files saved to {output_table_path}")
+
+    def save_table_csv_by_piece_name(self, output_filename_prefix="combined_table"):
+        output_table_path = self.output_table_path_by_piece
+
+        # Ensure the output directory exists
+        os.makedirs(output_table_path, exist_ok=True)
+
+        self.merged_df['piece_name'] = self.merged_df['piece_name'].str.replace(".dxf", "", regex=False)
+
+        # Group the DataFrame by 'piece_name'
+        grouped = self.merged_df.groupby('piece_name')
+
+        for piece_name, group_df in grouped:
+            # Convert all column headers to lowercase
+            group_df.columns = group_df.columns.str.lower()
+
+            # Sort rows by 'alteration_rule'
+            group_df = group_df.sort_values(by='alteration_rule')
+
+            safe_piece_name = str(piece_name).replace(" ", "_").replace("/", "_")  # Ensure no illegal filename characters
+            output_file_path = os.path.join(output_table_path, f"{output_filename_prefix}_{safe_piece_name}.csv")
+
+            group_df = group_df.sort_values(by='mtm points')
+            group_df = group_df.drop('vertices', axis=1)
+
+            # Drop duplicate rows
+            group_df = group_df.drop_duplicates()
+
+            # Remove rows that are all NaNs or empty (excluding 'piece_name' column)
+            group_df = group_df.dropna(how='all', subset=[col for col in group_df.columns if col != 'piece_name'])
+
+            # Reset the index and add point_order starting from 0
+            group_df['point_order'] = group_df.index
+            
+            # Save the group as a CSV file
+            group_df.to_csv(output_file_path, index=False)
+
+            print(f"CSV file saved to {output_file_path}")        
 
     def add_other_mtm_points(self):
         for filename in os.listdir(self.output_table_path):
@@ -140,8 +203,7 @@ class CreateTable:
                 # Save the updated DataFrame back to CSV
                 df.to_csv(load_path, index=False)
 
-                print(f"Updated DataFrame saved to {load_path}")
-
+               #print(f"Updated DataFrame saved to {load_path}")
 
     def create_vertices_df(self):
         # Base directory where all piece_name directories will be created
@@ -176,8 +238,8 @@ class CreateTable:
             #print(f'Saved {output_path}')
 
 if __name__ == "__main__":
-    alteration_filepath = "../data/input/mtm_points.xlsx"
-    combined_entities_folder = "../data/input/mtm-combined-entities/"
+    alteration_filepath = "data/input/mtm_points.xlsx"
+    combined_entities_folder = "data/input/mtm_combined_entities_labeled/"
     create_table = CreateTable(alteration_filepath, combined_entities_folder)
     
     # Process the sheets and get the combined DataFrame
@@ -191,11 +253,12 @@ if __name__ == "__main__":
     create_table.merge_tables()
     
     # Save the combined DataFrame as CSV files 
-    create_table.save_table_csv()
+    create_table.save_table_csv_by_alteration_rule()
+    create_table.save_table_csv_by_piece_name()
     create_table.add_other_mtm_points()
 
     # DEBUG
-    print("\n# Debug: All Unique Processed Piece Names. A common error is if they do not match the Actual piece name. \nCheck for extra spaces, incomplete names or unwanted extensions (e.g. .dxf)\n")
-    print(f"Processed Piece Names: {create_table.combined_entities_joined_df['piece_name'].unique()}\n")
-    print(f"Combined Entities (They should match): {create_table.alteration_joined_df['piece_name'].unique()}")
-    print("\nNOTE: If there are pieces in the Processed Piece Names that do not exist in the Combined entities or vice versa, then that table needs to be created")
+    #print("\n# Debug: All Unique Processed Piece Names. A common error is if they do not match the Actual piece name. \nCheck for extra spaces, incomplete names or unwanted extensions (e.g. .dxf)\n")
+    #print(f"Processed Piece Names: {create_table.combined_entities_joined_df['piece_name'].unique()}\n")
+    #print(f"Combined Entities (They should match): {create_table.alteration_joined_df['piece_name'].unique()}")
+    #print("\nNOTE: If there are pieces in the Processed Piece Names that do not exist in the Combined entities or vice versa, then that table needs to be created")
