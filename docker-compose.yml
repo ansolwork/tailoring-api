@@ -1,0 +1,19 @@
+version : "3"
+
+services:
+#UI service
+  ui:
+    image: lgfg_docker_images:ui
+    build:
+      dockerfile: UI_Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ".:/app"
+# API service
+#  api:
+#    image : lgfg_docker_images:api
+#    build:
+#      dockerfile: : Api_DockerFile
+#    ports:
+#      - "8080:8080"

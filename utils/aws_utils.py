@@ -9,7 +9,7 @@ class AwsUtils:
                  allowed_mime_types, 
                  aws_s3_bucket_name, 
                  aws_signature_version, 
-                 aws_profile_name='tailoring_api'):
+                 aws_profile_name):
         
         self.allowed_extensions = allowed_extensions
         self.allowed_mime_types = allowed_mime_types
@@ -50,7 +50,7 @@ class AwsUtils:
         response = s3_client.upload_fileobj(buffer, self.aws_s3_bucket_name, s3_file_path)
         print(f'Upload to S3 completed. Response: {response}')
 
-    def upload_dataframe_to_s3(self, dataframe, s3_file_path, file_format="csv"):
+    def upload_dataframe_to_s3(self, dataframe, s3_file_path, file_format):
         # Create an in-memory buffer
         buffer = io.BytesIO()
 
@@ -59,7 +59,7 @@ class AwsUtils:
             dataframe.to_csv(buffer, index=False)
         elif file_format == "excel":
             # Save the DataFrame to the buffer as an Excel file
-            dataframe.to_excel(buffer, index=False, engine='xlsxwriter')
+            dataframe.to_excel(buffer, index=False)
 
         # Move the buffer's position to the start
         buffer.seek(0)

@@ -8,6 +8,7 @@ persistent_output/
 test/
 archive/
 app/templates/
+static/*
 
 # MacOS local store
 .DS_Store

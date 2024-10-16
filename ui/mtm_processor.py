@@ -63,7 +63,7 @@ class MTMProcessor:
 
         # Generate a plot for the first file in coordinates_tables
         for file, df in self.coordinates_tables.items():
-            plt.figure(figsize=(10, 8))
+            plt.figure(figsize=(20, 16))
 
             self.plot_vertices(df)
             self.overlay_mtm_points(df)
@@ -78,6 +78,8 @@ class MTMProcessor:
                 plot_filepath = os.path.join(output_dir, f"{plot_filename}_plot.png")
                 self.configure_plot(file)
         
+            plt.tight_layout()
+            plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
             plt.savefig(plot_filepath)
             plt.close()
 
