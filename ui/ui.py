@@ -32,7 +32,9 @@ ALLOWED_EXTENSIONS = yaml_config['ALLOWED_EXTENSIONS']
 ALLOWED_MIME_TYPES = yaml_config['ALLOWED_MIME_TYPES']
 AWS_S3_BUCKET_NAME = yaml_config['AWS_S3_BUCKET_NAME']
 AWS_DXF_DIR_PATH = yaml_config['AWS_DXF_DIR_PATH']
+AWS_DXF_GRADED_DIR_PATH = yaml_config['AWS_DXF_GRADED_DIR_PATH']
 AWS_MTM_DIR_PATH = yaml_config['AWS_MTM_DIR_PATH']
+AWS_MTM_GRADED_DIR_PATH = yaml_config['AWS_MTM_GRADED_DIR_PATH']
 AWS_MTM_DIR_PATH_LABELED = yaml_config['AWS_MTM_DIR_PATH_LABELED']
 AWS_OUTPUT_DIR_PATH = yaml_config['AWS_OUTPUT_DIR_PATH']
 AWS_S3_SIGNATURE_VERSION = yaml_config['AWS_S3_SIGNATURE_VERSION']
@@ -180,6 +182,34 @@ def upload_file():
             # return render_template("download.html", download_url=presigned_url)
             return render_template("display_and_download_dxf.html", plot_url=presigned_plot_url,
                                    csv_url=presigned_csv_url)
+        
+        if typeform.lower() == 'graded_dxf_file':
+            print(f"Processing Graded DXF file: {file.filename}")
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                # Create a temp file with the same name as the uploaded file
+                temp_file_path = os.path.join(tmpdirname, file.filename)
+
+                # Save the uploaded file to the temp file
+                file.save(temp_file_path)
+
+                # with tempfile.NamedTemporaryFile(delete=False, suffix=".dxf") as temp_file:
+                # file.save(temp_file.name)  # Save the uploaded file to the temp file
+
+                # Load DXF using the file path
+                # dxf_loader.load_dxf(temp_file.name)
+                dxf_loader.load_dxf(temp_file_path)
+
+                # Convert DXF entities to a Pandas DataFrame
+                df = dxf_loader.entities_to_dataframe()
+
+                ## MTM Stuff: Generate Excel
+                sorted_df = df.sort_values(by=['Filename', 'Type', 'Layer'])
+                sorted_df['MTM Points'] = ''
+
+                base_filename = os.path.splitext(os.path.basename(file.filename))[0]
+                aws_mtm_graded_dir_path = os.path.join(AWS_MTM_GRADED_DIR_PATH, f"{base_filename}_combined_entities.xlsx")
+
+                aws_utils.upload_dataframe_to_s3(sorted_df, aws_mtm_graded_dir_path, file_format="excel")
 
         if typeform.lower() == 'mtm_points_file':
             print(f"Processing MTM points file: {file.filename}")

@@ -248,29 +248,15 @@ class DXFLoader:
 
 if __name__ == "__main__":
     # Change pattern folder here
-    #pattern = "basic_pattern"
-    pattern = "" # If no pattern dir
 
-    dxf_directory = "../data/LGFG-SHIRT-PATTERN/" + str(pattern) + "/"
-    output_table_directory = "../data/output_tables/" + pattern + "_"
+    dxf_filename = "LGFG-SH-01-CCB-FOA-GRADED.dxf"
+    dxf_filepath = "data/input/" + dxf_filename
+    output_table_directory = "data/output/processed_dxf/" 
 
     dxf_loader = DXFLoader()
-
-    all_data = []
-
-    print(dxf_directory)
-
-    for filename in os.listdir(dxf_directory):
-        file_path = os.path.join(dxf_directory, filename)
-        print(filename)
-        if os.path.isfile(file_path) and filename.lower().endswith(('.dxf', '.DXF')):  # Handle both .dxf and .DXF
-            dxf_loader.load_dxf(file_path)
-            dxf_loader.print_all_entities()  # Print all entity types found in the current DXF file
-            df = dxf_loader.entities_to_dataframe()
-            all_data.append(df)
-
-    combined_df = pd.concat(all_data, ignore_index=True)
-    sorted_df = combined_df.sort_values(by=['Filename', 'Type', 'Layer'])
+    dxf_loader.load_dxf(dxf_filepath)
+    df = dxf_loader.entities_to_dataframe()
+    sorted_df = df.sort_values(by=['Filename', 'Type', 'Layer'])
 
     # Save the sorted DataFrame to CSV and Excel files
     sorted_df.to_csv(output_table_directory + 'combined_entities.csv', index=False)
