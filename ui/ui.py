@@ -71,6 +71,7 @@ def upload_file():
         return "No files key in request.files"
 
     file = request.files["file-to-s3"]
+    file_list = request.files.getlist('file-to-s3')
     if not aws_utils.allowed_file(file.filename) or aws_utils.allowed_mime(file):
         return "FILE FORMAT NOT ALLOWED"
     if file.filename == "":
@@ -184,32 +185,50 @@ def upload_file():
                                    csv_url=presigned_csv_url)
         
         if typeform.lower() == 'graded_dxf_file':
-            print(f"Processing Graded DXF file: {file.filename}")
             with tempfile.TemporaryDirectory() as tmpdirname:
-                # Create a temp file with the same name as the uploaded file
-                temp_file_path = os.path.join(tmpdirname, file.filename)
+                for each_file in file_list:
+                    file_base_name=each_file.filename
 
-                # Save the uploaded file to the temp file
-                file.save(temp_file_path)
+                    print(f"Processing Graded DXF file: {file_base_name}")
+                #Create a temp file with the same name as the uploaded file
+                    temp_file_path = os.path.join(tmpdirname, file_base_name)
+                    os.makedirs(os.path.dirname(temp_file_path), exist_ok=True)
 
-                # with tempfile.NamedTemporaryFile(delete=False, suffix=".dxf") as temp_file:
-                # file.save(temp_file.name)  # Save the uploaded file to the temp file
+                    # Save the uploaded file to the temp file
+                    each_file.save(temp_file_path)
 
-                # Load DXF using the file path
-                # dxf_loader.load_dxf(temp_file.name)
-                dxf_loader.load_dxf(temp_file_path)
+                    # with tempfile.NamedTemporaryFile(delete=False, suffix=".dxf") as temp_file:
+                    # file.save(temp_file.name)  # Save the uploaded file to the temp file
 
-                # Convert DXF entities to a Pandas DataFrame
-                df = dxf_loader.entities_to_dataframe()
+                    # Load DXF using the file path
+                    # dxf_loader.load_dxf(temp_file.name)
+                    dxf_loader.load_dxf(temp_file_path)
 
-                ## MTM Stuff: Generate Excel
-                sorted_df = df.sort_values(by=['Filename', 'Type', 'Layer'])
-                sorted_df['MTM Points'] = ''
+                    # Convert DXF entities to a Pandas DataFrame
+                    df = dxf_loader.entities_to_dataframe()
 
-                base_filename = os.path.splitext(os.path.basename(file.filename))[0]
-                aws_mtm_graded_dir_path = os.path.join(AWS_MTM_GRADED_DIR_PATH, f"{base_filename}_combined_entities.xlsx")
+                    ## MTM Stuff: Generate Excel
+                    sorted_df = df.sort_values(by=['Filename', 'Type', 'Layer'])
+                    sorted_df['MTM Points'] = ''
 
-                aws_utils.upload_dataframe_to_s3(sorted_df, aws_mtm_graded_dir_path, file_format="excel")
+                    base_filename = os.path.splitext(os.path.basename(each_file.filename))[0]
+                    aws_mtm_graded_dir_path = os.path.join(AWS_MTM_GRADED_DIR_PATH, f"{base_filename}_combined_entities.xlsx")
+
+                    aws_utils.upload_dataframe_to_s3(sorted_df, aws_mtm_graded_dir_path, file_format="excel")
+
+                    with open(temp_file_path, 'rb') as tmp:
+                        # check for duplicate file using hash value of the file
+                        file_content = tmp.read()
+                        file_hash = aws_utils.compute_file_hashValue(file_content)
+                        tmp.seek(0)
+                        if not aws_utils.check_hash_exists(file_hash, AWS_DXF_GRADED_DIR_PATH):
+                            aws_utils.upload_file_to_s3(tmp, AWS_DXF_GRADED_DIR_PATH + file_base_name)
+                            aws_utils.update_hash_file(AWS_DXF_GRADED_DIR_PATH)
+                            print(f'Successfully uploaded {file_base_name} to S3!')
+                        else:
+                            print(f'DUPLICATE file : {file_base_name} ')
+                            return f"DUPLICATE file detected:{file_base_name} ,Upload a different file"
+
 
         if typeform.lower() == 'mtm_points_file':
             print(f"Processing MTM points file: {file.filename}")

@@ -67,11 +67,11 @@
           <p>Option 1: Upload DXF File. Get MTM Combined entities (unlabeled)</p>
           <p>Option 2: After adding labels to MTM points column, upload your CSV file here, and it will store it to the Database. Also visualizes the result.</p>
           <form method="POST" action="/upload_file" enctype="multipart/form-data" onsubmit="showLoadingSpinner()">
-            <input type="file" name="file-to-s3">
-            <select id="file_choice" name="file_choice" required>
+            <input type="file" id="fileInput" name="file-to-s3" required>
+            <select id="file_choice" name="file_choice" required onchange="handleFileChoice()">
               <option disabled selected>Select the type of File</option>
               <option id="DXF_file" value="DXF_file">DXF File</option>
-              <option id="Graded_DXF_file" value="Graded_DXF_file">Graded DXF File</option>
+              <option id="Graded_DXF_file" value="Graded_DXF_file" >Graded DXF File</option>
               <option id="MTM_points_file" value="MTM_points_file">MTM points File</option>
             </select>
             <input type="submit" value="Upload">
@@ -89,6 +89,18 @@
     <script>
         function showLoadingSpinner() {
             document.getElementById('loadingOverlay').style.display = 'block';
+        }
+        function handleFileChoice() {
+            const fileInput = document.getElementById('fileInput');
+            const selectedOption = document.getElementById('file_choice').value;
+
+            if (selectedOption === 'Graded_DXF_file') {
+                fileInput.setAttribute('webkitdirectory', '');
+                fileInput.setAttribute('multiple', '');
+            } else {
+                fileInput.removeAttribute('webkitdirectory');
+                fileInput.removeAttribute('multiple');
+            }
         }
     </script>
   </body>
