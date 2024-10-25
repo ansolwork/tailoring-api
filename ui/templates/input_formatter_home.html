@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Input Formatter Service</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        h2 {
+            text-align: center;
+        }
+
+        .button-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .btn {
+            text-decoration: none;
+            background-color: #007BFF; /* Bootstrap primary color */
+            color: white;
+            padding: 10px 20px;
+            margin: 10px;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: background-color 0.3s ease, transform 0.2s;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:hover {
+            background-color: #0056b3; /* Darker shade for hover */
+            transform: translateY(-2px); /* Slight lift effect */
+        }
+
+        .btn:active {
+            transform: translateY(0); /* Return to original state when clicked */
+            background-color: #00408d; /* Even darker on click */
+        }
+
+        .btn-primary {
+            background-color: #007BFF; /* Default primary color */
+        }
+    </style>
+</head>
+<body>
+<h2>This UI is used to add input tags/options to the input-formatter service</h2>
+<br><br>
+<div class="button-container">
+    <a href="/add_piece" class="btn btn-primary">Add new piece</a>
+</div>
+<br><br>
+<div class="button-container">
+    <a href="/add_alteration" class="btn btn-primary">Add new alteration</a>
+</div>
+<br><br>
+<div class="button-container">
+    <a href="/add_tag" class="btn btn-primary">Add new tag</a>
+</div>
+    <br><br>
+<div class="button-container">
+    <a href="/map_tags" class="btn btn-primary">Map tags</a>
+</div>
+
+<br>
+<div class="button-container">
+    <a href="/home" class="btn btn-primary">Return to Main page</a>
+</div>
+
+</body>
+</html>
