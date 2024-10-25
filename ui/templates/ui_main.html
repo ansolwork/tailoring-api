@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Input Formatter Service</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        h2 {
+            text-align: center;
+        }
+
+        .button-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .btn {
+            text-decoration: none;
+            background-color: #007BFF; /* Bootstrap primary color */
+            color: white;
+            padding: 10px 20px;
+            margin: 10px;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: background-color 0.3s ease, transform 0.2s;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:hover {
+            background-color: #0056b3; /* Darker shade for hover */
+            transform: translateY(-2px); /* Slight lift effect */
+        }
+
+        .btn:active {
+            transform: translateY(0); /* Return to original state when clicked */
+            background-color: #00408d; /* Even darker on click */
+        }
+
+        .btn-primary {
+            background-color: #007BFF; /* Default primary color */
+        }
+    </style>
+</head>
+<body>
+    <h2>Choose the data service from below</h2>
+    <br><br>
+
+    <div class="button-container">
+        <a href="/input_formatter_home" class="btn btn-primary">INPUT FORMATTER SERVICE</a>
+        <p>This service is used for creating a mapping database for input and corresponding pieces and alterations required for the tailoring API.</p>
+    </div>
+
+    <br><br>
+
+    <div class="button-container">
+        <a href="/file_operations_home" class="btn btn-primary">FILE OPERATIONS SERVICE</a>
+        <p>This service is used for uploading files and data into S3 required for the tailoring API.</p>
+    </div>
+</body>
+
+</html>
