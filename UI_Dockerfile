@@ -24,4 +24,4 @@ EXPOSE 5000
 
 # Run the Flask app using Gunicorn.
 # Change the workers(2 * num-cores + 1) to more while production deployment
-CMD ["gunicorn", "-w", "3", "-b", "0.0.0.0:5000","--timeout","120", "ui.ui:app"]
+CMD ["gunicorn", "-w", "3", "-b", "0.0.0.0:5000","--timeout","600", "ui.ui:app"]

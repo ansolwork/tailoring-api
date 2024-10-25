@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Form with Searchable Dropdown</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 50px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        form {
+            width: 60%;
+        }
+        .options-list {
+            list-style: none;
+            padding: 0;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .options-list li {
+            margin: 10px 0;
+        }
+        .options-list li input[type="checkbox"] {
+            margin-right: 10px;
+        }
+        .search-box {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .dropdown {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .selected-options {
+            padding: 10px;
+            background-color: #f8f8f8;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            min-height: 100px;
+        }
+        .button-container {
+    text-align: center; /* Center the button horizontally */
+    margin-top: 20px;   /* Add spacing above the button container */
+}
+
+.button-container .btn {
+    font-size: 16px;       /* Set font size for the button */
+    padding: 10px 20px;    /* Adjust padding for better spacing */
+    background-color: #007bff; /* Use Bootstrap's primary color (can be customized) */
+    border-radius: 5px;    /* Make button corners slightly rounded */
+    text-decoration: none; /* Remove underline from the link */
+    color: white;          /* Ensure text is white */
+    transition: background-color 0.3s ease; /* Smooth hover effect */
+}
+
+.button-container .btn:hover {
+    background-color: #0056b3; /* Darker shade of blue on hover */
+    text-decoration: none;      /* Keep no underline on hover */
+}
+
+    </style>
+</head>
+<body>
+
+<h2>Select Options from Pieces and Alteration names (Checkboxes) & Tags (Dropdown)</h2>
+
+<h4 style="color: red;">
+    {% with messages = get_flashed_messages(with_categories=True) %}
+    {% if messages %}
+    <div>
+        {% for category, message in messages %}
+        <div class="flash-message {{ category }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+</h4>
+<form action="/submit" method="POST" id="selectionForm">
+
+    <!-- Searchable Dropdown for Table 3 -->
+    <div>
+        <h3>Select an Option from Tags</h3>
+        <input type="text" class="search-box" id="searchBox3" placeholder="Search options in Tags..."
+               onkeyup="filterDropdown()">
+        <select class="dropdown" id="dropdowntags" name="tag_option">
+            <!-- Options from Table 3 will be dynamically inserted here -->
+        </select>
+    </div>
+
+    <!-- Search for Pieces -->
+    <div>
+        <h3>Pieces Options</h3>
+        <input type="text" class="search-box" id="searchBox1" placeholder="Search options in Pieces..."
+               onkeyup="filterOptions('optionsList1', 'searchBox1')">
+        <ul class="options-list" id="optionsList1">
+            <!-- Options from Pieces will be dynamically inserted here -->
+        </ul>
+    </div>
+
+    <!-- Search for Table 2 -->
+    <div>
+        <h3>Alterations Options</h3>
+        <input type="text" class="search-box" id="searchBox2" placeholder="Search options in Alterations..."
+               onkeyup="filterOptions('optionsList2', 'searchBox2')">
+        <ul class="options-list" id="optionsList2">
+            <!-- Options from Table 2 will be dynamically inserted here -->
+        </ul>
+    </div>
+
+    <div>
+        <br>
+        <h3>Enter alteration amount</h3>
+        <input type="text" name="alteration_amnt" id="alteration_amnt" placeholder=" (example: 0.000)...">
+    </div>
+
+
+    <!-- Display selected options -->
+    <br>
+    <div class="selected-options" id="selectedOptions">
+        <h3>Selected Options</h3>
+        <!-- Selected options will appear here -->
+    </div>
+
+    <!-- Submit Button -->
+    <button type="submit">Submit</button>
+</form>
+
+<div class="button-container">
+    <a href="/input_formatter_home" class="btn btn-primary">Return to Home</a>
+</div>
+
+
+<script>
+    // Load options from Table 1, Table 2, and Table 3
+    function loadOptions() {
+        // Load Table 1 options
+        fetch('/get-options/pieces')
+        .then(response => response.json())
+        .then(data => {
+            const optionsList1 = document.getElementById('optionsList1');
+            optionsList1.innerHTML = '';
+            data.forEach(option => {
+                let li = document.createElement('li');
+                li.innerHTML = `
+                    <input type="checkbox" id="pieces_${option}" value="${option}" name="pieces_options" onchange="updateSelectedOptions()">
+                    <label for="pieces_${option}">${option}</label>
+                `;
+                optionsList1.appendChild(li);
+            });
+        })
+        .catch(error => console.error('Error fetching options from Pieces:', error));
+
+        // Load Table 2 options
+        fetch('/get-options/alterations')
+        .then(response => response.json())
+        .then(data => {
+            const optionsList2 = document.getElementById('optionsList2');
+            optionsList2.innerHTML = '';
+            data.forEach(option => {
+                let li = document.createElement('li');
+                li.innerHTML = `
+                    <input type="checkbox" id="alterations_${option}" value="${option}" name="alterations_options" onchange="updateSelectedOptions()">
+                    <label for="alterations_${option}">${option}</label>
+                `;
+                optionsList2.appendChild(li);
+            });
+        })
+        .catch(error => console.error('Error fetching options from Alterations:', error));
+
+        // Load Table 3 options for the dropdown
+        fetch('/get-options/tags')
+        .then(response => response.json())
+        .then(data => {
+            const dropdowntags = document.getElementById('dropdowntags');
+            //dropdowntags.innerHTML = '';
+            dropdowntags.innerHTML = '<input type="text" id="tag_${option}" value="${option}" name="tag_option" onchange="updateSelectedOptions()"'
+            data.forEach(option => {
+                let optionElement = document.createElement('option');
+                optionElement. Value = option;
+                optionElement.textContent = option;
+                dropdowntags.appendChild(optionElement);
+            });
+        })
+        .catch(error => console.error('Error fetching options from Tags:', error));
+    }
+
+    // Update the selected options in the "Selected Options" section
+    function updateSelectedOptions() {
+        let selectedOptionsDiv = document.getElementById('selectedOptions');
+        selectedOptionsDiv.innerHTML = '';
+
+        // Get selected checkboxes from Table 1 and Table 2
+        let checkboxespieces= document.querySelectorAll('#optionsList1 input[type="checkbox"]');
+        let checkboxesalterations = document.querySelectorAll('#optionsList2 input[type="checkbox"]');
+
+        // Append selected options from Table 1
+        checkboxespieces.forEach(function(checkbox) {
+            if (checkbox.checked) {
+                let option = document.createElement('div');
+                option.textContent = `Pieces: ${checkbox.value}`;
+                selectedOptionsDiv.appendChild(option);
+            }
+        });
+
+        // Append selected options from Table 2
+        checkboxesalterations.forEach(function(checkbox) {
+            if (checkbox.checked) {
+                let option = document.createElement('div');
+                option.textContent = `Alterations: ${checkbox.value}`;
+                selectedOptionsDiv.appendChild(option);
+            }
+        });
+
+        // Append selected option from Tags dropdown
+        let selectedDropdown = document.getElementById('dropdowntags').value;
+        if (selectedDropdown) {
+            let option = document.createElement('div');
+            option.textContent = `Tags: ${selectedDropdown}`;
+            selectedOptionsDiv.appendChild(option);
+        }
+    }
+
+    // Filter the options based on the search input for Table 1 and Table 2
+    function filterOptions(listId, searchBoxId) {
+        let searchValue = document.getElementById(searchBoxId).value.toLowerCase();
+        let checkboxes = document.querySelectorAll(`#${listId} li`);
+        checkboxes.forEach(function(item) {
+            let label = item.textContent.toLowerCase();
+            if (label.includes(searchValue)) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
+    // Filter the options in the dropdown for Table 3
+    function filterDropdown() {
+        let searchValue = document.getElementById('searchBox3').value.toLowerCase();
+        let dropdownOptions = document.querySelectorAll('dropdowntags option');
+        dropdownOptions.forEach(function(option) {
+            let label = option.textContent.toLowerCase();
+            if (label.includes(searchValue)) {
+                option.style.display = '';
+            } else {
+                option.style.display = 'none';
+            }
+        });
+    }
+
+    // Load options when the page loads
+    window.onload = function() {
+        loadOptions();
+    }
+
+</script>
+</body>
+</html>

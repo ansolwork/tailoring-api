@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Item and Piecename Form</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .form-container {
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            width: 100%;
+        }
+
+        h2 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        input[type="submit"] {
+            width: 100%;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        input[type="submit"]:hover {
+            background-color: #45a049;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+        .button-container {
+    text-align: center; /* Center the button horizontally */
+    margin-top: 20px;   /* Add spacing above the button container */
+}
+
+.button-container .btn {
+    font-size: 16px;       /* Set font size for the button */
+    padding: 10px 20px;    /* Adjust padding for better spacing */
+    background-color: #007bff; /* Use Bootstrap's primary color (can be customized) */
+    border-radius: 5px;    /* Make button corners slightly rounded */
+    text-decoration: none; /* Remove underline from the link */
+    color: white;          /* Ensure text is white */
+    transition: background-color 0.3s ease; /* Smooth hover effect */
+}
+
+.button-container .btn:hover {
+    background-color: #0056b3; /* Darker shade of blue on hover */
+    text-decoration: none;      /* Keep no underline on hover */
+}
+
+
+    </style>
+</head>
+<body>
+
+
+<div class="form-container">
+    <h4 style="color: red;">
+        {% with messages = get_flashed_messages(with_categories=True) %}
+        {% if messages %}
+        <div>
+            {% for category, message in messages %}
+            <div class="flash-message {{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+    </h4>
+    <h2>Enter Item and Piecename</h2>
+    <form action="/add_piece" method="POST">
+        <div class="form-group">
+            <label for="piece_name">Piecename</label>
+            <input type="text" id="piece_name" name="piece_name" placeholder="Enter piecename" required>
+        </div>
+        <div class="form-group">
+            <label for="item">Item</label>
+            <input type="text" id="item" name="item" placeholder="Enter item" required>
+        </div>
+        <input type="submit" value="Submit">
+    </form>
+
+    <br>
+    <div class="button-container">
+        <a href="/input_formatter_home" class="btn btn-primary">Return to Home</a>
+    </div>
+
+</div>
+
+
+</body>
+</html>
