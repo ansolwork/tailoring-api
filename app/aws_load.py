@@ -21,7 +21,7 @@ class AWSS3Loader:
 
     def _initialize_s3_client(self):
         session = boto3.Session(profile_name='tailoring_api')
-        return session.client('s3', region_name='us-east-1')
+        return session.client('s3')
 
     def load_file(self, file_key: str):
         try:

@@ -1,3 +1,4 @@
 AWS_S3_BUCKET_NAME : 'lgfgbucket'
 DIRECTORY_KEY : "data/input/recurrent/graded_mtm_combined_entites/"
-LOCAL_SAVE_DIR: data/input/graded_mtm_combined_entities_labeled
+LOCAL_SAVE_DIR: data/input/merged_graded_labeled_entities
+AWS_SAVE_DIR: data/input/primary/graded_mtm_combined_entities_labeled/
