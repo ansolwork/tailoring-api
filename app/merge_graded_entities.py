@@ -38,41 +38,30 @@ class MergeGradedEntities:
                         self.labeled_data[piece_name].append(labeled_df)
 
     def extract_and_insert_mtm_points(self):
-        for piece_name in self.graded_data.keys():
-            logging.info(f"Processing piece: {piece_name}")
-            if piece_name in self.labeled_data:
-                labeled_df = pd.concat(self.labeled_data[piece_name], ignore_index=True)
-                mtm_points = labeled_df['MTM Points'].tolist()
-                logging.info(f"Found {len(mtm_points)} MTM points for {piece_name}")
+        for piece_name, labeled_dfs in self.labeled_data.items():
+            if piece_name in self.graded_data:
+                # Get the mapping of Point Labels to MTM Points from labeled data
+                mtm_mapping = {}
+                for labeled_df in labeled_dfs:
+                    mtm_points = labeled_df[labeled_df['MTM Points'].notna()]
+                    for _, row in mtm_points.iterrows():
+                        mtm_mapping[row['Point Label']] = row['MTM Points']
                 
-                for i, graded_df in enumerate(self.graded_data[piece_name]):
-                    logging.info(f"Processing graded file {i+1} for {piece_name}")
-                    if 'MTM Points' not in graded_df.columns:
-                        graded_df['MTM Points'] = np.nan
-                        logging.info("Added 'MTM Points' column to graded data")
+                logging.info(f"Found MTM points at Point Labels: {list(mtm_mapping.keys())}")
+                
+                # Apply MTM points to graded files using Point Label positions
+                for graded_df in self.graded_data[piece_name]:
+                    for point_label, mtm_point in mtm_mapping.items():
+                        mask = graded_df['Point Label'] == point_label
+                        graded_df.loc[mask, 'MTM Points'] = mtm_point
                     
-                    # Find empty MTM Points in graded_df
-                    empty_mtm_mask = graded_df['MTM Points'].isna()
-                    empty_mtm_indices = empty_mtm_mask[empty_mtm_mask].index
-                    logging.info(f"Found {len(empty_mtm_indices)} empty MTM points in graded data")
-                    
-                    # Insert MTM points from labeled data
-                    points_inserted = 0
-                    for i, idx in enumerate(empty_mtm_indices):
-                        if i < len(mtm_points):
-                            graded_df.at[idx, 'MTM Points'] = mtm_points[i]
-                            points_inserted += 1
-                        else:
-                            break  # Stop if we run out of MTM points to insert
-                    logging.info(f"Inserted {points_inserted} MTM points into graded data")
-            else:
-                logging.warning(f"No labeled data found for piece: {piece_name}")
+                    logging.info(f"Applied MTM points to graded file")
 
     def save_merged_data(self):
         for piece_name, dfs in self.graded_data.items():
             piece_folder = os.path.join(self.output_folder, piece_name)
             os.makedirs(piece_folder, exist_ok=True)
-            output_path = os.path.join(piece_folder, f'{piece_name}.xlsx')
+            output_path = os.path.join(piece_folder, f'{piece_name}_graded_combined_entities_labeled.xlsx')
             
             # Concatenate all DataFrames for this piece
             merged_df = pd.concat(dfs, ignore_index=True)

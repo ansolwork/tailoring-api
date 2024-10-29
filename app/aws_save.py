@@ -20,7 +20,7 @@ class AWSS3Saver:
 
     def _initialize_s3_client(self):
         session = boto3.Session(profile_name='tailoring_api')
-        return session.client('s3', region_name='us-east-1')
+        return session.client('s3')
 
     def save_file(self, local_file_path: str, s3_key: str):
         try:
