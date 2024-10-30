@@ -96,7 +96,7 @@ def get_entities_from_db(yaml_data):
     return pieces_df, alteration_names_df, alteration_amount_df
 
 
-@app.route('/home')
+@app.route('/api/home')
 def home():
     return "Home Page"
 
