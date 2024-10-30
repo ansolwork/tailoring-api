@@ -1,0 +1,20 @@
+# Use an official Python runtime as a parent image
+FROM --platform=linux/amd64 python:3.12-slim AS build
+
+# Install system dependencies
+
+# Set the working directory in the container
+WORKDIR /app/api
+
+# Copy the current directory contents into the container at /app/api
+COPY . /app/api
+
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Add API Call method
+EXPOSE 5001
+
+# Run the Flask app using Gunicorn.
+# Change the workers(2 * num-cores + 1) to more while production deployment
+CMD ["gunicorn", "-w", "3", "-b", "0.0.0.0:5001","--timeout","600", "app.api:app"]
