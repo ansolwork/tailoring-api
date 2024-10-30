@@ -250,7 +250,7 @@
     // Filter the options in the dropdown for Table 3
     function filterDropdown() {
         let searchValue = document.getElementById('searchBox3').value.toLowerCase();
-        let dropdownOptions = document.querySelectorAll('dropdowntags option');
+        let dropdownOptions = document.querySelectorAll('#dropdowntags option');
         dropdownOptions.forEach(function(option) {
             let label = option.textContent.toLowerCase();
             if (label.includes(searchValue)) {
