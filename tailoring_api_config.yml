@@ -19,6 +19,3 @@ AWS_S3_SIGNATURE_VERSION : "s3v4"
 AWS_PROFILE : "tailoring_api"
 DB_TYPE : "postgresql"
 DB_API : "psycopg2"
-DB_HOST : 127.0.0.1
-DB_PORT : 5432
-DB_NAME : "lgfg_api"
