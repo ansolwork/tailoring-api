@@ -9,11 +9,13 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ".:/app"
+      - ".:/app/ui"
 # API service
-#  api:
-#    image : lgfg_docker_images:api
-#    build:
-#      dockerfile: : Api_DockerFile
-#    ports:
-#      - "8080:8080"
+  api:
+    image : lgfg_docker_images:api
+    build:
+      dockerfile: API_Dockerfile
+    ports:
+      - "5001:5001"
+    volumes:
+      - ".:/app/api"

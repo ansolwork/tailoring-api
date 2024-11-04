@@ -1,0 +1,34 @@
+### Add the fields here which are only required , exclude the factory-info
+required:
+  - Item
+  - Shirt Styles
+  - Sleeve Cuff Style
+  - Sleeve Vent Button
+  - Cuff Depth
+  - Epaulette
+  - Front Style
+  - Breast Pockets
+  - Flap with button fastening
+  - Back Style
+  - Shirt Hem
+  - Contrast Top Collar
+  - Contrast Under Collar
+  - Contrast Top Cuff
+  - Contrast Under Cuff
+  - Contrast Placket
+  - Measurement Type
+  - Fit
+  - Chest
+  - Bare Neck Measure
+  - Waist Measure
+  - Seat
+  - Back Length
+  - Shoulder point to point
+  - Sleeve Length
+  - Cuff Length Left or Both
+  - Drop front Neck (shirt)
+  - Back Stance
+  - Shoulder Angle
+  - FWD Pointing Shoulders
+  - Shoulder Drop
+  - Shoulder Drop Amount
