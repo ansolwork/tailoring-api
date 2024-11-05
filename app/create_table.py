@@ -80,6 +80,7 @@ class CreateTable:
         for filename in os.listdir(self.combined_entities_folder):
             if filename.endswith(".xlsx"):
                 filepath = os.path.join(self.combined_entities_folder, filename)
+                print(f"Processing file: {filepath}")
                 
                 # Load the current Excel file
                 combined_df = pd.read_excel(filepath)
@@ -91,8 +92,15 @@ class CreateTable:
                     # Remove the '.dxf' extension and strip leading/trailing whitespace
                     combined_df['piece_name'] = combined_df['piece_name'].str.replace(r'\.dxf$', '', regex=True).str.strip()
                     
-                    # Remove only trailing spaces and numbers, ensuring valid names remain intact
-                    combined_df['piece_name'] = combined_df['piece_name'].str.replace(r'\s+\d*$', '', regex=True).str.strip()
+                    if self.is_graded:
+                        # Add a new column for the base piece name (for grouping)
+                        combined_df['base_piece_name'] = combined_df['piece_name'].apply(
+                            lambda x: '-'.join(x.split('-')[:-1]) if x.split('-')[-1].isdigit() else x
+                        )
+                    else:
+                        # For base pieces, just remove trailing spaces and numbers
+                        combined_df['piece_name'] = combined_df['piece_name'].str.replace(r'\s+\d*$', '', regex=True).str.strip()
+                        combined_df['base_piece_name'] = combined_df['piece_name']
 
                 combined_df_list.append(combined_df)
         
@@ -148,27 +156,27 @@ class CreateTable:
 
     def save_table_csv_by_piece_name(self, output_filename_prefix="combined_table"):
         output_table_path = self.output_table_path_by_piece
-
-        # Ensure the output directory exists
         os.makedirs(output_table_path, exist_ok=True)
 
-        self.merged_df['piece_name'] = self.merged_df['piece_name'].str.replace(".dxf", "", regex=False)
+        # Use base_piece_name for grouping if it exists, otherwise use piece_name
+        grouping_column = 'base_piece_name' if 'base_piece_name' in self.merged_df.columns else 'piece_name'
+        grouped = self.merged_df.groupby(grouping_column)
 
-        # Group the DataFrame by 'piece_name'
-        grouped = self.merged_df.groupby('piece_name')
-
-        for piece_name, group_df in grouped:
+        for base_piece_name, group_df in grouped:
             # Convert all column headers to lowercase
             group_df.columns = group_df.columns.str.lower()
 
-            # Sort rows by 'alteration_rule'
-            group_df = group_df.sort_values(by='alteration_rule')
+            # Sort rows by 'alteration_rule' and 'piece_name' (to order size variants)
+            group_df = group_df.sort_values(by=['alteration_rule', 'piece_name'])
 
-            safe_piece_name = str(piece_name).replace(" ", "_").replace("/", "_")  # Ensure no illegal filename characters
+            safe_piece_name = str(base_piece_name).replace(" ", "_").replace("/", "_")
             output_file_path = os.path.join(output_table_path, f"{output_filename_prefix}_{safe_piece_name}.csv")
 
             group_df = group_df.sort_values(by='mtm points')
             group_df = group_df.drop('vertices', axis=1)
+            
+            if 'base_piece_name' in group_df.columns:
+                group_df = group_df.drop('base_piece_name', axis=1)
 
             # Drop duplicate rows
             group_df = group_df.drop_duplicates()
@@ -177,6 +185,7 @@ class CreateTable:
             group_df = group_df.dropna(how='all', subset=[col for col in group_df.columns if col != 'piece_name'])
 
             # Reset the index and add point_order starting from 0
+            group_df = group_df.reset_index(drop=True)
             group_df['point_order'] = group_df.index
             
             # Save the group as a CSV file

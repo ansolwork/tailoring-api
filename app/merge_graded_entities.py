@@ -59,12 +59,30 @@ class MergeGradedEntities:
 
     def save_merged_data(self):
         for piece_name, dfs in self.graded_data.items():
-            piece_folder = os.path.join(self.output_folder, piece_name)
-            os.makedirs(piece_folder, exist_ok=True)
-            output_path = os.path.join(piece_folder, f'{piece_name}_graded_combined_entities_labeled.xlsx')
+            os.makedirs(self.output_folder, exist_ok=True)
+            output_path = os.path.join(self.output_folder, f'{piece_name}_graded_combined_entities_labeled.xlsx')
             
             # Concatenate all DataFrames for this piece
             merged_df = pd.concat(dfs, ignore_index=True)
+            
+            # Filter out rows where filename doesn't end with -number
+            if 'Filename' in merged_df.columns:
+                # Create a mask for filenames that end with -number
+                has_size = merged_df['Filename'].str.match(r'.*-\d+\.dxf$')
+                
+                # Print debug info about removed files
+                no_size_files = merged_df[~has_size]['Filename'].unique()
+                if len(no_size_files) > 0:
+                    print(f"\nRemoving files without size indicators for {piece_name}:")
+                    for f in no_size_files:
+                        print(f"- {f}")
+                
+                # Keep only rows where filename ends with -number.dxf
+                merged_df = merged_df[has_size]
+                
+                if len(merged_df) == 0:
+                    print(f"Warning: No rows left after filtering for {piece_name}")
+                    continue
             
             merged_df.to_excel(output_path, index=False)
             print(f"Merged data for {piece_name} saved to {output_path}")
