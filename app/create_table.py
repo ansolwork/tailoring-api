@@ -8,16 +8,24 @@ import numpy as np
 # IMplement sorting of MTM Points
 
 class CreateTable:
-    def __init__(self, alteration_filepath, combined_entities_folder):
+    def __init__(self, alteration_filepath, combined_entities_folder, is_graded=False):
         self.alteration_filepath = alteration_filepath
         self.combined_entities_folder = combined_entities_folder
+        self.is_graded = is_graded
         self.df_dict = self.load_table()  # Loading all sheets as a dictionary of DataFrames
         self.alteration_joined_df = pd.DataFrame()
         self.combined_entities_joined_df = pd.DataFrame()
         self.merged_df = pd.DataFrame()
-        self.output_dir = "data/staging"
-        self.output_table_path = "data/staging/combined_alteration_tables"
-        self.output_table_path_by_piece = "data/staging/alteration_by_piece"
+        
+        # Set output directories based on is_graded flag
+        if self.is_graded:
+            self.output_dir = "data/staging/graded"
+            self.output_table_path = "data/staging/graded/combined_alteration_tables"
+            self.output_table_path_by_piece = "data/staging/graded/alteration_by_piece"
+        else:
+            self.output_dir = "data/staging/base"
+            self.output_table_path = "data/staging/base/combined_alteration_tables"
+            self.output_table_path_by_piece = "data/staging/base/alteration_by_piece"
 
         # Add more sheets if necessary
         self.sheet_list = ["SHIRT-FRONT", "SHIRT-BACK", "SHIRT-YOKE", "SHIRT-SLEEVE", 
@@ -239,23 +247,42 @@ class CreateTable:
 
 if __name__ == "__main__":
     alteration_filepath = "data/input/mtm_points.xlsx"
+    
+    # Process base files
+    print("\nProcessing base files...")
     combined_entities_folder = "data/input/mtm_combined_entities_labeled/"
-    create_table = CreateTable(alteration_filepath, combined_entities_folder)
+    create_table = CreateTable(
+        alteration_filepath, 
+        combined_entities_folder,
+        is_graded=False
+    )
     
     # Process the sheets and get the combined DataFrame
     create_table.process_table()
     create_table.process_combined_entities()
-
-    # Create Vertices DF
     create_table.create_vertices_df()
-
-    # Join tables
     create_table.merge_tables()
-    
-    # Save the combined DataFrame as CSV files 
     create_table.save_table_csv_by_alteration_rule()
     create_table.save_table_csv_by_piece_name()
     create_table.add_other_mtm_points()
+
+    # Process graded files
+    print("\nProcessing graded files...")
+    graded_entities_folder = "data/input/merged_graded_labeled_entities/"
+    create_table_graded = CreateTable(
+        alteration_filepath, 
+        graded_entities_folder,
+        is_graded=True
+    )
+    
+    # Process the sheets and get the combined DataFrame for graded files
+    create_table_graded.process_table()
+    create_table_graded.process_combined_entities()
+    create_table_graded.create_vertices_df()
+    create_table_graded.merge_tables()
+    create_table_graded.save_table_csv_by_alteration_rule()
+    create_table_graded.save_table_csv_by_piece_name()
+    create_table_graded.add_other_mtm_points()
 
     # DEBUG
     #print("\n# Debug: All Unique Processed Piece Names. A common error is if they do not match the Actual piece name. \nCheck for extra spaces, incomplete names or unwanted extensions (e.g. .dxf)\n")
