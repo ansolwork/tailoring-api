@@ -13,7 +13,7 @@
         }
 
         /* Centering the input elements */
-        .form-container input, 
+        .form-container input,
         .form-container select {
             margin: 10px 0;
             padding: 10px;
@@ -56,6 +56,10 @@
             font-family: Arial, sans-serif;
             font-size: 18px;
         }
+
+        form:has(input[type="submit"]:active) ~ .loading-overlay {
+            display: block !important;
+        }
     </style>
 </head>
 <body>
@@ -67,7 +71,7 @@
         <p>Option 1: Upload DXF File. Get MTM Combined entities (unlabeled)</p>
         <p>Option 2: After adding labels to MTM points column, upload your CSV file here, and it will store it to the
             Database. Also visualizes the result.</p>
-        <form method="POST" action="/upload_file" enctype="multipart/form-data" onsubmit="showLoadingSpinner()">
+        <form method="POST" action="/upload_file" enctype="multipart/form-data">
             <input type="file" id="fileInput" name="file-to-s3" required>
             <select id="file_choice" name="file_choice" required onchange="handleFileChoice()">
                 <option disabled selected>Select the type of File</option>
@@ -75,7 +79,14 @@
                 <option id="Graded_DXF_file" value="Graded_DXF_file">Graded DXF File</option>
                 <option id="MTM_points_file" value="MTM_points_file">MTM points File</option>
             </select>
-            <input type="submit" value="Upload">
+
+            <select id="item_choice" name="item_choice" required>
+                <option disabled selected>Select Item Type</option>
+                {% for item in garment_types %}
+                    <option value="{{ item }}">{{ item }}</option>
+                {% endfor %}
+            </select>
+            <input type="submit" name="action" value="Upload">
         </form>
     </div>
 
@@ -97,6 +108,7 @@
     function showLoadingSpinner() {
         document.getElementById('loadingOverlay').style.display = 'block';
     }
+
     function handleFileChoice() {
         const fileInput = document.getElementById('fileInput');
         const selectedOption = document.getElementById('file_choice').value;

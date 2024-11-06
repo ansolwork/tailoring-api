@@ -32,15 +32,9 @@ with open(config_filepath) as f:
         yaml_config = yaml.safe_load(f)
     except yaml.YAMLError as e:
         print(e)
-
 ALLOWED_EXTENSIONS = yaml_config['ALLOWED_EXTENSIONS']
 ALLOWED_MIME_TYPES = yaml_config['ALLOWED_MIME_TYPES']
 AWS_S3_BUCKET_NAME = yaml_config['AWS_S3_BUCKET_NAME']
-AWS_DXF_DIR_PATH = yaml_config['AWS_DXF_DIR_PATH']
-AWS_DXF_GRADED_DIR_PATH = yaml_config['AWS_DXF_GRADED_DIR_PATH']
-AWS_MTM_DIR_PATH = yaml_config['AWS_MTM_DIR_PATH']
-AWS_MTM_GRADED_DIR_PATH = yaml_config['AWS_MTM_GRADED_DIR_PATH']
-AWS_MTM_DIR_PATH_LABELED = yaml_config['AWS_MTM_DIR_PATH_LABELED']
 AWS_OUTPUT_DIR_PATH = yaml_config['AWS_OUTPUT_DIR_PATH']
 AWS_S3_SIGNATURE_VERSION = yaml_config['AWS_S3_SIGNATURE_VERSION']
 AWS_PLOT_DIR_BASE = yaml_config['AWS_PLOT_DIR_BASE']
@@ -55,6 +49,7 @@ DB_NAME = os.getenv('DB_NAME')
 
 aws_utils = AwsUtils(ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, AWS_S3_BUCKET_NAME, AWS_S3_SIGNATURE_VERSION, AWS_PROFILE)
 connection_string = f"{DB_TYPE}+{DB_API}://{DB_USER}:{urllib.parse.quote(DB_PASSWORD)}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
 '''
 File operation service functions
 '''
@@ -409,9 +404,9 @@ File operations service routes
 @app.route("/file_operations_home")
 def file_operations_home():
     # return "Hello World!"
-    contents_output = aws_utils.list_all_s3_files(AWS_OUTPUT_DIR_PATH)
-    contents_mtm = aws_utils.list_all_s3_files(AWS_MTM_DIR_PATH)
-    return render_template("file_operations_home.html", contents_output=contents_output, contents_mtm=contents_mtm)
+    with open('tailoring_api_config.yml', 'r') as f:
+        config = yaml.safe_load(f)
+    return render_template("file_operations_home.html", garment_types=config['GARMENT_TYPES'])
 
 
 @app.route("/upload_file", methods=["POST", "GET"])
@@ -421,23 +416,154 @@ def upload_file():
 
     file = request.files["file-to-s3"]
     file_list = request.files.getlist('file-to-s3')
+    item_choice = request.form.get('item_choice')
 
+    if not item_choice:
+        return "Please select an item type"
+
+    # First update the paths
+    try:
+        global ITEM, AWS_DXF_DIR_PATH, AWS_DXF_GRADED_DIR_PATH, AWS_MTM_DIR_PATH, AWS_MTM_GRADED_DIR_PATH, AWS_MTM_DIR_PATH_LABELED
+
+        ITEM = item_choice.lower()
+        # Update AWS paths with new ITEM value
+        AWS_DXF_DIR_PATH = aws_utils.concatenate_item_subdirectories(yaml_config['AWS_DXF_DIR_PATH'], ITEM)
+        AWS_DXF_GRADED_DIR_PATH = aws_utils.concatenate_item_subdirectories(yaml_config['AWS_DXF_GRADED_DIR_PATH'],
+                                                                            ITEM)
+        AWS_MTM_DIR_PATH = aws_utils.concatenate_item_subdirectories(yaml_config['AWS_MTM_DIR_PATH'], ITEM)
+        AWS_MTM_GRADED_DIR_PATH = aws_utils.concatenate_item_subdirectories(yaml_config['AWS_MTM_GRADED_DIR_PATH'],
+                                                                            ITEM)
+        AWS_MTM_DIR_PATH_LABELED = aws_utils.concatenate_item_subdirectories(yaml_config['AWS_MTM_DIR_PATH_LABELED'],
+                                                                             ITEM)
+    except Exception as e:
+        return f"Failed to update paths: {str(e)}"
+
+    # Then proceed with file upload
     if not aws_utils.allowed_file(file.filename) or aws_utils.allowed_mime(file):
         return "FILE FORMAT NOT ALLOWED"
     if file.filename == "":
         return "Please select a file"
-    if file:
-        typeform = request.form['file_choice']
-        print("typeform" + typeform)
 
-        if typeform.lower() == 'dxf_file':
-            print(f"Processing DXF file: {file.filename}")
-            with tempfile.TemporaryDirectory() as tmpdirname:
+    typeform = request.form.get('file_choice')
+    if not typeform:
+        return "Please select a file type"
+
+    if typeform.lower() == 'dxf_file':
+        print(f"Processing DXF file: {file.filename}")
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # Create a temp file with the same name as the uploaded file
+            temp_file_path = os.path.join(tmpdirname, file.filename)
+
+            # Save the uploaded file to the temp file
+            file.save(temp_file_path)
+
+            # with tempfile.NamedTemporaryFile(delete=False, suffix=".dxf") as temp_file:
+            # file.save(temp_file.name)  # Save the uploaded file to the temp file
+
+            # Load DXF using the file path
+            # dxf_loader.load_dxf(temp_file.name)
+            dxf_loader.load_dxf(temp_file_path)
+
+            # Convert DXF entities to a Pandas DataFrame
+            df = dxf_loader.entities_to_dataframe()
+
+            # Create plot
+            output_plot_path = os.path.join("ui/static/plots", f"{os.path.splitext(file.filename)[0]}_plot.png")
+
+            # Prepare a matplotlib figure
+            fig, ax = plt.subplots(figsize=(60, 50))
+            ax.set_aspect('equal')
+
+            # Draw lines
+            lines = df[df['Type'] == 'LINE']
+            for _, row in lines.iterrows():
+                if pd.notna(row['Line_Start_X']) and pd.notna(row['Line_End_X']) and pd.notna(
+                        row['Line_Start_Y']) and pd.notna(row['Line_End_Y']):
+                    plt.plot([row['Line_Start_X'], row['Line_End_X']], [row['Line_Start_Y'], row['Line_End_Y']],
+                             marker='o', linewidth=0.5, markersize=5)
+                    plt.text(row['Line_Start_X'], row['Line_Start_Y'],
+                             f"({row['Line_Start_X']}, {row['Line_Start_Y']})", fontsize=8, ha='right', va='bottom')
+                    plt.text(row['Line_End_X'], row['Line_End_Y'], f"({row['Line_End_X']}, {row['Line_End_Y']})",
+                             fontsize=8, ha='right', va='bottom')
+
+            # Draw polylines
+            polylines = df[df['Type'].isin(['POLYLINE', 'LWPOLYLINE'])]
+            unique_points = polylines.drop_duplicates(subset=['PL_POINT_X', 'PL_POINT_Y'])
+            for vertex_label in polylines['Vertex Label'].unique():
+                vertex_group = polylines[polylines['Vertex Label'] == vertex_label]
+                xs = vertex_group['PL_POINT_X'].tolist()
+                ys = vertex_group['PL_POINT_Y'].tolist()
+                plt.plot(xs, ys, marker='o', linewidth=0.5, markersize=5)
+
+            # Annotate unique points
+            for x, y, point_label in zip(unique_points['PL_POINT_X'], unique_points['PL_POINT_Y'],
+                                         unique_points['Point Label']):
+                plt.text(x, y, f'{point_label}', fontsize=8, ha='right', va='bottom')
+
+            # Configure and save the plot
+            plt.title(f'Polyline Plot for {file.filename}', fontsize=26)
+            plt.xlabel('X Coordinate', fontsize=24)
+            plt.ylabel('Y Coordinate', fontsize=24)
+
+            # Increase x-tick and y-tick label sizes
+            plt.xticks(fontsize=20)  # Increase x-tick size
+            plt.yticks(fontsize=20)  # Increase y-tick size
+
+            plt.grid(True)
+            plt.tight_layout()
+            plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)  # Adjust margins to reduce whitespace
+            fig.savefig(output_plot_path, dpi=150, bbox_inches='tight')  # Save plot locally with minimal whitespace
+            plt.close(fig)
+
+            # Upload plot to S3
+            s3_plot_path = os.path.join(AWS_PLOT_DIR_BASE + "/for_labeling",
+                                        f"{os.path.splitext(file.filename)[0]}_plot.png")
+            aws_utils.upload_file_by_path_to_s3(output_plot_path, s3_plot_path)  # Upload plot to S3
+
+            # Generate presigned URL for the plot
+            presigned_plot_url = aws_utils.generate_presigned_url(s3_plot_path)
+
+            ## MTM Stuff: Generate Excel
+            sorted_df = df.sort_values(by=['Filename', 'Type', 'Layer'])
+            sorted_df['MTM Points'] = ''
+
+            base_filename = os.path.splitext(os.path.basename(file.filename))[0]
+            aws_mtm_dir_path = os.path.join(AWS_MTM_DIR_PATH, f"{base_filename}_combined_entities.xlsx")
+
+            with open(temp_file_path, 'rb') as tmp:
+                # check for duplicate file using hash value of the file
+                file_content = tmp.read()
+                file_hash = aws_utils.compute_file_hashValue(file_content)
+                tmp.seek(0)
+                if not aws_utils.check_hash_exists(file_hash, AWS_DXF_DIR_PATH):
+                    aws_utils.upload_file_to_s3(tmp, os.path.join(AWS_DXF_DIR_PATH, file.filename))
+                    aws_utils.update_hash_file(AWS_DXF_DIR_PATH)
+                    print(f'Successfully uploaded {file.filename} to S3!')
+                else:
+                    print(f'DUPLICATE file : {file.filename} ')
+                    return "DUPLICATE file detected. Upload a different file"
+
+        aws_utils.upload_dataframe_to_s3(sorted_df, aws_mtm_dir_path, file_format="excel")
+
+        # Generate a presigned URL for the CSV file
+        presigned_csv_url = aws_utils.generate_presigned_url(aws_mtm_dir_path)
+
+        # return render_template("download.html", download_url=presigned_url)
+        return render_template("display_and_download_dxf.html", plot_url=presigned_plot_url,
+                               csv_url=presigned_csv_url)
+
+    if typeform.lower() == 'graded_dxf_file':
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            for each_file in file_list:
+                file_base_name = each_file.filename
+
+                print(f"Processing Graded DXF file: {file_base_name}")
                 # Create a temp file with the same name as the uploaded file
-                temp_file_path = os.path.join(tmpdirname, file.filename)
+                temp_file_path = os.path.join(tmpdirname, file_base_name)
+                os.makedirs(os.path.dirname(temp_file_path), exist_ok=True)
 
                 # Save the uploaded file to the temp file
-                file.save(temp_file_path)
+                each_file.save(temp_file_path)
 
                 # with tempfile.NamedTemporaryFile(delete=False, suffix=".dxf") as temp_file:
                 # file.save(temp_file.name)  # Save the uploaded file to the temp file
@@ -449,193 +575,83 @@ def upload_file():
                 # Convert DXF entities to a Pandas DataFrame
                 df = dxf_loader.entities_to_dataframe()
 
-                # Create plot
-                output_plot_path = os.path.join("ui/static/plots", f"{os.path.splitext(file.filename)[0]}_plot.png")
-
-                # Prepare a matplotlib figure
-                fig, ax = plt.subplots(figsize=(60, 50))
-                ax.set_aspect('equal')
-
-                # Draw lines
-                lines = df[df['Type'] == 'LINE']
-                for _, row in lines.iterrows():
-                    if pd.notna(row['Line_Start_X']) and pd.notna(row['Line_End_X']) and pd.notna(
-                            row['Line_Start_Y']) and pd.notna(row['Line_End_Y']):
-                        plt.plot([row['Line_Start_X'], row['Line_End_X']], [row['Line_Start_Y'], row['Line_End_Y']],
-                                 marker='o', linewidth=0.5, markersize=5)
-                        plt.text(row['Line_Start_X'], row['Line_Start_Y'],
-                                 f"({row['Line_Start_X']}, {row['Line_Start_Y']})", fontsize=8, ha='right', va='bottom')
-                        plt.text(row['Line_End_X'], row['Line_End_Y'], f"({row['Line_End_X']}, {row['Line_End_Y']})",
-                                 fontsize=8, ha='right', va='bottom')
-
-                # Draw polylines
-                polylines = df[df['Type'].isin(['POLYLINE', 'LWPOLYLINE'])]
-                unique_points = polylines.drop_duplicates(subset=['PL_POINT_X', 'PL_POINT_Y'])
-                for vertex_label in polylines['Vertex Label'].unique():
-                    vertex_group = polylines[polylines['Vertex Label'] == vertex_label]
-                    xs = vertex_group['PL_POINT_X'].tolist()
-                    ys = vertex_group['PL_POINT_Y'].tolist()
-                    plt.plot(xs, ys, marker='o', linewidth=0.5, markersize=5)
-
-                # Annotate unique points
-                for x, y, point_label in zip(unique_points['PL_POINT_X'], unique_points['PL_POINT_Y'],
-                                             unique_points['Point Label']):
-                    plt.text(x, y, f'{point_label}', fontsize=8, ha='right', va='bottom')
-
-                # Configure and save the plot
-                plt.title(f'Polyline Plot for {file.filename}', fontsize=26)
-                plt.xlabel('X Coordinate', fontsize=24)
-                plt.ylabel('Y Coordinate', fontsize=24)
-
-                # Increase x-tick and y-tick label sizes
-                plt.xticks(fontsize=20)  # Increase x-tick size
-                plt.yticks(fontsize=20)  # Increase y-tick size
-
-                plt.grid(True)
-                plt.tight_layout()
-                plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)  # Adjust margins to reduce whitespace
-                fig.savefig(output_plot_path, dpi=150, bbox_inches='tight')  # Save plot locally with minimal whitespace
-                plt.close(fig)
-
-                # Upload plot to S3
-                s3_plot_path = os.path.join(AWS_PLOT_DIR_BASE + "/for_labeling",
-                                            f"{os.path.splitext(file.filename)[0]}_plot.png")
-                aws_utils.upload_file_by_path_to_s3(output_plot_path, s3_plot_path)  # Upload plot to S3
-
-                # Generate presigned URL for the plot
-                presigned_plot_url = aws_utils.generate_presigned_url(s3_plot_path)
-
                 ## MTM Stuff: Generate Excel
                 sorted_df = df.sort_values(by=['Filename', 'Type', 'Layer'])
                 sorted_df['MTM Points'] = ''
 
-                base_filename = os.path.splitext(os.path.basename(file.filename))[0]
-                aws_mtm_dir_path = os.path.join(AWS_MTM_DIR_PATH, f"{base_filename}_combined_entities.xlsx")
+                # base_filename = os.path.splitext(os.path.basename(each_file.filename))[0]
+                aws_mtm_graded_dir_path = os.path.join(AWS_MTM_GRADED_DIR_PATH,
+                                                       f"{file_base_name}_combined_entities.xlsx")
+
+                aws_utils.upload_dataframe_to_s3(sorted_df, aws_mtm_graded_dir_path, file_format="excel")
 
                 with open(temp_file_path, 'rb') as tmp:
                     # check for duplicate file using hash value of the file
                     file_content = tmp.read()
                     file_hash = aws_utils.compute_file_hashValue(file_content)
                     tmp.seek(0)
-                    if not aws_utils.check_hash_exists(file_hash, AWS_DXF_DIR_PATH):
-                        aws_utils.upload_file_to_s3(tmp, AWS_DXF_DIR_PATH + file.filename)
-                        aws_utils.update_hash_file(AWS_DXF_DIR_PATH)
-                        print(f'Successfully uploaded {file.filename} to S3!')
+                    if not aws_utils.check_hash_exists(file_hash, AWS_DXF_GRADED_DIR_PATH):
+                        aws_utils.upload_file_to_s3(tmp, os.path.join(AWS_DXF_GRADED_DIR_PATH, file_base_name))
+                        aws_utils.update_hash_file(AWS_DXF_GRADED_DIR_PATH)
+                        print(f'Successfully uploaded {file_base_name} to S3!')
                     else:
-                        print(f'DUPLICATE file : {file.filename} ')
-                        return "DUPLICATE file detected. Upload a different file"
+                        print(f'DUPLICATE file : {file_base_name} ')
+                        return f"DUPLICATE file detected:{file_base_name} ,Upload a different file"
 
-            aws_utils.upload_dataframe_to_s3(sorted_df, aws_mtm_dir_path, file_format="excel")
+    if typeform.lower() == 'mtm_points_file':
+        print(f"Processing MTM points file: {file.filename}")
+        # with tempfile.NamedTemporaryFile(delete=False, suffix=".dxf") as temp_file:
+        # file.save(temp_file.name)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # Create a temp file with the same name as the uploaded file
+            temp_file_path = os.path.join(tmpdirname, file.filename)
 
-            # Generate a presigned URL for the CSV file
-            presigned_csv_url = aws_utils.generate_presigned_url(aws_mtm_dir_path)
+            # Save the uploaded file to the temp file
+            file.save(temp_file_path)
+            mtm_processor = MTMProcessor()
+            mtm_processor.load_coordinates_tables(temp_file_path)
+            mtm_processor.remove_nan_mtm_points()
+            # mtm_processor.display_filtered_coordinates_tables()
 
-            # return render_template("download.html", download_url=presigned_url)
-            return render_template("display_and_download_dxf.html", plot_url=presigned_plot_url,
-                                   csv_url=presigned_csv_url)
+            # Remove the extension
+            table_name = os.path.splitext(file.filename)[0]
+            piece_name = table_name.split('_')[0]
+            print(f"Piece Name: {piece_name}")
 
-        if typeform.lower() == 'graded_dxf_file':
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                for each_file in file_list:
-                    file_base_name = each_file.filename
+            plot_filename, plot_file_path = mtm_processor.plot_points(rename=piece_name)
 
-                    print(f"Processing Graded DXF file: {file_base_name}")
-                    # Create a temp file with the same name as the uploaded file
-                    temp_file_path = os.path.join(tmpdirname, file_base_name)
-                    os.makedirs(os.path.dirname(temp_file_path), exist_ok=True)
+            aws_mtm_plot_dir_path = os.path.join(AWS_PLOT_DIR_BASE + "/labeled_mtm/", f"{plot_filename}_base.png")
+            aws_utils.upload_file_by_path_to_s3(plot_file_path, aws_mtm_plot_dir_path)
+            print(f"Plot Filename {plot_filename}")
 
-                    # Save the uploaded file to the temp file
-                    each_file.save(temp_file_path)
+            with open(temp_file_path, 'rb') as tmp:
+                # check for duplicate file using hash value of the file
+                file_content = tmp.read()
+                file_hash = aws_utils.compute_file_hashValue(file_content)
+                tmp.seek(0)
+                if not aws_utils.check_hash_exists(file_hash, AWS_MTM_DIR_PATH_LABELED):
+                    aws_utils.upload_file_to_s3(tmp, os.path.join(AWS_MTM_DIR_PATH_LABELED, file.filename))
+                    aws_utils.update_hash_file(AWS_MTM_DIR_PATH_LABELED)
+                    print(f'Successfully uploaded {file.filename} to S3!')
+                else:
+                    print(f'DUPLICATE file : {file.filename} ')
+                    return "DUPLICATE file detected. Upload a different file"
 
-                    # with tempfile.NamedTemporaryFile(delete=False, suffix=".dxf") as temp_file:
-                    # file.save(temp_file.name)  # Save the uploaded file to the temp file
+        # Delete the temp file after processing (optional)
+        # os.remove(temp_file.name)
 
-                    # Load DXF using the file path
-                    # dxf_loader.load_dxf(temp_file.name)
-                    dxf_loader.load_dxf(temp_file_path)
+        # aws_utils.upload_file_to_s3(file, AWS_MTM_DIR_PATH_LABELED)
 
-                    # Convert DXF entities to a Pandas DataFrame
-                    df = dxf_loader.entities_to_dataframe()
+        # Generate a presigned URL for the plot file in S3
+        plot_presigned_url = aws_utils.generate_presigned_url(aws_mtm_plot_dir_path)
 
-                    ## MTM Stuff: Generate Excel
-                    sorted_df = df.sort_values(by=['Filename', 'Type', 'Layer'])
-                    sorted_df['MTM Points'] = ''
+        # Clear the static/plots folder after everything is processed
+        clear_static_plots_folder()
 
-                    # base_filename = os.path.splitext(os.path.basename(each_file.filename))[0]
-                    aws_mtm_graded_dir_path = os.path.join(AWS_MTM_GRADED_DIR_PATH,
-                                                           f"{file_base_name}_combined_entities.xlsx")
+        # Render the plot on the page by passing the presigned URL to the template
+        return render_template("display_mtm_plot.html", plot_url=plot_presigned_url)
 
-                    aws_utils.upload_dataframe_to_s3(sorted_df, aws_mtm_graded_dir_path, file_format="excel")
-
-                    with open(temp_file_path, 'rb') as tmp:
-                        # check for duplicate file using hash value of the file
-                        file_content = tmp.read()
-                        file_hash = aws_utils.compute_file_hashValue(file_content)
-                        tmp.seek(0)
-                        if not aws_utils.check_hash_exists(file_hash, AWS_DXF_GRADED_DIR_PATH):
-                            aws_utils.upload_file_to_s3(tmp, AWS_DXF_GRADED_DIR_PATH + file_base_name)
-                            aws_utils.update_hash_file(AWS_DXF_GRADED_DIR_PATH)
-                            print(f'Successfully uploaded {file_base_name} to S3!')
-                        else:
-                            print(f'DUPLICATE file : {file_base_name} ')
-                            return f"DUPLICATE file detected:{file_base_name} ,Upload a different file"
-
-        if typeform.lower() == 'mtm_points_file':
-            print(f"Processing MTM points file: {file.filename}")
-            # with tempfile.NamedTemporaryFile(delete=False, suffix=".dxf") as temp_file:
-            # file.save(temp_file.name)
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                # Create a temp file with the same name as the uploaded file
-                temp_file_path = os.path.join(tmpdirname, file.filename)
-
-                # Save the uploaded file to the temp file
-                file.save(temp_file_path)
-                mtm_processor = MTMProcessor()
-                mtm_processor.load_coordinates_tables(temp_file_path)
-                mtm_processor.remove_nan_mtm_points()
-                # mtm_processor.display_filtered_coordinates_tables()
-
-                # Remove the extension
-                table_name = os.path.splitext(file.filename)[0]
-                piece_name = table_name.split('_')[0]
-                print(f"Piece Name: {piece_name}")
-
-                plot_filename, plot_file_path = mtm_processor.plot_points(rename=piece_name)
-
-                aws_mtm_plot_dir_path = os.path.join(AWS_PLOT_DIR_BASE + "/labeled_mtm/", f"{plot_filename}_base.png")
-                aws_utils.upload_file_by_path_to_s3(plot_file_path, aws_mtm_plot_dir_path)
-                print(f"Plot Filename {plot_filename}")
-
-                with open(temp_file_path, 'rb') as tmp:
-                    # check for duplicate file using hash value of the file
-                    file_content = tmp.read()
-                    file_hash = aws_utils.compute_file_hashValue(file_content)
-                    tmp.seek(0)
-                    if not aws_utils.check_hash_exists(file_hash, AWS_MTM_DIR_PATH_LABELED):
-                        aws_utils.upload_file_to_s3(tmp, AWS_MTM_DIR_PATH_LABELED + file.filename)
-                        aws_utils.update_hash_file(AWS_MTM_DIR_PATH_LABELED)
-                        print(f'Successfully uploaded {file.filename} to S3!')
-                    else:
-                        print(f'DUPLICATE file : {file.filename} ')
-                        return "DUPLICATE file detected. Upload a different file"
-
-            # Delete the temp file after processing (optional)
-            # os.remove(temp_file.name)
-
-            # aws_utils.upload_file_to_s3(file, AWS_MTM_DIR_PATH_LABELED)
-
-            # Generate a presigned URL for the plot file in S3
-            plot_presigned_url = aws_utils.generate_presigned_url(aws_mtm_plot_dir_path)
-
-            # Clear the static/plots folder after everything is processed
-            clear_static_plots_folder()
-
-            # Render the plot on the page by passing the presigned URL to the template
-            return render_template("display_mtm_plot.html", plot_url=plot_presigned_url)
-
-        return redirect("/file_operations_home")
-    else:
-        return "File not uploaded successfully"
+    return redirect("/file_operations_home")
 
 
 @app.route("/download_file_to_dir/<path:filename>", methods=['GET'])

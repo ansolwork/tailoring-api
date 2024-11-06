@@ -1,4 +1,5 @@
 import hashlib
+import os
 
 import boto3
 from botocore.client import Config
@@ -57,7 +58,7 @@ class AwsUtils:
                     hashes.append(f"{file_key}: {file_hash}")
 
             # Save hashes to the hash file
-            s3_client.put_object(Bucket=self.aws_s3_bucket_name, Key=s3_filepath + hash_file_name,
+            s3_client.put_object(Bucket=self.aws_s3_bucket_name, Key=os.path.join(s3_filepath, hash_file_name),
                                  Body='\n'.join(hashes))
             print("Hash file updated successfully.")
         except Exception as e:
@@ -67,7 +68,7 @@ class AwsUtils:
             s3_client = boto3.session.Session(profile_name=self.aws_profile_name).client(
                 service_name='s3',
             )
-            hash_file = s3_client.get_object(Bucket=self.aws_s3_bucket_name, Key=s3_filepath + hash_file_name)[
+            hash_file = s3_client.get_object(Bucket=self.aws_s3_bucket_name, Key=os.path.join(s3_filepath , hash_file_name))[
                 'Body'].read().decode(
                 'utf-8')
             for line in hash_file.splitlines():
@@ -170,3 +171,7 @@ class AwsUtils:
             files = [obj['Key'] for obj in response['Contents']]
 
         return files
+
+    def concatenate_item_subdirectories(self,path,item):
+        return os.path.join(path,item)
+
