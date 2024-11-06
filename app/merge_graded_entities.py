@@ -4,10 +4,10 @@ import numpy as np
 import logging
 
 class MergeGradedEntities:
-    def __init__(self, graded_folder, labeled_folder):
+    def __init__(self, graded_folder, labeled_folder, item):
         self.graded_folder = graded_folder
         self.labeled_folder = labeled_folder
-        self.output_folder = "data/input/merged_graded_labeled_entities"
+        self.output_folder = os.path.join("data/input/merged_graded_labeled_entities", item)
         self.graded_data = {}
         self.labeled_data = {}
 
@@ -104,9 +104,11 @@ class MergeGradedEntities:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+    item = "shirt"
+
+    graded_folder = f"data/input/graded_mtm_combined_entities/{item}"
+    labeled_folder = f"data/input/mtm_combined_entities_labeled/{item}"
     
-    graded_folder = "data/input/graded_mtm_combined_entities"
-    labeled_folder = "data/input/mtm_combined_entities_labeled"
-    
-    merger = MergeGradedEntities(graded_folder, labeled_folder)
+    merger = MergeGradedEntities(graded_folder, labeled_folder, item)
     merger.process()
