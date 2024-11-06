@@ -85,22 +85,21 @@ class CreateTable:
                 # Load the current Excel file
                 combined_df = pd.read_excel(filepath)
                 
+                # Get the full piece name from the filename (without extension)
+                full_piece_name = filename.replace('_combined_entities_labeled.xlsx', '')
+                
                 # Rename the 'Filename' column to 'piece_name' and remove the '.dxf' extension
                 if 'Filename' in combined_df.columns:
                     combined_df = combined_df.rename(columns={'Filename': 'piece_name'})
                     
-                    # Remove the '.dxf' extension and strip leading/trailing whitespace
-                    combined_df['piece_name'] = combined_df['piece_name'].str.replace(r'\.dxf$', '', regex=True).str.strip()
+                    # Set the piece_name to the full piece name for all rows
+                    combined_df['piece_name'] = full_piece_name
                     
-                    if self.is_graded:
-                        # Add a new column for the base piece name (for grouping)
-                        combined_df['base_piece_name'] = combined_df['piece_name'].apply(
-                            lambda x: '-'.join(x.split('-')[:-1]) if x.split('-')[-1].isdigit() else x
-                        )
-                    else:
-                        # For base pieces, just remove trailing spaces and numbers
-                        combined_df['piece_name'] = combined_df['piece_name'].str.replace(r'\s+\d*$', '', regex=True).str.strip()
-                        combined_df['base_piece_name'] = combined_df['piece_name']
+                    # For base pieces, keep the piece number as part of the name
+                    if not self.is_graded:
+                        combined_df['original_name'] = full_piece_name
+                        # Extract just the size number (last component)
+                        combined_df['size'] = full_piece_name.split('-')[-1]
 
                 combined_df_list.append(combined_df)
         
@@ -120,14 +119,33 @@ class CreateTable:
         self.alteration_joined_df['piece_name'] = self.alteration_joined_df['piece_name'].fillna('')
         self.combined_entities_joined_df['piece_name'] = self.combined_entities_joined_df['piece_name'].fillna('')
 
+        # For both graded and base files now
+        # Create a copy of the original piece_name with size
+        self.combined_entities_joined_df['original_name'] = self.combined_entities_joined_df['piece_name']
+        
+        # Extract size from piece_name and create size column
+        self.combined_entities_joined_df['size'] = self.combined_entities_joined_df['piece_name'].str.extract(r'-(\d+)(?:\.dxf)?$')
+        
+        # Remove the last number (size) from piece_name for joining
+        self.combined_entities_joined_df['piece_name'] = self.combined_entities_joined_df['piece_name'].str.replace(r'-\d+(?:\.dxf)?$', '', regex=True)
+        
+        # Also remove any .dxf extension from the piece_name if it exists
+        self.combined_entities_joined_df['piece_name'] = self.combined_entities_joined_df['piece_name'].str.replace(r'\.dxf$', '', regex=True)
+        
+        # Now merge using the base piece_name
         self.merged_df = pd.merge(
             self.alteration_joined_df, 
             self.combined_entities_joined_df, 
             on=['piece_name', 'mtm points'], 
             how='right'
         )
-
-        #self.merged_df.to_csv("data/staging/all_combined_tables.csv")
+        
+        # Keep only rows that had a size
+        has_size = self.merged_df['size'].notna()
+        self.merged_df = self.merged_df[has_size]
+        
+        # Sort by piece_name and size
+        self.merged_df = self.merged_df.sort_values(['piece_name', 'size'])
 
     def save_table_csv_by_alteration_rule(self, output_filename_prefix="combined_table"):
         
@@ -256,10 +274,11 @@ class CreateTable:
 
 if __name__ == "__main__":
     alteration_filepath = "data/input/mtm_points.xlsx"
+    item = "shirt"
     
     # Process base files
     print("\nProcessing base files...")
-    combined_entities_folder = "data/input/mtm_combined_entities_labeled/"
+    combined_entities_folder = f"data/input/mtm_combined_entities_labeled/{item}/"
     create_table = CreateTable(
         alteration_filepath, 
         combined_entities_folder,
@@ -277,7 +296,7 @@ if __name__ == "__main__":
 
     # Process graded files
     print("\nProcessing graded files...")
-    graded_entities_folder = "data/input/merged_graded_labeled_entities/"
+    graded_entities_folder = f"data/input/merged_graded_labeled_entities/{item}/"
     create_table_graded = CreateTable(
         alteration_filepath, 
         graded_entities_folder,
