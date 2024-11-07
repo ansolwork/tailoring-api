@@ -6,11 +6,17 @@ ALLOWED_MIME_TYPES :
   - 'application/vnd.ms -excel'
   - 'image/x-dxf'
   - 'text/csv'
+GARMENT_TYPES:
+  - 'Shirt'
+  - 'Trouser'
+  - 'Jacket'
+  - 'Waistcoat'
+  - 'Suit'
 AWS_S3_BUCKET_NAME : 'lgfgbucket'
-AWS_DXF_DIR_PATH : "data/input/recurrent/dxf_files/"
-AWS_DXF_GRADED_DIR_PATH : "data/input/recurrent/graded_dxf/"
-AWS_MTM_DIR_PATH : "data/input/recurrent/mtm_combined_entites/"
-AWS_MTM_GRADED_DIR_PATH : "data/input/recurrent/graded_mtm_combined_entites/"
+AWS_DXF_DIR_PATH : "data/input/recurrent/base_files/dxf_files/"
+AWS_DXF_GRADED_DIR_PATH : "data/input/recurrent/graded_files/graded_dxf/"
+AWS_MTM_DIR_PATH : "data/input/recurrent/base_files/mtm_combined_entites/"
+AWS_MTM_GRADED_DIR_PATH : "data/input/recurrent/graded_files/graded_mtm_combined_entites/"
 AWS_MTM_DIR_PATH_LABELED : "data/input/primary/mtm_combined_entites_labeled/"
 AWS_MTM_GRADED_DIR_PATH_LABELED : "data/input/primary/graded_mtm_combined_entites_labeled/"
 AWS_PLOT_DIR_BASE : "data/plots/base_pieces"
