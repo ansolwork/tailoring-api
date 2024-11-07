@@ -86,7 +86,14 @@ class CreateTable:
                 combined_df = pd.read_excel(filepath)
                 
                 # Get the full piece name from the filename (without extension)
-                full_piece_name = filename.replace('_combined_entities_labeled.xlsx', '')
+                full_piece_name = (filename
+                    .replace('_combined_entities_labeled.xlsx', '')
+                    .replace('_graded_combined_entities_labeled.xlsx', '')
+                    .replace('_combined_entities.xlsx', '')  # Also handle this case from earlier
+                    .replace('_graded', '')  # Remove the _graded suffix
+                )
+
+                print(full_piece_name)
                 
                 # Rename the 'Filename' column to 'piece_name' and remove the '.dxf' extension
                 if 'Filename' in combined_df.columns:
