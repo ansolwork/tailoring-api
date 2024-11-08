@@ -95,13 +95,13 @@ def load_and_save_s3_data(config_file):
         
         logging.info(f"Initializing AWSS3Loader with bucket: {config['AWS_S3_BUCKET_NAME']}, "
                      f"directory: {config['DIRECTORY_KEY']}, "
-                     f"local dir: {config['LOCAL_SAVE_DIR']}")
+                     f"local dir: {config['LOCAL_SAVE_DIR_DEFAULT'] if 'LOCAL_SAVE_DIR_DEFAULT' in config else config['LOCAL_SAVE_DIR_LABELED']}")
         
         # Initialize AWSS3Loader with parameters from config
         loader = AWSS3Loader(
             bucket_name=config['AWS_S3_BUCKET_NAME'],
             directory_key=config['DIRECTORY_KEY'],
-            local_save_dir=config['LOCAL_SAVE_DIR']
+            local_save_dir=config['LOCAL_SAVE_DIR_DEFAULT'] if 'LOCAL_SAVE_DIR_DEFAULT' in config else config['LOCAL_SAVE_DIR_LABELED']
         )
 
         logging.info("Attempting to load files from S3")

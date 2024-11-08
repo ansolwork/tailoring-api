@@ -7,7 +7,7 @@ class MergeGradedEntities:
     def __init__(self, graded_folder, labeled_folder, item):
         self.graded_folder = graded_folder
         self.labeled_folder = labeled_folder
-        self.output_folder = os.path.join("data/input/merged_graded_labeled_entities", item)
+        self.output_folder = os.path.join("data/input/graded_mtm_combined_entities_labeled", item)
         self.graded_data = {}
         self.labeled_data = {}
 

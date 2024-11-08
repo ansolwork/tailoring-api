@@ -1,3 +1,3 @@
 AWS_S3_BUCKET_NAME : 'lgfgbucket'
-DIRECTORY_KEY : "data/input/primary/mtm_combined_entites_labeled/"
-LOCAL_SAVE_DIR: data/input/mtm_combined_entities_labeled
+DIRECTORY_KEY : data/input/primary/mtm_combined_entites_labeled/
+LOCAL_SAVE_DIR_LABELED: data/input/mtm_combined_entities_labeled
