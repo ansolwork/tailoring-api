@@ -49,13 +49,13 @@ def save_local_data_to_s3(config_file):
             config = yaml.safe_load(file)
         
         logging.info(f"Initializing AWSS3Saver with bucket: {config['AWS_S3_BUCKET_NAME']}, "
-                     f"local dir: {config['LOCAL_SAVE_DIR']}, "
+                     f"local dir: {config['LOCAL_SAVE_DIR_LABELED']}, "
                      f"AWS save dir: {config['AWS_SAVE_DIR']}")
         
         # Initialize AWSS3Saver with parameters from config
         saver = AWSS3Saver(
             bucket_name=config['AWS_S3_BUCKET_NAME'],
-            local_save_dir=config['LOCAL_SAVE_DIR'],
+            local_save_dir=config['LOCAL_SAVE_DIR_LABELED'],
             aws_save_dir=config['AWS_SAVE_DIR']
         )
 

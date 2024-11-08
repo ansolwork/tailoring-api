@@ -1,6 +1,8 @@
 import pandas as pd
 import os
 import numpy as np
+import re
+from tqdm import tqdm
 
 # TODO: Fix issue why we are not getting enough Alteration Rules in the output
 # TODO: Mark Line Points
@@ -8,10 +10,11 @@ import numpy as np
 # IMplement sorting of MTM Points
 
 class CreateTable:
-    def __init__(self, alteration_filepath, combined_entities_folder, is_graded=False):
+    def __init__(self, alteration_filepath, combined_entities_folder, is_graded=False, debug=False):
         self.alteration_filepath = alteration_filepath
         self.combined_entities_folder = combined_entities_folder
         self.is_graded = is_graded
+        self.debug = debug  # Add debug flag
         self.df_dict = self.load_table()  # Loading all sheets as a dictionary of DataFrames
         self.alteration_joined_df = pd.DataFrame()
         self.combined_entities_joined_df = pd.DataFrame()
@@ -76,54 +79,158 @@ class CreateTable:
     def process_combined_entities(self):
         combined_df_list = []
         
-        # Iterate over each Excel file in the combined entities folder
-        for filename in os.listdir(self.combined_entities_folder):
-            if filename.endswith(".xlsx"):
-                filepath = os.path.join(self.combined_entities_folder, filename)
-                
-                # Load the current Excel file
-                combined_df = pd.read_excel(filepath)
-                
-                # Rename the 'Filename' column to 'piece_name' and remove the '.dxf' extension
-                if 'Filename' in combined_df.columns:
-                    combined_df = combined_df.rename(columns={'Filename': 'piece_name'})
-                    
-                    # Remove the '.dxf' extension and strip leading/trailing whitespace
-                    combined_df['piece_name'] = combined_df['piece_name'].str.replace(r'\.dxf$', '', regex=True).str.strip()
-                    
-                    # Remove only trailing spaces and numbers, ensuring valid names remain intact
-                    combined_df['piece_name'] = combined_df['piece_name'].str.replace(r'\s+\d*$', '', regex=True).str.strip()
-
-                combined_df_list.append(combined_df)
+        # Get list of files first
+        files = [f for f in os.listdir(self.combined_entities_folder) if f.endswith(".xlsx")]
         
-        # Combine all the DataFrames from different files into one
+        # Create progress bar
+        file_type = "graded" if self.is_graded else "base"
+        for filename in tqdm(files, desc=f"Processing {file_type} files"):
+            filepath = os.path.join(self.combined_entities_folder, filename)
+            if self.debug:
+                print(f"\nProcessing file: {filepath}")
+            
+            combined_df = pd.read_excel(filepath)
+            
+            if 'Filename' in combined_df.columns:
+                combined_df = combined_df.rename(columns={'Filename': 'piece_name'})
+            
+            if self.debug:
+                print("Original piece_name values:", combined_df['piece_name'].unique())
+            
+            # Initialize size column
+            combined_df['size'] = None
+            
+            if self.is_graded:
+                # For graded files, extract size and base name from the piece_name column
+                # Extract size (number before .dxf)
+                combined_df['size'] = combined_df['piece_name'].str.extract(r'-(\d+)\.dxf$')
+                
+                # Extract base piece name (remove only size and .dxf)
+                combined_df['piece_name'] = combined_df['piece_name'].str.replace(r'-\d+\.dxf$', '', regex=True)
+                
+                # Ensure we're not losing any part of the piece name
+                combined_df['piece_name'] = combined_df['piece_name'].astype(str)
+                
+                if self.debug:      
+                    print("After processing graded files:")
+                    print("Piece names:", combined_df['piece_name'].unique())
+                    print("Sizes:", combined_df['size'].unique())
+            else:
+                # For base files, extract size from the filename
+                base_piece_name = filename.replace('_combined_entities_labeled.xlsx', '')
+                size_match = re.search(r'-(\d+)$', base_piece_name)
+                if size_match:
+                    size = size_match.group(1)
+                    # Remove only the size number from the end
+                    piece_name = re.sub(r'-\d+$', '', base_piece_name)
+                    combined_df['size'] = size
+                    combined_df['piece_name'] = piece_name
+                else:
+                    piece_name = base_piece_name.replace('_combined_entities', '')
+                    combined_df['piece_name'] = piece_name
+            
+            # Ensure piece_name is string type before concatenation
+            combined_df['piece_name'] = combined_df['piece_name'].astype(str)
+            if self.debug:      
+                print("Final piece_name values:", combined_df['piece_name'].unique())
+            combined_df_list.append(combined_df)
+        
+        # Combine all the DataFrames
         final_combined_df = pd.concat(combined_df_list, ignore_index=True) if combined_df_list else pd.DataFrame()
+        
+        # Ensure piece_name is preserved after concatenation
+        final_combined_df['piece_name'] = final_combined_df['piece_name'].astype(str)
         final_combined_df.columns = final_combined_df.columns.str.lower()
         
-        # Drop DXF Native entities and other not needed for further processing
+        # Drop unnecessary columns
         columns_to_drop = ['color', 'type', 'layer', 'color', 'point_x', 'point_y', 'height', 
-                           'style', 'text', 'block', 'line_start_x', 'line_start_y', 'line_end_x', 'line_end_y',
-                           'vertex_index', 'point label', 'vertex label']
+                          'style', 'text', 'block', 'line_start_x', 'line_start_y', 'line_end_x', 'line_end_y',
+                          'vertex_index', 'point label', 'vertex label']
         
-        final_combined_df.drop(columns=columns_to_drop, inplace=True)
+        final_combined_df = final_combined_df.drop(columns=[col for col in columns_to_drop if col in final_combined_df.columns])
+        
+        if self.debug:  
+            print("\nDEBUG after processing:")
+            print(f"Columns in final_combined_df: {final_combined_df.columns.tolist()}")
+            print(f"Sample sizes in final df: {final_combined_df['size'].unique()[:5]}")
+            print(f"Sample piece names in final df: {final_combined_df['piece_name'].unique()[:5]}")
+        
         self.combined_entities_joined_df = final_combined_df
     
     def merge_tables(self):
+        if self.debug:
+            print("\nDEBUG merge_tables:")
+            print(f"Alteration joined df size: {len(self.alteration_joined_df)}")
+            print(f"Combined entities df size: {len(self.combined_entities_joined_df)}")
+            print(f"Sample piece names in alteration_joined_df: {self.alteration_joined_df['piece_name'].unique()[:5]}")
+            print(f"Sample piece names in combined_entities_df: {self.combined_entities_joined_df['piece_name'].unique()[:5]}")
+            print(f"Sample sizes in combined_entities_df: {self.combined_entities_joined_df['size'].unique()[:5]}")
+        
         self.alteration_joined_df['piece_name'] = self.alteration_joined_df['piece_name'].fillna('')
         self.combined_entities_joined_df['piece_name'] = self.combined_entities_joined_df['piece_name'].fillna('')
 
+        # For both graded and base files now
+        # Create a copy of the original piece_name
+        self.combined_entities_joined_df['original_name'] = self.combined_entities_joined_df['piece_name']
+        
+        # Extract size from piece_name and create size column if not already present
+        if 'size' not in self.combined_entities_joined_df.columns:
+            self.combined_entities_joined_df['size'] = self.combined_entities_joined_df['piece_name'].str.extract(r'-(\d+)(?:\.dxf)?$')
+        
+        # Remove any .dxf extension from the piece_name if it exists
+        self.combined_entities_joined_df['piece_name'] = self.combined_entities_joined_df['piece_name'].str.replace(r'\.dxf$', '', regex=True)
+        
+        if self.debug:  
+            print("\nDEBUG before merge:")
+            print(f"Combined entities piece names: {self.combined_entities_joined_df['piece_name'].unique()[:5]}")
+            print(f"Alteration piece names: {self.alteration_joined_df['piece_name'].unique()[:5]}")
+        
+        # Now merge using the piece_name
         self.merged_df = pd.merge(
             self.alteration_joined_df, 
             self.combined_entities_joined_df, 
             on=['piece_name', 'mtm points'], 
             how='right'
         )
+        
+        if self.debug:
+            print("\nDEBUG after merge:")
+            print(f"Merged piece names: {self.merged_df['piece_name'].unique()[:5]}")
+            
+        # Keep only rows that had a size
+        has_size = self.merged_df['size'].notna()
+        self.merged_df = self.merged_df[has_size]
+        
+        # Sort by piece_name and size
+        self.merged_df = self.merged_df.sort_values(['piece_name', 'size'])
 
-        #self.merged_df.to_csv("data/staging/all_combined_tables.csv")
+        self.print_alteration_rule_counts()
+
+    def print_alteration_rule_counts(self):
+        if self.debug:      
+            print("\nAlteration Rule Counts Matrix (Size × Rule):")
+        
+        # Create pivot table
+        pivot = pd.pivot_table(
+            self.merged_df, 
+            values='mtm points',
+            index='alteration_rule',
+            columns='size',
+            aggfunc='count',
+            fill_value=0
+        )
+        
+        # Sort columns (sizes) numerically
+        pivot = pivot.reindex(sorted(pivot.columns, key=int), axis=1)
+        
+        # Print the matrix
+        if self.debug:  
+            print(pivot)
 
     def save_table_csv_by_alteration_rule(self, output_filename_prefix="combined_table"):
         
         output_table_path = self.output_table_path
+
 
         # Ensure the output directory exists
         os.makedirs(output_table_path, exist_ok=True)
@@ -144,31 +251,32 @@ class CreateTable:
             # Save the group as a CSV file
             group_df.to_csv(output_file_path, index=False)
 
-            print(f"CSV files saved to {output_table_path}")
+            if self.debug:  
+                print(f"CSV files saved to {output_table_path}")
 
     def save_table_csv_by_piece_name(self, output_filename_prefix="combined_table"):
         output_table_path = self.output_table_path_by_piece
-
-        # Ensure the output directory exists
         os.makedirs(output_table_path, exist_ok=True)
 
-        self.merged_df['piece_name'] = self.merged_df['piece_name'].str.replace(".dxf", "", regex=False)
+        # Use base_piece_name for grouping if it exists, otherwise use piece_name
+        grouping_column = 'base_piece_name' if 'base_piece_name' in self.merged_df.columns else 'piece_name'
+        grouped = self.merged_df.groupby(grouping_column)
 
-        # Group the DataFrame by 'piece_name'
-        grouped = self.merged_df.groupby('piece_name')
-
-        for piece_name, group_df in grouped:
+        for base_piece_name, group_df in grouped:
             # Convert all column headers to lowercase
             group_df.columns = group_df.columns.str.lower()
 
-            # Sort rows by 'alteration_rule'
-            group_df = group_df.sort_values(by='alteration_rule')
+            # Sort rows by 'alteration_rule' and 'piece_name' (to order size variants)
+            group_df = group_df.sort_values(by=['alteration_rule', 'piece_name'])
 
-            safe_piece_name = str(piece_name).replace(" ", "_").replace("/", "_")  # Ensure no illegal filename characters
+            safe_piece_name = str(base_piece_name).replace(" ", "_").replace("/", "_")
             output_file_path = os.path.join(output_table_path, f"{output_filename_prefix}_{safe_piece_name}.csv")
 
             group_df = group_df.sort_values(by='mtm points')
             group_df = group_df.drop('vertices', axis=1)
+            
+            if 'base_piece_name' in group_df.columns:
+                group_df = group_df.drop('base_piece_name', axis=1)
 
             # Drop duplicate rows
             group_df = group_df.drop_duplicates()
@@ -177,12 +285,14 @@ class CreateTable:
             group_df = group_df.dropna(how='all', subset=[col for col in group_df.columns if col != 'piece_name'])
 
             # Reset the index and add point_order starting from 0
+            group_df = group_df.reset_index(drop=True)
             group_df['point_order'] = group_df.index
             
             # Save the group as a CSV file
             group_df.to_csv(output_file_path, index=False)
 
-            print(f"CSV file saved to {output_file_path}")        
+            if self.debug:  
+                print(f"CSV file saved to {output_file_path}")        
 
     def add_other_mtm_points(self):
         for filename in os.listdir(self.output_table_path):
@@ -247,14 +357,17 @@ class CreateTable:
 
 if __name__ == "__main__":
     alteration_filepath = "data/input/mtm_points.xlsx"
+    item = "shirt"
+    debug = False  # Set debug flag here
     
     # Process base files
     print("\nProcessing base files...")
-    combined_entities_folder = "data/input/mtm_combined_entities_labeled/"
+    combined_entities_folder = f"data/input/mtm_combined_entities_labeled/{item}/"
     create_table = CreateTable(
         alteration_filepath, 
         combined_entities_folder,
-        is_graded=False
+        is_graded=False,
+        debug=debug
     )
     
     # Process the sheets and get the combined DataFrame
@@ -268,11 +381,12 @@ if __name__ == "__main__":
 
     # Process graded files
     print("\nProcessing graded files...")
-    graded_entities_folder = "data/input/merged_graded_labeled_entities/"
+    graded_entities_folder = f"data/input/merged_graded_labeled_entities/{item}/"
     create_table_graded = CreateTable(
         alteration_filepath, 
         graded_entities_folder,
-        is_graded=True
+        is_graded=True,
+        debug=debug
     )
     
     # Process the sheets and get the combined DataFrame for graded files
