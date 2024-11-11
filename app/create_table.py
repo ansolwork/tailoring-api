@@ -10,7 +10,7 @@ from tqdm import tqdm
 # IMplement sorting of MTM Points
 
 class CreateTable:
-    def __init__(self, alteration_filepath, combined_entities_folder, is_graded=False, debug=False):
+    def __init__(self, alteration_filepath, combined_entities_folder, item, is_graded=False, debug=False):
         self.alteration_filepath = alteration_filepath
         self.combined_entities_folder = combined_entities_folder
         self.is_graded = is_graded
@@ -19,16 +19,17 @@ class CreateTable:
         self.alteration_joined_df = pd.DataFrame()
         self.combined_entities_joined_df = pd.DataFrame()
         self.merged_df = pd.DataFrame()
+        self.item = item
         
         # Set output directories based on is_graded flag
         if self.is_graded:
-            self.output_dir = "data/staging/graded"
-            self.output_table_path = "data/staging/graded/combined_alteration_tables"
-            self.output_table_path_by_piece = "data/staging/graded/alteration_by_piece"
+            self.output_dir = f"data/staging/graded/{item}"
+            self.output_table_path = f"data/staging/graded/{item}/combined_alteration_tables"
+            self.output_table_path_by_piece = f"data/staging/graded/{item}/alteration_by_piece"
         else:
-            self.output_dir = "data/staging/base"
-            self.output_table_path = "data/staging/base/combined_alteration_tables"
-            self.output_table_path_by_piece = "data/staging/base/alteration_by_piece"
+            self.output_dir = f"data/staging/base/{item}"
+            self.output_table_path = f"data/staging/base/{item}/combined_alteration_tables"
+            self.output_table_path_by_piece = f"data/staging/base/{item}/alteration_by_piece"
 
         # Add more sheets if necessary
         self.sheet_list = ["SHIRT-FRONT", "SHIRT-BACK", "SHIRT-YOKE", "SHIRT-SLEEVE", 
@@ -366,6 +367,7 @@ if __name__ == "__main__":
     create_table = CreateTable(
         alteration_filepath, 
         combined_entities_folder,
+        item,
         is_graded=False,
         debug=debug
     )
@@ -381,10 +383,11 @@ if __name__ == "__main__":
 
     # Process graded files
     print("\nProcessing graded files...")
-    graded_entities_folder = f"data/input/merged_graded_labeled_entities/{item}/"
+    graded_entities_folder = f"data/input/graded_mtm_combined_entities_labeled/{item}/"
     create_table_graded = CreateTable(
         alteration_filepath, 
         graded_entities_folder,
+        item,
         is_graded=True,
         debug=debug
     )
