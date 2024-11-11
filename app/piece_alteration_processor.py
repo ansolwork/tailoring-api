@@ -44,7 +44,8 @@ class PieceAlterationProcessor:
                 save_folder_processed_vertices="data/staging_processed/processed_vertices_by_piece/", 
                 save_file_format=".csv",
                 debug_alteration_rule = None,
-                alteration_movement = 1):
+                alteration_movement = 1,
+                item_size = 39):
         
         self.processing_utils = DataProcessingUtils()
 
@@ -66,6 +67,9 @@ class PieceAlterationProcessor:
 
         # Alteration settings
         self.alteration_movement = alteration_movement
+
+        # Item size
+        self.item_size = item_size
 
         # Adjustment points
         self.cw_adjustment_points = pd.DataFrame()  # Initialize as empty DataFrame
@@ -1785,12 +1789,15 @@ if __name__ == "__main__":
     #debug_alteration_rule = "WAISTSHAPE"
     #debug_alteration_rule = "WAISTSMOTH"
 
-
+    # Item siz
+    item_size = 32
+    # Alteration movement
     alteration_movement = 5.0 # INCHES (can be positive or negative)
     
     make_alteration = PieceAlterationProcessor(piece_table_path=piece_table_path,
                                                vertices_table_path=vertices_table_path,
                                                debug_alteration_rule=debug_alteration_rule, 
+                                               item_size=item_size,
                                                alteration_movement = alteration_movement)
     make_alteration.process_alterations()
     #make_alteration.log_info(debug_alteration_rule)
