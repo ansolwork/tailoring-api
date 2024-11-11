@@ -7,12 +7,12 @@ from botocore.exceptions import ClientError
 import argparse
 
 class AWSS3Saver:
-    def __init__(self, bucket_name: str, local_save_dir: str, aws_save_dir: str, config_path: str = 'tailoring_api_config.yml'):
+    def __init__(self, bucket_name: str, local_dir: str, aws_dir: str, config_path: str = 'config_graded_mtm.yml'):
         self.config = self._load_config(config_path)
         self.s3 = self._initialize_s3_client()
         self.bucket_name = bucket_name
-        self.local_save_dir = local_save_dir
-        self.aws_save_dir = aws_save_dir
+        self.local_dir = local_dir
+        self.aws_dir = aws_dir
 
     def _load_config(self, config_path: str):
         with open(config_path, 'r') as config_file:
@@ -31,32 +31,39 @@ class AWSS3Saver:
 
     def save_all_files(self):
         try:
-            for root, dirs, files in os.walk(self.local_save_dir):
+            logging.info(f"Processing directory mapping: {self.local_dir} -> {self.aws_dir}")
+            
+            for root, dirs, files in os.walk(self.local_dir):
                 for file in files:
-                    if file.endswith('.xlsx'):
+                    if file.endswith('.xlsx') or file.endswith('.csv'):  # Add more extensions if needed
                         local_file_path = os.path.join(root, file)
-                        relative_path = os.path.relpath(local_file_path, self.local_save_dir)
-                        s3_key = os.path.join(self.aws_save_dir, relative_path)
+                        relative_path = os.path.relpath(local_file_path, self.local_dir)
+                        s3_key = os.path.join(self.aws_dir, relative_path)
                         self.save_file(local_file_path, s3_key)
         except Exception as e:
             logging.error(f"Error saving files to S3: {e}")
 
-def save_local_data_to_s3(config_file):
+def save_local_data_to_s3(config_file, local_dir_key: str, aws_dir_key: str):
     try:
         # Load configuration
         logging.info(f"Loading configuration from {config_file}")
         with open(config_file, 'r') as file:
             config = yaml.safe_load(file)
         
-        logging.info(f"Initializing AWSS3Saver with bucket: {config['AWS_S3_BUCKET_NAME']}, "
-                     f"local dir: {config['LOCAL_SAVE_DIR_LABELED']}, "
-                     f"AWS save dir: {config['AWS_SAVE_DIR']}")
+        # Get directory paths from config using the provided keys
+        local_dir = config[local_dir_key]
+        aws_dir = config[aws_dir_key]
         
-        # Initialize AWSS3Saver with parameters from config
+        logging.info(f"Initializing AWSS3Saver with bucket: {config['AWS_S3_BUCKET_NAME']}")
+        logging.info(f"Local directory: {local_dir}")
+        logging.info(f"AWS directory: {aws_dir}")
+        
+        # Initialize AWSS3Saver with specific directory mapping
         saver = AWSS3Saver(
             bucket_name=config['AWS_S3_BUCKET_NAME'],
-            local_save_dir=config['LOCAL_SAVE_DIR_LABELED'],
-            aws_save_dir=config['AWS_SAVE_DIR']
+            local_dir=local_dir,
+            aws_dir=aws_dir,
+            config_path=config_file
         )
 
         logging.info("Attempting to save files to S3")
@@ -72,9 +79,11 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Save local data to S3')
     parser.add_argument('config_file', help='Path to the YAML configuration file')
+    parser.add_argument('local_dir_key', help='Key in config file for local directory (e.g., LOCAL_STAGING_DIR)')
+    parser.add_argument('aws_dir_key', help='Key in config file for AWS directory (e.g., AWS_STAGING_DIR)')
     
     args = parser.parse_args()
 
     logging.info(f"Starting script with config file: {args.config_file}")
-    save_local_data_to_s3(args.config_file)
+    save_local_data_to_s3(args.config_file, args.local_dir_key, args.aws_dir_key)
     logging.info("Script execution completed")
