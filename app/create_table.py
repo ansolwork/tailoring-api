@@ -280,9 +280,6 @@ class CreateTable:
                 group_df = group_df.drop('base_piece_name', axis=1)
 
             # Drop duplicate rows
-            group_df = group_df.drop_duplicates()
-
-            # Remove rows that are all NaNs or empty (excluding 'piece_name' column)
             group_df = group_df.dropna(how='all', subset=[col for col in group_df.columns if col != 'piece_name'])
 
             # Reset the index and add point_order starting from 0
@@ -329,6 +326,11 @@ class CreateTable:
         base_dir = os.path.join(self.output_dir, "vertices")
         os.makedirs(base_dir, exist_ok=True)
 
+        if self.debug:
+            print("\nDEBUG create_vertices_df:")
+            print(f"Available columns: {self.combined_entities_joined_df.columns.tolist()}")
+            print(f"Total rows in combined_entities: {len(self.combined_entities_joined_df)}")
+
         # Get the unique piece names
         unique_piece_names = self.combined_entities_joined_df['piece_name'].unique()
 
@@ -340,21 +342,48 @@ class CreateTable:
             # Filter rows where piece_name matches the current piece_name
             matching_rows = self.combined_entities_joined_df[self.combined_entities_joined_df['piece_name'] == piece_name]
             
-            # Extract unique vertices for this piece_name
-            unique_vertices = matching_rows['vertices'].unique()
+            vertices_data = []
+            
+            # Process each row individually to ensure we don't miss any vertices
+            for _, row in matching_rows.iterrows():
+                if 'vertices' in row and pd.notna(row['vertices']):
+                    size = row['size'] if 'size' in row and pd.notna(row['size']) else 'base'
+                    vertices_data.append({
+                        'piece_name': sanitized_piece_name,
+                        'size': size,
+                        'vertices': row['vertices']
+                    })
 
-            # Create a DataFrame with piece_name and its corresponding unique vertices
-            vertices_df = pd.DataFrame({'piece_name': sanitized_piece_name, 'vertices': unique_vertices})
-            
-            # Drop rows where 'vertices' is empty or NaN
-            vertices_df = vertices_df.dropna(subset=['vertices'])
-            
-            # Save the DataFrame to a CSV file in the corresponding directory
-            output_path = os.path.join(base_dir, f'vertices_{sanitized_piece_name}.csv')
-            vertices_df.to_csv(output_path, index=False)
-            
-            # Print the DataFrame (optional)
-            #print(f'Saved {output_path}')
+            # Create DataFrame from vertices data
+            if vertices_data:  # Only create DataFrame if we have data
+                vertices_df = pd.DataFrame(vertices_data)
+                
+                if self.debug:
+                    print(f"\nProcessed {piece_name}:")
+                    print(f"Found {len(vertices_data)} total vertices")
+                    if 'size' in vertices_df.columns:
+                        print("\nVertices per size before deduplication:")
+                        size_counts = vertices_df.groupby('size').size()
+                        for size, count in size_counts.items():
+                            print(f"Size {size}: {count} vertices")
+                
+                # Sort by size if it exists and has multiple values
+                if 'size' in vertices_df.columns and vertices_df['size'].nunique() > 1:
+                    vertices_df['size'] = vertices_df['size'].astype(str)
+                    vertices_df = vertices_df.sort_values('size')
+                    
+                    # Remove duplicates within each size group
+                    vertices_df = vertices_df.drop_duplicates(subset=['size', 'vertices'])
+                
+                if self.debug:
+                    print("\nVertices per size after deduplication:")
+                    size_counts = vertices_df.groupby('size').size()
+                    for size, count in size_counts.items():
+                        print(f"Size {size}: {count} vertices")
+                
+                # Save the DataFrame to a CSV file
+                output_path = os.path.join(base_dir, f'vertices_{sanitized_piece_name}.csv')
+                vertices_df.to_csv(output_path, index=False)
 
 if __name__ == "__main__":
     alteration_filepath = "data/input/mtm_points.xlsx"
