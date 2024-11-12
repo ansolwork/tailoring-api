@@ -38,22 +38,55 @@ class PieceAlterationProcessor:
     :param save_file_format: Format to save the processed files.
     """
     def __init__(self, 
+                graded_or_base,
+                item,
                 piece_table_path=None, 
                 vertices_table_path=None, 
-                save_folder_processed_pieces="data/staging_processed/processed_alterations_by_piece/", 
-                save_folder_processed_vertices="data/staging_processed/processed_vertices_by_piece/", 
+                save_folder_processed_pieces=None,  
+                save_folder_processed_vertices=None,
                 save_file_format=".csv",
-                debug_alteration_rule = None,
-                alteration_movement = 1,
-                item_size = 39):
+                debug_alteration_rule=None,
+                alteration_movement=1,
+                item_size=39):
         
         self.processing_utils = DataProcessingUtils()
+        self.item_size = item_size  # Set this before loading data
 
-        # Load the piece and vertices data
-        self.piece_df = self.processing_utils.load_csv(piece_table_path)
-        self.vertices_df = self.processing_utils.load_csv(vertices_table_path)
+        # Set default paths if none provided
+        if save_folder_processed_pieces is None:
+            save_folder_processed_pieces = f"data/staging_processed/{graded_or_base}/{item}/processed_alterations_by_piece/"
+        if save_folder_processed_vertices is None:
+            save_folder_processed_vertices = f"data/staging_processed/{graded_or_base}/{item}/processed_vertices_by_piece/"
+
+        # Create base directories structure
+        os.makedirs(f"data/staging_processed/{graded_or_base}/{item}/processed_alterations_by_piece/", exist_ok=True)
+        os.makedirs(f"data/staging_processed/{graded_or_base}/{item}/processed_vertices_by_piece/", exist_ok=True)
+        os.makedirs(f"data/staging_processed/{graded_or_base}/{item}/debug/", exist_ok=True)
+
+        # Store paths
+        self.save_folder_processed_pieces = save_folder_processed_pieces
+        self.save_folder_processed_vertices = save_folder_processed_vertices
+
+        # Load and filter the data by size
+        piece_df = self.processing_utils.load_csv(piece_table_path)
+        vertices_df = self.processing_utils.load_csv(vertices_table_path)
+        
+        # Convert size column to numeric in both DataFrames
+        piece_df['size'] = pd.to_numeric(piece_df['size'], errors='coerce')
+        vertices_df['size'] = pd.to_numeric(vertices_df['size'], errors='coerce')
+        
+        # Filter both DataFrames by size
+        self.piece_df = piece_df[piece_df['size'] == self.item_size].copy()
+        self.vertices_df = vertices_df[vertices_df['size'] == self.item_size].copy()
+        
+        logging.info(f"Filtered piece data for size {self.item_size}, remaining rows: {len(self.piece_df)}")
+        logging.info(f"Filtered vertices data for size {self.item_size}, remaining rows: {len(self.vertices_df)}")
+
         self.processed_vertices_list = []
         self.line_pl_points = [] # Used to store line points
+
+        self.graded_or_base = graded_or_base
+        self.item = item
 
         # Get the unique alteration rules
         self.alteration_rules = self.get_alteration_rules()
@@ -68,16 +101,11 @@ class PieceAlterationProcessor:
         # Alteration settings
         self.alteration_movement = alteration_movement
 
-        # Item size
-        self.item_size = item_size
-
         # Adjustment points
         self.cw_adjustment_points = pd.DataFrame()  # Initialize as empty DataFrame
         self.ccw_adjustment_points = pd.DataFrame() 
 
         # Save Options
-        self.save_folder_processed_pieces = save_folder_processed_pieces
-        self.save_folder_processed_vertices = save_folder_processed_vertices
         self.save_file_format = save_file_format
 
         # Debugging
@@ -339,7 +367,7 @@ class PieceAlterationProcessor:
             # Mark notch points
             processed_df = self.mark_notch_points(notch_points, processed_df)
 
-            processed_df.to_csv("data/processed_marked_notch_points.csv", index=False)
+            processed_df.to_csv(f"data/staging_processed/{self.graded_or_base}/{self.item}/debug/processed_marked_notch_points.csv", index=False)
 
             # Count alteration types
             alteration_type_counts = processed_df['alteration_type'].value_counts()
@@ -379,7 +407,7 @@ class PieceAlterationProcessor:
 
             # Check for further alteration points
             if self.xy_move_step_counter > 0 and self.xy_move_step_counter == self.xy_move_count:
-                    processed_df.to_csv("data/processed_df.csv", index=False)
+                    processed_df.to_csv(f"data/staging_processed/{self.graded_or_base}/{self.item}/debug/processed_df-{self.item_size}.csv", index=False)
                     processed_df = self.alter_unaltered_notch_groups_near_mtm(processed_df)
                     processed_df = self.post_alteration_point_shift(processed_df)
                     #processed_df = self.xy_move_correction(processed_df)
@@ -391,9 +419,11 @@ class PieceAlterationProcessor:
             return processed_df
 
         # Debug Mode
+        print(f"Debug alteration rule: {self.debug_alteration_rule}")
         if not pd.isna(self.debug_alteration_rule):
-            debug_savefolder = "data/staging_processed/debug/"
-            save_filepath = f"{debug_savefolder}{self.piece_name}_{self.debug_alteration_rule}{self.save_file_format}"
+            debug_savefolder = f"data/staging_processed/{self.graded_or_base}/{self.item}/debug/"
+            print(f"Debug save folder: {debug_savefolder}")
+            save_filepath = f"{debug_savefolder}{self.piece_name}-{self.item_size}_{self.debug_alteration_rule}{self.save_file_format}"
             os.makedirs(debug_savefolder, exist_ok=True)
 
             if self.debug_alteration_rule in self.alteration_rules:
@@ -751,7 +781,7 @@ class PieceAlterationProcessor:
             logging.info(f"{extension_type} No Extension applied. MTM point {mtm_point} moved from ({p1[0]}, {p1[1]}) to ({new_mtm_x}, {new_mtm_y})")
             logging.info(f"MTM dependent {mtm_dependent} remains fixed at ({p2[0]}, {p2[1]})")
 
-            selected_df_copy.to_csv("data/ccw_no_ext_df.csv", index=False)
+            selected_df_copy.to_csv(f"data/ccw_no_ext_df-{self.item_size}.csv", index=False)
 
             return row, selected_df_copy
 
@@ -1522,8 +1552,8 @@ class PieceAlterationProcessor:
         debug_df.loc[:, 'movement_x'] = debug_df['pl_point_altered_x'] - debug_df['pl_point_x']
         debug_df.loc[:, 'movement_y'] = debug_df['pl_point_altered_y'] - debug_df['pl_point_y']
 
-        debug_df.to_csv('debug_post_alteration_shift.csv', index=False)
-        logging.info("Debug information saved to 'debug_post_alteration_shift.csv'")
+        debug_df.to_csv(f'data/staging_processed/{self.graded_or_base}/{self.item}/debug/debug_post_alteration_shift-{self.item_size}.csv', index=False)
+        logging.info(f"Debug information saved to 'debug_post_alteration_shift-{self.item_size}.csv'")
 
         return selected_df_copy
 
@@ -1670,7 +1700,7 @@ class PieceAlterationProcessor:
         Saves the processed vertices to the specified folder.
         """
         os.makedirs(self.save_folder_processed_vertices, exist_ok=True)
-        save_filepath = f"{self.save_folder_processed_vertices}/processed_vertices_{self.piece_name}{self.save_file_format}"
+        save_filepath = f"{self.save_folder_processed_vertices}/processed_vertices_{self.piece_name}-{self.item_size}{self.save_file_format}"
         self.vertices_df.to_csv(save_filepath, index=False)
 
     def extract_and_flatten_vertices(self, vertices_string_list):
@@ -1739,65 +1769,50 @@ class PieceAlterationProcessor:
 
 if __name__ == "__main__":
 
-    piece_table_path = "data/staging/alteration_by_piece/combined_table_LGFG-SH-01-CCB-FOA.csv"
-    vertices_table_path = "data/staging/vertices/vertices_LGFG-SH-01-CCB-FOA.csv"
+    graded_or_base = "graded"
+    item = "shirt"
 
-    #piece_table_path = "data/staging/alteration_by_piece/combined_table_CIRCLE-12BY12-INCH.csv"
-    #vertices_table_path = "data/staging/vertices/vertices_CIRCLE-12BY12-INCH.csv"
-
-    #piece_table_path = "data/staging/alteration_by_piece/combined_table_LGFG-V2-SH-01-STBS-F.csv"
-    #vertices_table_path = "data/staging/vertices/vertices_LGFG-V2-SH-01-STBS-F.csv"
-
-    #piece_table_path = "data/staging/alteration_by_piece/combined_table_LGFG-SH-04FS-FOA.csv"
-    #vertices_table_path = "data/staging/vertices/vertices_LGFG-SH-04FS-FOA.csv"
-
-    #piece_table_path = "data/staging/alteration_by_piece/combined_table_LGFG-V2-BC1-SH-08.csv"
-    #vertices_table_path = "data/staging/vertices/vertices_LGFG-V2-BC1-SH-08.csv"
+    base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    piece_table_path = os.path.join(
+        base_path, 
+        "data", 
+        "staging", 
+        graded_or_base,
+        item,
+        "alteration_by_piece",
+        "combined_table_LGFG-SH-01-CCB-FOA.csv"
+    )
+    vertices_table_path = os.path.join(
+        base_path,
+        "data",
+        "staging",
+        graded_or_base,
+        item,
+        "vertices",
+        "vertices_LGFG-SH-01-CCB-FOA.csv"
+    )
     
-    # Debug: Check by Alteration Rule
-    
-    #debug_alteration_rule = "1LTH-FSLV"
-    #debug_alteration_rule = "FRT-HEIGHT"
-    #debug_alteration_rule = "2SL-BICEP"
-
-    ## LGFG-SH-01-CCB-FO
-    #debug_alteration_rule = "1LTH-BACK"
-    #debug_alteration_rule = "1LTH-FRONT"
     debug_alteration_rule = "1LTH-FULL"
-    #debug_alteration_rule = "2ARMHOLEDN"
-    #debug_alteration_rule = "2ARMHOLEIN"
-    #debug_alteration_rule = "3-COLLAR"
-    #debug_alteration_rule = "3-SHOULDER"
-    #debug_alteration_rule = "4-CHEST"
-    #debug_alteration_rule = "4-HIP"
-    #debug_alteration_rule = "4-WAIST"
-    #debug_alteration_rule = "4CHESTACRS" 
-    #debug_alteration_rule = "5-DARTBACK"
-    #debug_alteration_rule = "6-PLACKET"
-    #debug_alteration_rule = "7F-BELLY"
-    #debug_alteration_rule = "7F-ERECT"
-    #debug_alteration_rule = "7F-SH-BKSL"
-    #debug_alteration_rule = "7F-SHPOINT"
-    #debug_alteration_rule = "7F-SHSLOPE"
-    #debug_alteration_rule = "7F-SHSQUAR"
-    #debug_alteration_rule = "7F-STOOPED"
-    #debug_alteration_rule = "HIGH-CHEST"
-    #debug_alteration_rule = "LONG-BACK"
-    #debug_alteration_rule = "OPEN-CLR"
-    #debug_alteration_rule = "ROUND-BACK"
-    #debug_alteration_rule = "SHORT-BACK"
-    #debug_alteration_rule = "WAISTSHAPE"
-    #debug_alteration_rule = "WAISTSMOTH"
 
     # Item siz
     item_size = 32
     # Alteration movement
     alteration_movement = 5.0 # INCHES (can be positive or negative)
+
+    # Verify paths exist
+    if not os.path.exists(piece_table_path):
+        raise FileNotFoundError(f"Piece table not found at: {piece_table_path}")
+    if not os.path.exists(vertices_table_path):
+        raise FileNotFoundError(f"Vertices table not found at: {vertices_table_path}")
     
-    make_alteration = PieceAlterationProcessor(piece_table_path=piece_table_path,
-                                               vertices_table_path=vertices_table_path,
-                                               debug_alteration_rule=debug_alteration_rule, 
-                                               item_size=item_size,
-                                               alteration_movement = alteration_movement)
+    make_alteration = PieceAlterationProcessor(
+        graded_or_base=graded_or_base,
+        item=item,
+        piece_table_path=piece_table_path,
+        vertices_table_path=vertices_table_path,
+        debug_alteration_rule=debug_alteration_rule, 
+        item_size=item_size,
+        alteration_movement = alteration_movement)
+    
     make_alteration.process_alterations()
     #make_alteration.log_info(debug_alteration_rule)

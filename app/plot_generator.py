@@ -201,14 +201,14 @@ class PlotGenerator:
         self.plot_vertices(file_path_vertices, file_path)
 
 if __name__ == "__main__":
-    #file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FOA_1LTH-FRONT.csv"
-    file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FOA_1LTH-FULL.csv"
-    #file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_4-WAIST.csv"
-    #file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_7F-SHPOINT.csv"
-    #file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_2ARMHOLEDN.csv"
-    #file_path = "data/staging_processed/debug/LGFG-SH-01-CCB-FO_2ARMHOLEIN.csv"
+    piece_name = "LGFG-SH-01-CCB-FOA"
+    alteration_rule = "1LTH-FULL"
+    item_size = "32"
+    graded_or_base = "graded"
+    item = "shirt"
 
-    file_path_vertices = "data/staging_processed/processed_vertices_by_piece/processed_vertices_LGFG-SH-01-CCB-FOA.csv"
+    file_path = f"data/staging_processed/{graded_or_base}/{item}/debug/{piece_name}-{item_size}_{alteration_rule}.csv"
+    file_path_vertices = f"data/staging_processed/{graded_or_base}/{item}/processed_vertices_by_piece/processed_vertices_{piece_name}-{item_size}.csv"
     
     plot_generator = PlotGenerator()
     plot_generator.generate_plots(file_path, file_path_vertices)
