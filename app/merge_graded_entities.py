@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import numpy as np
 import logging
+import re
 
 class MergeGradedEntities:
     def __init__(self, graded_folder, labeled_folder, item):
@@ -65,27 +66,34 @@ class MergeGradedEntities:
             # Concatenate all DataFrames for this piece
             merged_df = pd.concat(dfs, ignore_index=True)
             
-            # Filter out rows where filename doesn't end with -number
             if 'Filename' in merged_df.columns:
-                # Create a mask for filenames that end with -number
-                has_size = merged_df['Filename'].str.match(r'.*-\d+\.dxf$')
+                # First try to get size from TEXT field
+                text_sizes = merged_df[merged_df['Type'] == 'TEXT']['Text'].apply(lambda x: get_sizes_from_text(x))
+                text_sizes = text_sizes[text_sizes.apply(len) > 0].apply(lambda x: x[0])  # Take first valid size
                 
-                # Print debug info about removed files
-                no_size_files = merged_df[~has_size]['Filename'].unique()
-                if len(no_size_files) > 0:
-                    print(f"\nRemoving files without size indicators for {piece_name}:")
-                    for f in no_size_files:
-                        print(f"- {f}")
+                # For rows where text size is missing, fallback to filename
+                filename_sizes = merged_df['Filename'].str.extract(r'-(\d+)\.dxf')[0]
                 
-                # Keep only rows where filename ends with -number.dxf
-                merged_df = merged_df[has_size]
+                # Combine both size sources, prioritizing text sizes this time
+                merged_df['Size'] = text_sizes.fillna(filename_sizes).astype(str)
+                
+                # Log input sizes
+                input_sizes = sorted(merged_df['Size'].dropna().unique())
+                logging.info(f"\nPiece {piece_name} input sizes: {input_sizes}")
+                
+                # Keep only rows where size was found
+                merged_df = merged_df[merged_df['Size'].notna()]
+                
+                # Log remaining sizes after filtering
+                final_sizes = sorted(merged_df['Size'].unique())
+                logging.info(f"Piece {piece_name} final sizes after filtering: {final_sizes}")
                 
                 if len(merged_df) == 0:
-                    print(f"Warning: No rows left after filtering for {piece_name}")
+                    logging.warning(f"Warning: No rows left after filtering for {piece_name}")
                     continue
             
             merged_df.to_excel(output_path, index=False)
-            print(f"Merged data for {piece_name} saved to {output_path}")
+            logging.info(f"Merged data for {piece_name} saved to {output_path}")
 
     def process(self):
         self.load_graded_data()
@@ -99,11 +107,79 @@ class MergeGradedEntities:
             total_mtm_points = sum(len(df) for df in dfs)
             logging.info(f"Piece {piece} has {total_mtm_points} non-null MTM points in labeled data")
         
+        # Add detailed logging for each piece's files
+        for piece_name, dfs_list in self.graded_data.items():
+            logging.info(f"\nProcessing files for piece {piece_name}:")
+            for df in dfs_list:
+                if 'Filename' in df.columns:
+                    filenames = df['Filename'].unique()
+                    for filename in filenames:
+                        # Add logging for text elements to debug size extraction
+                        text_rows = df[df['Type'] == 'TEXT']
+                        logging.info(f"- Found file: {filename}")
+                        logging.info(f"  Text elements: {text_rows['Text'].tolist()}")
+                        size = self.process_file(filename, piece_name)
+                        if size:
+                            logging.info(f"  Extracted size: {size}")
+        
         self.extract_and_insert_mtm_points()
         self.save_merged_data()
 
+    def process_file(self, filepath, piece_name):
+        # Since we already have the text elements in the DataFrame
+        # We don't need to read the file again
+        if isinstance(filepath, str):
+            # Extract size from filename if it matches pattern
+            match = re.search(r'-(\d+)\.dxf$', filepath)
+            if match:
+                return match.group(1)
+        return None
+
+    def extract_size_from_text(self, text_elements):
+        """Extract size from text elements that match pattern '30 - 62 (XX)'"""
+        for text in text_elements:
+            # Look for pattern XX - XX (size)
+            match = re.search(r'\d+\s*-\s*\d+\s*\((\d+)\)', text)
+            if match:
+                size = match.group(1)
+                return size
+        return None
+
+def get_sizes_from_text(text, min_size=30, max_size=62):
+    """
+    Extract sizes from text, prioritizing parenthetical sizes and filename sizes
+    Args:
+        text: String to extract sizes from
+        min_size: Minimum valid size (inclusive)
+        max_size: Maximum valid size (inclusive)
+    """
+    if not isinstance(text, str):
+        return []
+    
+    sizes = set()
+    
+    # First priority: Extract size from parentheses (32) from text like "30 - 62 (32)"
+    paren_match = re.search(r'\((\d+)\)', text)
+    if paren_match:
+        size = int(paren_match.group(1))
+        if min_size <= size <= max_size:
+            sizes.add(str(size))
+    
+    # Second priority: Extract size from filename pattern like "-30.dxf"
+    filename_match = re.search(r'-(\d{2})\.dxf$', text)
+    if filename_match:
+        size = int(filename_match.group(1))
+        if min_size <= size <= max_size:
+            sizes.add(str(size))
+    
+    return sorted(list(sizes))
+
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    # Enable debug logging
+    logging.basicConfig(
+        level=logging.DEBUG,  # Change to DEBUG to see more detailed logs
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
 
     item = "shirt"
 
