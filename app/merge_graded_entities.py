@@ -57,10 +57,10 @@ class MergeGradedEntities:
                     # Extract sizes from both filename and text fields
                     sizes = set()
                     if 'Filename' in graded_df.columns:
-                        sizes.update(get_sizes_from_text(graded_df['Filename'].iloc[0], self.min_size, self.max_size))
+                        sizes.update(int(size) for size in get_sizes_from_text(graded_df['Filename'].iloc[0], self.min_size, self.max_size))
                     if 'Text' in graded_df.columns:
                         for text in graded_df['Text'].dropna().unique():
-                            sizes.update(get_sizes_from_text(text, self.min_size, self.max_size))
+                            sizes.update(int(size) for size in get_sizes_from_text(text, self.min_size, self.max_size))
                     
                     logging.info(f"Found sizes for piece {piece_name}: {sorted(list(sizes))}")
                     
@@ -69,33 +69,49 @@ class MergeGradedEntities:
                         mask = graded_df['Point Label'] == point_label
                         graded_df.loc[mask, 'MTM Points'] = mtm_point
                         # Add size information
-                        graded_df.loc[mask, 'Sizes'] = ','.join(sorted(list(sizes)))
+                        graded_df.loc[mask, 'size'] = ','.join(str(size) for size in sorted(sizes))
                     
                     logging.info(f"Applied MTM points to graded file")
 
     def save_merged_data(self):
         for piece_name, dfs in self.graded_data.items():
             os.makedirs(self.output_folder, exist_ok=True)
-            
-            # Create a list to store DataFrames for all sizes
             all_size_dfs = []
             
-            # Process each DataFrame
             for df in dfs:
-                sizes = set()
                 if 'Filename' in df.columns:
-                    sizes.update(get_sizes_from_text(df['Filename'].iloc[0], self.min_size, self.max_size))
-                if 'Text' in df.columns:
-                    for text in df['Text'].dropna().unique():
-                        sizes.update(get_sizes_from_text(text, self.min_size, self.max_size))
-                
-                # For each size, create a copy of the DataFrame with the size information
-                for size in sizes:
-                    size_df = df.copy()
-                    size_df['size'] = size
-                    all_size_dfs.append(size_df)
+                    # Get base filename without extension
+                    original_filename = df['Filename'].iloc[0]
+                    base_filename = re.sub(r'\.dxf$', '', original_filename)  # Remove .dxf first
+                    base_filename = re.sub(r'-\d+$', '', base_filename)      # Then remove any trailing size
+                    
+                    # Extract sizes from Text field
+                    text_sizes = set()
+                    if 'Text' in df.columns:
+                        for text in df['Text'].dropna().unique():
+                            found_sizes = get_sizes_from_text(text)
+                            text_sizes.update(found_sizes)
+                    
+                    # If sizes found in Text field, create a copy of df for each size
+                    if text_sizes:
+                        for size in text_sizes:
+                            size_df = df.copy()
+                            size_df['Filename'] = f"{base_filename}-{size}.dxf"  # Proper filename construction
+                            size_df['size'] = size
+                            all_size_dfs.append(size_df)
+                    else:
+                        # Check for size in filename
+                        size_match = re.search(r'-(\d+)\.dxf$', original_filename)
+                        if size_match:
+                            df['size'] = size_match.group(1)
+                            all_size_dfs.append(df)
+                        else:
+                            # Keep original if no size found
+                            all_size_dfs.append(df)
+                else:
+                    # Keep original if no Filename column
+                    all_size_dfs.append(df)
             
-            # Combine all DataFrames into one
             if all_size_dfs:
                 final_df = pd.concat(all_size_dfs, ignore_index=True)
                 output_path = os.path.join(self.output_folder, f'{piece_name}_graded_combined_entities_labeled.xlsx')

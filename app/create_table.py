@@ -97,14 +97,28 @@ class CreateTable:
             
             if self.debug:
                 print("Original piece_name values:", combined_df['piece_name'].unique())
+                print(f"Initial columns: {combined_df.columns.tolist()}")
+                print(f"Unique sizes before processing: {combined_df['size'].unique()}")
             
             # Initialize size column
             combined_df['size'] = None
             
             if self.is_graded:
-                # For graded files, extract size and base name from the piece_name column
-                # Extract size (number before .dxf)
-                combined_df['size'] = combined_df['piece_name'].str.extract(r'-(\d+)\.dxf$')
+                # First try to get size from filename
+                combined_df['size'] = combined_df['piece_name'].str.extract(r'-(\d+)\.dxf$').astype(str)
+                
+                # If size not found in filename, check text entities
+                text_rows = combined_df[combined_df['Type'] == 'TEXT']
+                if not text_rows.empty:
+                    for _, row in text_rows.iterrows():
+                        if 'Text' in row and pd.notna(row['Text']):
+                            # Look for pattern like "30 - 62 (39)"
+                            size_match = re.search(r'\((\d+)\)', str(row['Text']))
+                            if size_match:
+                                size = size_match.group(1)
+                                # Update size for all rows with same piece_name
+                                piece_mask = combined_df['piece_name'] == row['piece_name']
+                                combined_df.loc[piece_mask, 'size'] = size
                 
                 # Extract base piece name (remove only size and .dxf)
                 combined_df['piece_name'] = combined_df['piece_name'].str.replace(r'-\d+\.dxf$', '', regex=True)
@@ -119,16 +133,38 @@ class CreateTable:
             else:
                 # For base files, extract size from the filename
                 base_piece_name = filename.replace('_combined_entities_labeled.xlsx', '')
-                size_match = re.search(r'-(\d+)$', base_piece_name)
+                # Modified regex to capture size correctly
+                size_match = re.search(r'-(\d+)(?:\.dxf)?$', base_piece_name)
                 if size_match:
                     size = size_match.group(1)
                     # Remove only the size number from the end
-                    piece_name = re.sub(r'-\d+$', '', base_piece_name)
-                    combined_df['size'] = size
+                    piece_name = re.sub(r'-\d+(?:\.dxf)?$', '', base_piece_name)
+                    combined_df['size'] = str(size)  # Ensure size is string
                     combined_df['piece_name'] = piece_name
                 else:
                     piece_name = base_piece_name.replace('_combined_entities', '')
                     combined_df['piece_name'] = piece_name
+            
+            # After size extraction but before merging alteration rules
+            if self.debug and '39' in combined_df['size'].unique():
+                print("\nFound size 39 data:")
+                size_39_data = combined_df[combined_df['size'] == '39']
+                print(f"Number of size 39 rows: {len(size_39_data)}")
+                print(f"Available columns for size 39: {size_39_data.columns[size_39_data.notna().any()].tolist()}")
+            
+            # Join with alteration rules
+            if 'alteration_rules' in self.df_dict:
+                combined_df = pd.merge(
+                    combined_df,
+                    self.df_dict['alteration_rules'],
+                    on=['size', 'piece_name'],  # Make sure we're joining on correct keys
+                    how='left'
+                )
+                
+                if self.debug and '39' in combined_df['size'].unique():
+                    print("\nAfter joining alteration rules:")
+                    size_39_data = combined_df[combined_df['size'] == '39']
+                    print(f"Size 39 rows with rules: {len(size_39_data[size_39_data['alteration_name'].notna()])}")
             
             # Ensure piece_name is string type before concatenation
             combined_df['piece_name'] = combined_df['piece_name'].astype(str)
@@ -159,34 +195,19 @@ class CreateTable:
         self.combined_entities_joined_df = final_combined_df
     
     def merge_tables(self):
-        if self.debug:
-            print("\nDEBUG merge_tables:")
-            print(f"Alteration joined df size: {len(self.alteration_joined_df)}")
-            print(f"Combined entities df size: {len(self.combined_entities_joined_df)}")
-            print(f"Sample piece names in alteration_joined_df: {self.alteration_joined_df['piece_name'].unique()[:5]}")
-            print(f"Sample piece names in combined_entities_df: {self.combined_entities_joined_df['piece_name'].unique()[:5]}")
-            print(f"Sample sizes in combined_entities_df: {self.combined_entities_joined_df['size'].unique()[:5]}")
+        # Add these debug prints
+        print("\nDEBUG for size 39:")
+        print("Combined entities df sizes:", self.combined_entities_joined_df['size'].unique())
+        print("\nSize 39 records in combined entities:")
+        print(self.combined_entities_joined_df[self.combined_entities_joined_df['size'] == '39'][['piece_name', 'mtm points', 'size']].head())
         
-        self.alteration_joined_df['piece_name'] = self.alteration_joined_df['piece_name'].fillna('')
-        self.combined_entities_joined_df['piece_name'] = self.combined_entities_joined_df['piece_name'].fillna('')
-
-        # For both graded and base files now
-        # Create a copy of the original piece_name
-        self.combined_entities_joined_df['original_name'] = self.combined_entities_joined_df['piece_name']
+        print("\nAlteration joined df mtm points:", self.alteration_joined_df['mtm points'].unique())
         
-        # Extract size from piece_name and create size column if not already present
-        if 'size' not in self.combined_entities_joined_df.columns:
-            self.combined_entities_joined_df['size'] = self.combined_entities_joined_df['piece_name'].str.extract(r'-(\d+)(?:\.dxf)?$')
+        # Before merge
+        size_39_before = len(self.combined_entities_joined_df[self.combined_entities_joined_df['size'] == '39'])
+        print(f"\nSize 39 records before merge: {size_39_before}")
         
-        # Remove any .dxf extension from the piece_name if it exists
-        self.combined_entities_joined_df['piece_name'] = self.combined_entities_joined_df['piece_name'].str.replace(r'\.dxf$', '', regex=True)
-        
-        if self.debug:  
-            print("\nDEBUG before merge:")
-            print(f"Combined entities piece names: {self.combined_entities_joined_df['piece_name'].unique()[:5]}")
-            print(f"Alteration piece names: {self.alteration_joined_df['piece_name'].unique()[:5]}")
-        
-        # Now merge using the piece_name
+        # Your existing merge code
         self.merged_df = pd.merge(
             self.alteration_joined_df, 
             self.combined_entities_joined_df, 
@@ -194,9 +215,9 @@ class CreateTable:
             how='right'
         )
         
-        if self.debug:
-            print("\nDEBUG after merge:")
-            print(f"Merged piece names: {self.merged_df['piece_name'].unique()[:5]}")
+        # After merge
+        size_39_after = len(self.merged_df[self.merged_df['size'] == '39'])
+        print(f"Size 39 records after merge: {size_39_after}")
             
         # Keep only rows that had a size
         has_size = self.merged_df['size'].notna()

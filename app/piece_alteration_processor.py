@@ -131,14 +131,14 @@ class PieceAlterationProcessor:
 
     def get_piece_name(self):
         """
-        Returns the unique piece name from the piece_name column.
-        Assumes there is only one unique piece name.
+        Returns the piece name from the filtered data.
+        Since all rows should have the same piece name after filtering by size,
+        we can just take it from the first row.
         """
-        piece_name = self.piece_df['piece_name'].dropna().unique()
-        if len(piece_name) == 1:
-            return piece_name[0]
-        else:
-            raise ValueError("There should only be one unique piece name, but multiple were found.")
+        if len(self.piece_df) == 0:
+            raise ValueError(f"No data found for size {self.item_size}")
+            
+        return self.piece_df['piece_name'].iloc[0]
 
     def split_by_alteration_rule(self):
         """
