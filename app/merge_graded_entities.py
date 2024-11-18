@@ -5,12 +5,14 @@ import logging
 import re
 
 class MergeGradedEntities:
-    def __init__(self, graded_folder, labeled_folder, item):
+    def __init__(self, graded_folder, labeled_folder, item, min_size=30, max_size=62):
         self.graded_folder = graded_folder
         self.labeled_folder = labeled_folder
         self.output_folder = os.path.join("data/input/graded_mtm_combined_entities_labeled", item)
         self.graded_data = {}
         self.labeled_data = {}
+        self.min_size = min_size
+        self.max_size = max_size
 
     def load_graded_data(self):
         for root, dirs, files in os.walk(self.graded_folder):
@@ -52,48 +54,53 @@ class MergeGradedEntities:
                 
                 # Apply MTM points to graded files using Point Label positions
                 for graded_df in self.graded_data[piece_name]:
+                    # Extract sizes from both filename and text fields
+                    sizes = set()
+                    if 'Filename' in graded_df.columns:
+                        sizes.update(get_sizes_from_text(graded_df['Filename'].iloc[0], self.min_size, self.max_size))
+                    if 'Text' in graded_df.columns:
+                        for text in graded_df['Text'].dropna().unique():
+                            sizes.update(get_sizes_from_text(text, self.min_size, self.max_size))
+                    
+                    logging.info(f"Found sizes for piece {piece_name}: {sorted(list(sizes))}")
+                    
+                    # Apply MTM points
                     for point_label, mtm_point in mtm_mapping.items():
                         mask = graded_df['Point Label'] == point_label
                         graded_df.loc[mask, 'MTM Points'] = mtm_point
+                        # Add size information
+                        graded_df.loc[mask, 'Sizes'] = ','.join(sorted(list(sizes)))
                     
                     logging.info(f"Applied MTM points to graded file")
 
     def save_merged_data(self):
         for piece_name, dfs in self.graded_data.items():
             os.makedirs(self.output_folder, exist_ok=True)
-            output_path = os.path.join(self.output_folder, f'{piece_name}_graded_combined_entities_labeled.xlsx')
             
-            # Concatenate all DataFrames for this piece
-            merged_df = pd.concat(dfs, ignore_index=True)
+            # Create a list to store DataFrames for all sizes
+            all_size_dfs = []
             
-            if 'Filename' in merged_df.columns:
-                # First try to get size from TEXT field
-                text_sizes = merged_df[merged_df['Type'] == 'TEXT']['Text'].apply(lambda x: get_sizes_from_text(x))
-                text_sizes = text_sizes[text_sizes.apply(len) > 0].apply(lambda x: x[0])  # Take first valid size
+            # Process each DataFrame
+            for df in dfs:
+                sizes = set()
+                if 'Filename' in df.columns:
+                    sizes.update(get_sizes_from_text(df['Filename'].iloc[0], self.min_size, self.max_size))
+                if 'Text' in df.columns:
+                    for text in df['Text'].dropna().unique():
+                        sizes.update(get_sizes_from_text(text, self.min_size, self.max_size))
                 
-                # For rows where text size is missing, fallback to filename
-                filename_sizes = merged_df['Filename'].str.extract(r'-(\d+)\.dxf')[0]
-                
-                # Combine both size sources, prioritizing text sizes this time
-                merged_df['Size'] = text_sizes.fillna(filename_sizes).astype(str)
-                
-                # Log input sizes
-                input_sizes = sorted(merged_df['Size'].dropna().unique())
-                logging.info(f"\nPiece {piece_name} input sizes: {input_sizes}")
-                
-                # Keep only rows where size was found
-                merged_df = merged_df[merged_df['Size'].notna()]
-                
-                # Log remaining sizes after filtering
-                final_sizes = sorted(merged_df['Size'].unique())
-                logging.info(f"Piece {piece_name} final sizes after filtering: {final_sizes}")
-                
-                if len(merged_df) == 0:
-                    logging.warning(f"Warning: No rows left after filtering for {piece_name}")
-                    continue
+                # For each size, create a copy of the DataFrame with the size information
+                for size in sizes:
+                    size_df = df.copy()
+                    size_df['size'] = size
+                    all_size_dfs.append(size_df)
             
-            merged_df.to_excel(output_path, index=False)
-            logging.info(f"Merged data for {piece_name} saved to {output_path}")
+            # Combine all DataFrames into one
+            if all_size_dfs:
+                final_df = pd.concat(all_size_dfs, ignore_index=True)
+                output_path = os.path.join(self.output_folder, f'{piece_name}_graded_combined_entities_labeled.xlsx')
+                final_df.to_excel(output_path, index=False)
+                print(f"Saved combined data for {piece_name} with all sizes to {output_path}")
 
     def process(self):
         self.load_graded_data()
