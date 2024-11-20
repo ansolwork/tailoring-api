@@ -1668,7 +1668,7 @@ class PieceAlterationProcessor:
 
 if __name__ == "__main__":
 
-    graded_or_base = "graded"
+    graded_or_base = "base"
     item = "shirt"
 
     base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
