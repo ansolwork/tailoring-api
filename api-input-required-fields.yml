@@ -2,33 +2,72 @@
 required:
   - Item
   - Shirt Styles
-  - Sleeve Cuff Style
+  - Collar Depth & Buttoning
+  - Collar Style
+  - Tie Space
+  - Point Length
+  - Cuff Link Button Hole
   - Sleeve Vent Button
   - Cuff Depth
+  - Contrast Top Collar
+  - Contrast Under Collar
+  - Contrast Neck Band
+  - Sleeve Cuff Style
+  - Sleeve Type
   - Epaulette
   - Front Style
   - Breast Pockets
   - Flap with button fastening
   - Back Style
   - Shirt Hem
-  - Contrast Top Collar
-  - Contrast Under Collar
   - Contrast Top Cuff
   - Contrast Under Cuff
   - Contrast Placket
+  - Tri Tab
+  - Handkerchief/Face mask with filter pocket
   - Measurement Type
-  - Fit
+  - Cuff Length Left or Both
   - Chest
   - Bare Neck Measure
+  - Half Chest
+  - Collar length
+  - Half Waist Measure
+  - Half Seat
+  - Back Length
+  - Cross Back
+  - Sleeve Length
+  - Half Armhole
+  - Fit
   - Waist Measure
   - Seat
-  - Back Length
   - Shoulder point to point
-  - Sleeve Length
-  - Cuff Length Left or Both
+  - Bicep
+  - Right Sleeve Length
+  - Cuff Length Right
+  - Odd Cuff Circumferences
+  - Odd Sleeves
   - Drop front Neck (shirt)
-  - Back Stance
   - Shoulder Angle
+  - Full Chest
   - FWD Pointing Shoulders
   - Shoulder Drop
   - Shoulder Drop Amount
+
+measurement_fields:
+  - Cuff Length Left or Both
+  - Chest
+  - Bare Neck Measure
+  - Half Chest
+  - Collar length
+  - Half Waist Measure
+  - Half Seat
+  - Back Length
+  - Cross Back
+  - Sleeve Length
+  - Half Armhole
+  - Waist Measure
+  - Seat
+  - Shoulder point to point
+  - Bicep
+  - Right Sleeve Length
+  - Cuff Length Right
