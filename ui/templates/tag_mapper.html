@@ -69,6 +69,31 @@
     background-color: #0056b3; /* Darker shade of blue on hover */
     text-decoration: none;      /* Keep no underline on hover */
 }
+  /* Add these new styles for flash messages */
+  .flash-message {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .flash-message.error {
+            background-color: #ffebee;
+            color: #c62828;
+            border: 1px solid #ffcdd2;
+        }
+
+        .flash-message.success {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #c8e6c9;
+        }
+
+        .flash-message.warning {
+            background-color: #fff3e0;
+            color: #ef6c00;
+            border: 1px solid #ffe0b2;
+        }
 
     </style>
 </head>
@@ -95,8 +120,8 @@
         <h3>Select an Option from Tags</h3>
         <input type="text" class="search-box" id="searchBox3" placeholder="Search options in Tags..."
                onkeyup="filterDropdown()">
-        <select class="dropdown" id="dropdowntags" name="tag_option">
-            <!-- Options from Table 3 will be dynamically inserted here -->
+        <select class="dropdown" id="dropdowntags" name="tag_option" required>
+            <option value="">Select a tag...</option>
         </select>
     </div>
 
@@ -185,22 +210,45 @@
         .then(response => response.json())
         .then(data => {
             const dropdowntags = document.getElementById('dropdowntags');
-            //dropdowntags.innerHTML = '';
-            dropdowntags.innerHTML = '<input type="text" id="tag_${option}" value="${option}" name="tag_option" onchange="updateSelectedOptions()"'
+            dropdowntags.innerHTML = '<option value="">Select a tag...</option>';
+            
+            // Group tags by subcategory
+            const groupedTags = {};
             data.forEach(option => {
-                let optionElement = document.createElement('option');
-                optionElement. Value = option;
-                optionElement.textContent = option;
-                dropdowntags.appendChild(optionElement);
+                if (!groupedTags[option.tag_subcategory]) {
+                    groupedTags[option.tag_subcategory] = [];
+                }
+                groupedTags[option.tag_subcategory].push(option);
             });
+
+            // Create optgroup for each subcategory
+            Object.entries(groupedTags).forEach(([subcategory, tags]) => {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = subcategory;
+                
+                tags.forEach(tag => {
+                    let optionElement = document.createElement('option');
+                    // Combine tag_name and subcategory with a delimiter
+                    optionElement.value = `${tag.tag_name}|${tag.tag_subcategory}`;
+                    optionElement.textContent = `${tag.tag_name} (${tag.tag_subcategory})`;
+                    optgroup.appendChild(optionElement);
+                });
+                
+                dropdowntags.appendChild(optgroup);
+            });
+
+            // Log the first few options to verify the format
+            console.log('First few tag options:', Array.from(dropdowntags.options).slice(0, 3));
         })
-        .catch(error => console.error('Error fetching options from Tags:', error));
+        .catch(error => {
+            console.error('Error fetching options from Tags:', error);
+        });
     }
 
     // Update the selected options in the "Selected Options" section
     function updateSelectedOptions() {
         let selectedOptionsDiv = document.getElementById('selectedOptions');
-        selectedOptionsDiv.innerHTML = '';
+        selectedOptionsDiv.innerHTML = '<h3>Selected Options</h3>';
 
         // Get selected checkboxes from Table 1 and Table 2
         let checkboxespieces= document.querySelectorAll('#optionsList1 input[type="checkbox"]');
@@ -224,11 +272,12 @@
             }
         });
 
-        // Append selected option from Tags dropdown
-        let selectedDropdown = document.getElementById('dropdowntags').value;
-        if (selectedDropdown) {
+        // Update how we handle the selected tag
+        let selectedTag = document.getElementById('dropdowntags').value;
+        if (selectedTag) {
+            const [tagName, tagSubcategory] = selectedTag.split('|');
             let option = document.createElement('div');
-            option.textContent = `Tags: ${selectedDropdown}`;
+            option.textContent = `Tags: ${tagName} (${tagSubcategory})`;
             selectedOptionsDiv.appendChild(option);
         }
     }
@@ -265,6 +314,13 @@
     window.onload = function() {
         loadOptions();
     }
+
+    // Add this for debugging
+    document.getElementById('dropdowntags').addEventListener('change', function() {
+        console.log('Selected tag value:', this.value);
+        const [tagName, tagSubcategory] = this.value.split('|');
+        console.log('Split into:', { tagName, tagSubcategory });
+    });
 
 </script>
 </body>
