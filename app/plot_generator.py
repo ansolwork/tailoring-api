@@ -204,7 +204,7 @@ if __name__ == "__main__":
     piece_name = "LGFG-SH-01-CCB-FOA"
     alteration_rule = "1LTH-FULL"
     item_size = "39"
-    graded_or_base = "base"
+    graded_or_base = "graded"
     item = "shirt"
 
     file_path = f"data/staging_processed/{graded_or_base}/{item}/debug/{piece_name}-{item_size}_{alteration_rule}.csv"

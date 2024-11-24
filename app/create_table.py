@@ -3,6 +3,8 @@ import os
 import numpy as np
 import re
 from tqdm import tqdm
+import shutil
+import logging
 
 # TODO: Fix issue why we are not getting enough Alteration Rules in the output
 # TODO: Mark Line Points
@@ -195,18 +197,6 @@ class CreateTable:
         self.combined_entities_joined_df = final_combined_df
     
     def merge_tables(self):
-        # Add these debug prints
-        print("\nDEBUG for size 39:")
-        print("Combined entities df sizes:", self.combined_entities_joined_df['size'].unique())
-        print("\nSize 39 records in combined entities:")
-        print(self.combined_entities_joined_df[self.combined_entities_joined_df['size'] == '39'][['piece_name', 'mtm points', 'size']].head())
-        
-        print("\nAlteration joined df mtm points:", self.alteration_joined_df['mtm points'].unique())
-        
-        # Before merge
-        size_39_before = len(self.combined_entities_joined_df[self.combined_entities_joined_df['size'] == '39'])
-        print(f"\nSize 39 records before merge: {size_39_before}")
-        
         # Your existing merge code
         self.merged_df = pd.merge(
             self.alteration_joined_df, 
@@ -214,10 +204,6 @@ class CreateTable:
             on=['piece_name', 'mtm points'], 
             how='right'
         )
-        
-        # After merge
-        size_39_after = len(self.merged_df[self.merged_df['size'] == '39'])
-        print(f"Size 39 records after merge: {size_39_after}")
             
         # Keep only rows that had a size
         has_size = self.merged_df['size'].notna()
@@ -250,11 +236,7 @@ class CreateTable:
             print(pivot)
 
     def save_table_csv_by_alteration_rule(self, output_filename_prefix="combined_table"):
-        
         output_table_path = self.output_table_path
-
-
-        # Ensure the output directory exists
         os.makedirs(output_table_path, exist_ok=True)
 
         self.merged_df['piece_name'] = self.merged_df['piece_name'].str.replace(".dxf", "", regex=False)
@@ -265,9 +247,13 @@ class CreateTable:
         for alteration_rule, group_df in grouped:
             # Convert all column headers to lowercase
             group_df.columns = group_df.columns.str.lower()
+            
+            # Sort by size (convert to integer for proper numerical sorting)
+            group_df['size'] = pd.to_numeric(group_df['size'], errors='coerce')
+            group_df = group_df.sort_values('size')
                         
             # Create a sanitized file name for each alteration_rule
-            safe_alteration_rule = str(alteration_rule).replace(" ", "_").replace("/", "_")  # Ensure no illegal filename characters
+            safe_alteration_rule = str(alteration_rule).replace(" ", "_").replace("/", "_")
             output_file_path = os.path.join(output_table_path, f"{output_filename_prefix}_{safe_alteration_rule}.csv")
             
             # Save the group as a CSV file
@@ -280,7 +266,6 @@ class CreateTable:
         output_table_path = self.output_table_path_by_piece
         os.makedirs(output_table_path, exist_ok=True)
 
-        # Use base_piece_name for grouping if it exists, otherwise use piece_name
         grouping_column = 'base_piece_name' if 'base_piece_name' in self.merged_df.columns else 'piece_name'
         grouped = self.merged_df.groupby(grouping_column)
 
@@ -288,13 +273,15 @@ class CreateTable:
             # Convert all column headers to lowercase
             group_df.columns = group_df.columns.str.lower()
 
-            # Sort rows by 'alteration_rule' and 'piece_name' (to order size variants)
-            group_df = group_df.sort_values(by=['alteration_rule', 'piece_name'])
+            # Convert size to numeric for proper sorting
+            group_df['size'] = pd.to_numeric(group_df['size'], errors='coerce')
+            
+            # Sort by size, then alteration_rule, then mtm points
+            group_df = group_df.sort_values(['size', 'alteration_rule', 'mtm points'])
 
             safe_piece_name = str(base_piece_name).replace(" ", "_").replace("/", "_")
             output_file_path = os.path.join(output_table_path, f"{output_filename_prefix}_{safe_piece_name}.csv")
 
-            group_df = group_df.sort_values(by='mtm points')
             group_df = group_df.drop('vertices', axis=1)
             
             if 'base_piece_name' in group_df.columns:
@@ -311,7 +298,7 @@ class CreateTable:
             group_df.to_csv(output_file_path, index=False)
 
             if self.debug:  
-                print(f"CSV file saved to {output_file_path}")        
+                print(f"CSV file saved to {output_file_path}")
 
     def add_other_mtm_points(self):
         for filename in os.listdir(self.output_table_path):
@@ -406,6 +393,23 @@ class CreateTable:
                 output_path = os.path.join(base_dir, f'vertices_{sanitized_piece_name}.csv')
                 vertices_df.to_csv(output_path, index=False)
 
+    def clean_staging_folder(self):
+        """Clean the staging folder before saving new data"""
+        folders_to_clean = [
+            self.output_dir,
+            self.output_table_path,
+            self.output_table_path_by_piece
+        ]
+        
+        for folder in folders_to_clean:
+            if os.path.exists(folder):
+                try:
+                    shutil.rmtree(folder)
+                    if self.debug:
+                        print(f"Cleaned directory: {folder}")
+                except Exception as e:
+                    logging.error(f"Error cleaning directory {folder}: {str(e)}")
+
 if __name__ == "__main__":
     alteration_filepath = "data/input/mtm_points.xlsx"
     item = "shirt"
@@ -422,6 +426,9 @@ if __name__ == "__main__":
         debug=debug
     )
     
+    # Clean staging folder before processing
+    create_table.clean_staging_folder()
+    
     # Process the sheets and get the combined DataFrame
     create_table.process_table()
     create_table.process_combined_entities()
@@ -433,7 +440,7 @@ if __name__ == "__main__":
 
     # Process graded files
     print("\nProcessing graded files...")
-    graded_entities_folder = f"data/input/graded_mtm_combined_entities_labeled/{item}/"
+    graded_entities_folder = f"data/input/graded_mtm_combined_entities_labeled/{item}/all_sizes_merged/"
     create_table_graded = CreateTable(
         alteration_filepath, 
         graded_entities_folder,
@@ -441,6 +448,9 @@ if __name__ == "__main__":
         is_graded=True,
         debug=debug
     )
+    
+    # Clean staging folder before processing graded files
+    create_table_graded.clean_staging_folder()
     
     # Process the sheets and get the combined DataFrame for graded files
     create_table_graded.process_table()

@@ -26,11 +26,12 @@ matplotlib_logger = logging.getLogger('matplotlib')
 matplotlib_logger.addFilter(ExcludeFontDebugFilter())
 
 class MergeGradedEntities:
-    def __init__(self, graded_folder, labeled_folder, item):
+    def __init__(self, graded_folder, labeled_folder, item, visualize_all=False):
         # First assign all instance variables
         self.graded_folder = graded_folder
         self.labeled_folder = labeled_folder
         self.item = item
+        self.visualize_all = visualize_all
         
         # Initialize other instance variables
         self.base_files = {}
@@ -65,19 +66,23 @@ class MergeGradedEntities:
         self.cleanup_output_folders()
 
     def cleanup_output_folders(self):
-        """Clean up output folders before processing new files"""
-        output_base = f"data/input/graded_mtm_combined_entities_labeled/{self.item}"
-        
-        # Remove the entire output directory if it exists
-        if os.path.exists(output_base):
-            logging.info(f"Cleaning up existing output folder: {output_base}")
-            shutil.rmtree(output_base)
-        
-        # Create fresh directories
-        os.makedirs(output_base, exist_ok=True)
-        
-        # Log the cleanup
-        logging.info(f"Created clean output directory: {output_base}")
+        """Clean up the entire graded_mtm_combined_entities_labeled folder before processing"""
+        try:
+            # Main output directory to clean
+            output_base = "data/input/graded_mtm_combined_entities_labeled"
+            
+            if os.path.exists(output_base):
+                logging.info(f"Removing entire output directory: {output_base}")
+                shutil.rmtree(output_base, ignore_errors=True)
+            
+            # Recreate the main item directory
+            item_dir = os.path.join(output_base, self.item)
+            os.makedirs(item_dir, exist_ok=True)
+            logging.info(f"Created fresh output directory: {item_dir}")
+            
+        except Exception as e:
+            logging.error(f"Error during cleanup: {str(e)}")
+            raise
 
     def load_graded_data(self):
         for root, dirs, files in os.walk(self.graded_folder):
@@ -246,7 +251,9 @@ class MergeGradedEntities:
     def visualize_labeled_graded_base_data(self):
         """Create visualizations for the graded data with MTM points"""
         viz_dir = os.path.join(self.output_folder, "images_base_size")
+        coord_dir = os.path.join(self.output_folder, "mtm_coordinates")
         os.makedirs(viz_dir, exist_ok=True)
+        os.makedirs(coord_dir, exist_ok=True)
         
         if not self.graded_data:
             logging.warning("No graded data found for visualization")
@@ -256,19 +263,22 @@ class MergeGradedEntities:
             try:
                 base_df = graded_dfs[0]
                 
-                # Create figure with adjusted size and margins
-                plt.figure(figsize=(8, 8))
+                # Create larger figure with higher DPI
+                plt.figure(figsize=(20, 20), dpi=300)
                 
-                # Get all x and y coordinates for setting plot limits
+                # Create axis with no spacing around the edges
+                ax = plt.gca()
+                ax.set_position([0.1, 0.1, 0.85, 0.85])  # Adjust plot area to fill more space
+                
                 x_coords_all = []
                 y_coords_all = []
                 
-                # Plot the polygon using Vertices column
+                # Plot the polygon with improved styling
                 for _, row in base_df.iterrows():
                     if pd.notna(row['Vertices']):
                         vertices = ast.literal_eval(row['Vertices'])
                         x_coords, y_coords = zip(*vertices)
-                        plt.plot(x_coords, y_coords, 'b-', alpha=0.5)
+                        plt.plot(x_coords, y_coords, 'b-', alpha=0.8, linewidth=2.5)
                         x_coords_all.extend(x_coords)
                         y_coords_all.extend(y_coords)
                 
@@ -276,37 +286,76 @@ class MergeGradedEntities:
                 mtm_points = base_df[pd.notna(base_df['MTM Points'])]
                 
                 if not mtm_points.empty:
+                    # Larger, more visible points
                     plt.scatter(mtm_points['PL_POINT_X'], mtm_points['PL_POINT_Y'], 
-                              c='red', s=50, label='MTM Points')
+                              c='red', s=150, zorder=5, alpha=0.9)
                     
-                    # Add MTM point labels with smaller font size
+                    # Improved point labels
                     for _, row in mtm_points.iterrows():
                         plt.annotate(f"{int(float(row['MTM Points']))}", 
                                    (row['PL_POINT_X'], row['PL_POINT_Y']),
-                                   xytext=(3, 3),
+                                   xytext=(7, 7),
                                    textcoords='offset points',
-                                   fontsize=8)
+                                   fontsize=12,
+                                   bbox=dict(facecolor='white', 
+                                           edgecolor='black',
+                                           alpha=0.8,
+                                           pad=3,
+                                           boxstyle='round,pad=0.5'),
+                                   zorder=6)
+                    
+                    # Save coordinates to Excel
+                    coord_df = pd.DataFrame({
+                        'MTM_Point': [int(float(row['MTM Points'])) for _, row in mtm_points.iterrows()],
+                        'Coordinates': [f"({row['PL_POINT_X']:.2f}, {row['PL_POINT_Y']:.2f})" 
+                                      for _, row in mtm_points.iterrows()]
+                    }).sort_values('MTM_Point')
+                    
+                    excel_path = os.path.join(coord_dir, f"{piece_name}_mtm_coordinates.xlsx")
+                    coord_df.to_excel(excel_path, index=False)
                 
-                    plt.legend()
-                
-                plt.title(f"{piece_name} - Pattern with MTM Points")
+                # Improved title with better spacing
+                plt.title(f"{piece_name} - Pattern with MTM Points\nReference base size", 
+                         fontsize=16, pad=20, weight='bold')
                 plt.axis('equal')
-                plt.grid(True)
                 
-                # Set axis limits with reduced padding
+                # Enhanced grid with better visibility
+                plt.grid(True, which='major', linestyle='-', linewidth=1.0, color='gray', alpha=0.4)
+                plt.grid(True, which='minor', linestyle=':', linewidth=0.5, color='gray', alpha=0.2)
+                plt.minorticks_on()
+                
+                # Improved axis labels
+                plt.xlabel('X Coordinates', fontsize=14, weight='bold')
+                plt.ylabel('Y Coordinates', fontsize=14, weight='bold')
+                
+                # Optimize the plot area
                 if x_coords_all and y_coords_all:
                     x_min, x_max = min(x_coords_all), max(x_coords_all)
                     y_min, y_max = min(y_coords_all), max(y_coords_all)
-                    padding = 0.05
+                    
+                    # Calculate the range and center
                     x_range = x_max - x_min
                     y_range = y_max - y_min
-                    plt.xlim(x_min - x_range * padding, x_max + x_range * padding)
-                    plt.ylim(y_min - y_range * padding, y_max + y_range * padding)
+                    x_center = (x_max + x_min) / 2
+                    y_center = (y_max + y_min) / 2
+                    
+                    # Make the plot square and centered
+                    max_range = max(x_range, y_range)
+                    padding = max_range * 0.08  # Reduced padding
+                    plt.xlim(x_center - max_range/2 - padding, x_center + max_range/2 + padding)
+                    plt.ylim(y_center - max_range/2 - padding, y_center + max_range/2 + padding)
                 
-                plt.tight_layout(pad=0.5)
+                # Improved tick labels
+                plt.tick_params(axis='both', which='major', labelsize=12, width=2)
+                plt.tick_params(axis='both', which='minor', width=1)
                 
+                # Ensure the plot fills the available space
+                plt.tight_layout(pad=1.5)
+                
+                # Save with high quality
                 output_path = os.path.join(viz_dir, f"{piece_name}_pattern.png")
-                plt.savefig(output_path, dpi=300, bbox_inches='tight')
+                plt.savefig(output_path, dpi=300, bbox_inches='tight', 
+                           facecolor='white', edgecolor='none')
                 plt.close()
                                 
             except Exception as e:
@@ -383,19 +432,148 @@ class MergeGradedEntities:
                 logging.error(f"Error visualizing labeled file for {piece_name}: {str(e)}")
                 logging.error(f"DataFrame info: {base_df.info()}")
 
+    def visualize_graded_base_pieces(self):
+        """Create visualizations for all graded pieces using the saved Excel files"""
+        if not self.visualize_all:
+            return
+        
+        # Create visualization directory
+        graded_viz_dir = os.path.join(self.graded_folder, "images_graded")
+        os.makedirs(graded_viz_dir, exist_ok=True)
+        
+        # Get the path to the saved graded files
+        graded_output_dir = os.path.join("data/input/graded_mtm_combined_entities_labeled", self.item)
+        
+        for piece_name in os.listdir(graded_output_dir):
+            piece_dir = os.path.join(graded_output_dir, piece_name)
+            if not os.path.isdir(piece_dir):
+                continue
+            
+            piece_viz_dir = os.path.join(graded_viz_dir, piece_name)
+            os.makedirs(piece_viz_dir, exist_ok=True)
+            
+            for size_file in os.listdir(piece_dir):
+                if not size_file.endswith('.xlsx'):
+                    continue
+                
+                try:
+                    file_path = os.path.join(piece_dir, size_file)
+                    df = pd.read_excel(file_path)
+                    
+                    size_match = re.search(r'-(\d+)\.xlsx$', size_file)
+                    if not size_match:
+                        continue
+                    size = size_match.group(1)
+                    
+                    # Create figure
+                    plt.figure(figsize=(20, 20), dpi=100)
+                    
+                    x_coords_all = []
+                    y_coords_all = []
+                    
+                    # Plot the polygon
+                    for _, row in df.iterrows():
+                        if pd.notna(row['Vertices']):
+                            vertices = ast.literal_eval(row['Vertices'])
+                            x_coords, y_coords = zip(*vertices)
+                            plt.plot(x_coords, y_coords, 'b-', alpha=0.8, linewidth=2)
+                            x_coords_all.extend(x_coords)
+                            y_coords_all.extend(y_coords)
+                    
+                    # Add vertex points and labels
+                    vertex_points = df[pd.notna(df['PL_POINT_X'])]
+                    if not vertex_points.empty:
+                        plt.scatter(vertex_points['PL_POINT_X'], vertex_points['PL_POINT_Y'], 
+                                  c='red', s=100, zorder=5, alpha=0.7)
+                        
+                        for _, row in vertex_points.iterrows():
+                            if pd.notna(row.get('Point Label')):
+                                plt.annotate(
+                                    str(row['Point Label']),
+                                    (row['PL_POINT_X'], row['PL_POINT_Y']),
+                                    xytext=(7, 7),
+                                    textcoords='offset points',
+                                    fontsize=10,
+                                    bbox=dict(
+                                        facecolor='white',
+                                        edgecolor='none',
+                                        alpha=0.8,
+                                        pad=1,
+                                        boxstyle='round,pad=0.3'
+                                    ),
+                                    zorder=6
+                                )
+                    
+                    plt.title(f"{piece_name} - Size {size}", fontsize=14, pad=20)
+                    plt.axis('equal')
+                    
+                    # Make grid more visible
+                    plt.grid(True, which='major', linestyle='-', linewidth=0.8, color='gray', alpha=0.5)
+                    plt.grid(True, which='minor', linestyle=':', linewidth=0.5, color='gray', alpha=0.3)
+                    plt.minorticks_on()
+                    
+                    # Set axis limits with minimal padding
+                    if x_coords_all and y_coords_all:
+                        x_min, x_max = min(x_coords_all), max(x_coords_all)
+                        y_min, y_max = min(y_coords_all), max(y_coords_all)
+                        
+                        # Calculate the range
+                        x_range = abs(x_max - x_min)
+                        y_range = abs(y_max - y_min)
+                        
+                        # Add very small padding (1%)
+                        padding_x = x_range * 0.01
+                        padding_y = y_range * 0.01
+                        
+                        plt.xlim(x_min - padding_x, x_max + padding_x)
+                        plt.ylim(y_min - padding_y, y_max + padding_y)
+                    
+                    plt.tight_layout()
+                    
+                    # Save with minimal padding
+                    output_path = os.path.join(piece_viz_dir, f"{piece_name}-{size}.png")
+                    plt.savefig(output_path, bbox_inches='tight', pad_inches=0.1)
+                    plt.close()
+                    
+                except Exception as e:
+                    logging.error(f"Error visualizing {size_file}: {str(e)}")
+
     def process(self):
-        logging.debug("Starting process method")
-        self.load_graded_data()
-        logging.debug("Finished loading graded data")
-        self.load_labeled_data()
-        logging.debug("Finished loading labeled data")
-        self.extract_and_insert_mtm_points()
-        logging.debug("Finished extracting and inserting MTM points")
-        self.save_merged_data()
-        logging.debug("Finished saving merged data")
-        self.visualize_labeled_graded_base_data()
-        self.visualize_reference_labeled_base_data()
-        logging.debug("Finished visualizing base data")
+        """Main processing method with separated visualization"""
+        try:
+            logging.debug("Starting process method")
+            # Clean up first
+            self.cleanup_output_folders()
+            
+            # Data processing steps
+            self.load_graded_data()
+            logging.debug("Finished loading graded data")
+            self.load_labeled_data()
+            logging.debug("Finished loading labeled data")
+            self.extract_and_insert_mtm_points()
+            logging.debug("Finished extracting and inserting MTM points")
+            self.save_merged_data()
+            logging.debug("Finished saving merged data")
+            
+            # Ask user if they want to proceed with visualization
+            if self.visualize_all:
+                proceed = input("\nDo you want to proceed with visualization? (y/n): ").lower().strip()
+                if proceed == 'y':
+                    logging.info("Starting visualization process...")
+                    self.visualize_labeled_graded_base_data()
+                    self.visualize_reference_labeled_base_data()
+                    self.visualize_graded_base_pieces()
+                    logging.debug("Finished visualizing data")
+                else:
+                    logging.info("Skipping visualization process")
+        except KeyboardInterrupt:
+            logging.warning("\nProcess interrupted by user")
+            self.cleanup_output_folders()  # Clean up partial files
+            raise
+        except Exception as e:
+            logging.error(f"Error in process: {str(e)}")
+            self.cleanup_output_folders()  # Clean up partial files
+            raise
 
 def get_sizes_from_text(text, min_size=30, max_size=62):
     """
@@ -427,16 +605,22 @@ def get_sizes_from_text(text, min_size=30, max_size=62):
     return sorted(list(sizes))
 
 if __name__ == "__main__":
-    # Enable debug logging
-    logging.basicConfig(
-        level=logging.DEBUG,  # Change to DEBUG to see more detailed logs
-        format='%(asctime)s - %(levelname)s - %(message)s'
-    )
+    try:
+        # Enable debug
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format='%(asctime)s - %(levelname)s - %(message)s'
+        )
 
-    item = "shirt"
+        item = "shirt"
+        visualize_all = True  # Set to True to generate visualizations for all graded pieces
 
-    graded_folder = f"data/input/graded_mtm_combined_entities/{item}"
-    labeled_folder = f"data/input/mtm_combined_entities_labeled/{item}"
-    
-    merger = MergeGradedEntities(graded_folder, labeled_folder, item)
-    merger.process()
+        graded_folder = f"data/input/graded_mtm_combined_entities/{item}"
+        labeled_folder = f"data/input/mtm_combined_entities_labeled/{item}"
+        
+        merger = MergeGradedEntities(graded_folder, labeled_folder, item, visualize_all=visualize_all)
+        merger.process()
+    except KeyboardInterrupt:
+        logging.warning("\nProcess interrupted by user")
+    except Exception as e:
+        logging.error(f"Error in main: {str(e)}")
