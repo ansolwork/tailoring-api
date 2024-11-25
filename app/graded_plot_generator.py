@@ -23,6 +23,8 @@ class PlotGradedMTM:
         """Create visualizations for all sizes in the graded files"""
         print(f"\n📊 Generating plots for {self.piece_name}:")
         print("========================================")
+        print(f"📂 Input directory: {self.base_dir}")
+        print("----------------------------------------")
 
         for file in os.listdir(self.base_dir):
             if not file.endswith('.xlsx'):
@@ -35,7 +37,8 @@ class PlotGradedMTM:
                     continue
                 
                 size = size_match.group(1)
-                print(f"\nProcessing size {size}:")
+                print(f"\n📄 Processing file: {file}")
+                print(f"🔢 Size: {size}")
                 
                 # Read the Excel file
                 df = pd.read_excel(file_path)
