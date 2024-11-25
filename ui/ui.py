@@ -264,14 +264,14 @@ def save_piece_to_db(entered_piece, entered_item):
             return jsonify({"error": "Missing required fields"}), 400
 
         # Clean and prepare input data
-        entered_piece = entered_piece.strip().lower()
+        entered_piece = entered_piece.strip().upper()
         entered_item = entered_item.strip().lower()
 
         # Check for duplicates using direct SQL query
         check_duplicate_df_query = text("""
             SELECT COUNT(*) 
             FROM pieces 
-            WHERE LOWER(piece_name) = :piece_name 
+            WHERE UPPER(piece_name) = :piece_name 
             AND LOWER(item) = :item
         """)
         
@@ -314,14 +314,14 @@ def save_alteration_to_db(entered_alteration, entered_item):
             return jsonify({"error": "Missing required fields"}), 400
 
         # Clean and prepare input data
-        entered_alteration = entered_alteration.strip().lower()
+        entered_alteration = entered_alteration.strip().upper()
         entered_item = entered_item.strip().lower()
 
         # Check for duplicates using direct SQL query
         check_duplicate_df_query = text("""
             SELECT COUNT(*) 
             FROM alterations 
-            WHERE LOWER(alteration_name) = :alteration_name 
+            WHERE UPPER(alteration_name) = :alteration_name 
             AND LOWER(item) = :item
         """)
         
