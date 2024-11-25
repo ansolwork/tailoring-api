@@ -6,7 +6,9 @@ import numpy as np
 import traceback
 
 class GradingRules:
-    def __init__(self, item="shirt"):
+    def __init__(self, item="shirt", piece_name="FFS-V2-SH-01-CCB-FO"):
+        self.item = item
+        self.piece_name = piece_name
         self.rules_file = os.path.join(
             "data/input/graded_mtm_combined_entities",
             item,
@@ -274,8 +276,17 @@ class GradingRules:
 
     def generate_labeled_files(self):
         """Generate new labeled files using grading rules"""
-        source_dir = "data/input/graded_mtm_combined_entities/shirt/LGFG-SH-01-CCB-FOA"
-        target_dir = "data/input/graded_mtm_combined_entities_labeled/shirt/generated_with_grading_rule"
+        source_dir = os.path.join(
+            "data/input/graded_mtm_combined_entities",
+            self.item,
+            "LGFG-SH-01-CCB-FOA"
+        )
+        target_dir = os.path.join(
+            "data/input/graded_mtm_combined_entities_labeled",
+            self.item,
+            "generated_with_grading_rule",
+            self.piece_name
+        )
         os.makedirs(target_dir, exist_ok=True)
         
         # Load base size (39) to get all MTM points that should exist
@@ -417,9 +428,18 @@ def main():
     print("\n📝 Generating Labeled Files:")
     print("========================================")
     
-    # Define directories
-    source_dir = "data/input/graded_mtm_combined_entities/shirt/LGFG-SH-01-CCB-FOA"
-    target_dir = "data/input/graded_mtm_combined_entities_labeled/shirt/generated_with_grading_rule"
+    # Define directories using class properties
+    source_dir = os.path.join(
+        "data/input/graded_mtm_combined_entities",
+        grading.item,
+        "LGFG-SH-01-CCB-FOA"
+    )
+    target_dir = os.path.join(
+        "data/input/graded_mtm_combined_entities_labeled",
+        grading.item,
+        "generated_with_grading_rule",
+        grading.piece_name
+    )
     os.makedirs(target_dir, exist_ok=True)
     
     # Load base template (pre-labeled size 39)
