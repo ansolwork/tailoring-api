@@ -24,6 +24,7 @@ config_filepath = "tailoring_api_config.yml"
 
 app = Flask(__name__, template_folder="templates")
 app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024  # 30 MB as per file upload limit
+app.secret_key = secrets.token_hex(16)
 
 dxf_loader = DXFLoader()
 
@@ -882,5 +883,4 @@ def run_main_process():
 
 
 if __name__ == "__main__":
-    app.secret_key = secrets.token_hex(16)
     app.run(host='0.0.0.0', port=5000)
