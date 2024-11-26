@@ -14,6 +14,7 @@ from matplotlib import pyplot as plt
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
+import logging
 
 load_dotenv()
 # Run from project root (no relative path needed)
@@ -23,6 +24,7 @@ config_filepath = "tailoring_api_config.yml"
 
 app = Flask(__name__, template_folder="templates")
 app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024  # 30 MB as per file upload limit
+app.secret_key = secrets.token_hex(16)
 
 dxf_loader = DXFLoader()
 
@@ -49,6 +51,15 @@ DB_NAME = os.getenv('DB_NAME')
 
 aws_utils = AwsUtils(ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES, AWS_S3_BUCKET_NAME, AWS_S3_SIGNATURE_VERSION, AWS_PROFILE)
 connection_string = f"{DB_TYPE}+{DB_API}://{DB_USER}:{urllib.parse.quote(DB_PASSWORD)}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+# Setup logging
+logging.basicConfig(
+    level=logging.DEBUG,  # Set to logging.DEBUG to see debug messages
+    # Set to logging.INFO for production
+    #level=logging.INFO,  
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 '''
 File operation service functions
@@ -83,107 +94,162 @@ def get_db_connection():
     return conn
 
 
-def save_mapped_tags_to_db(tag_name, pieces_list, alterations_list, alteration_amnt):
+def save_mapped_tags_to_db(tag_name, tag_subcategory, pieces_list, alterations_list, alteration_amnt):
     engine = create_engine(connection_string)
     try:
-        print(
-            f"Selected Pieces: {pieces_list}, Selected Alterations: {alterations_list}, Entered Alteration amount: {alteration_amnt},Selected Tag: {tag_name}")
+        logger.info(f"Processing tag mapping: {tag_name} ({tag_subcategory})")
+        logger.debug(
+            f"Full details - Pieces: {pieces_list}, Alterations: {alterations_list}, "
+            f"Alteration amount: {alteration_amnt}"
+        )
+        
+        # Validate required parameters
+        if not tag_name or tag_subcategory is None:
+            error_msg = "Tag name and subcategory are required"
+            logger.error(error_msg)
+            return jsonify({"error": error_msg}), 400
+            
         pieces_tuple = tuple(pieces_list)
         alterations_tuple = tuple(alterations_list)
-        # Get the tag_ids,piece_ids and alteration_ids using the input
+        
+        # Get tag_id with error handling
         tag_id_query = text("""
             SELECT tag_id 
             FROM tags
-            WHERE tag_name ilike :tag_name 
+            WHERE tag_name = :tag_name 
+            AND tag_subcategory = :tag_subcategory
         """)
 
-        piece_id_query = text("""
-            SELECT piece_id 
-            FROM pieces
-            WHERE piece_name in :pieces_tuple 
-        """)
+        with engine.connect() as conn:
+            tag_df = pd.read_sql(tag_id_query, conn, params={
+                "tag_name": tag_name,
+                "tag_subcategory": tag_subcategory
+            })
+            
+            if tag_df.empty:
+                error_msg = f"No tag found with name '{tag_name}' and subcategory '{tag_subcategory}'"
+                logger.error(error_msg)
+                return jsonify({"error": error_msg}), 404
+                
+            tag_id = int(tag_df['tag_id'].iloc[0])
+            logger.debug(f"Found tag_id: {tag_id}")
 
-        alteration_id_query = text("""
-            SELECT alteration_id 
-            FROM alterations
-            WHERE alteration_name in :alterations_tuple 
-        """)
-
-        tag_df = pd.read_sql(tag_id_query, engine, params={"tag_name": tag_name})
-        tag_id = tag_df['tag_id'].tolist()[0]
-
-        if not len(pieces_tuple) == 0:
-            piece_df = pd.read_sql(piece_id_query, engine, params={"pieces_tuple": pieces_tuple})
-            piece_ids = piece_df['piece_id'].tolist()
-            # For each piece add the tag and insert many-to-many relation values into piece_tag_rel table
-            for piece_id in piece_ids:
-                data = {
-                    'tag_id': tag_id,
-                    'piece_id': piece_id
+            # Process pieces
+            if pieces_tuple:
+                piece_id_query = text("""
+                    SELECT piece_id 
+                    FROM pieces
+                    WHERE piece_name in :pieces_tuple 
+                """)
+                piece_df = pd.read_sql(piece_id_query, conn, params={"pieces_tuple": pieces_tuple})
+                piece_ids = [int(pid) for pid in piece_df['piece_id'].tolist()]
+                
+                # Create DataFrame for tag-piece relations
+                tag_piece_data = {
+                    'tag_id': [tag_id] * len(piece_ids),
+                    'piece_id': piece_ids
                 }
-                df_to_insert = pd.DataFrame(data, index=[0])
-                check_duplicate_df_query = text("""
-                    SELECT tag_id ,piece_id
+                tag_piece_df = pd.DataFrame(tag_piece_data)
+                
+                # Check for duplicates
+                check_duplicate_query = text("""
+                    SELECT tag_id, piece_id
                     FROM tag_piece_rel
-                    WHERE tag_id = :tag_id AND piece_id = :piece_id
+                    WHERE tag_id = :tag_id 
+                    AND piece_id IN :piece_ids
                 """)
-                check_duplicate_df = pd.read_sql(check_duplicate_df_query, engine,
-                                                 params={"tag_id": tag_id, "piece_id": piece_id})
-                if not (df_to_insert.equals(check_duplicate_df)):
-                    df_to_insert.to_sql('tag_piece_rel', engine, if_exists='append', index=False)
-                    print("Inserted tag into tag_piece_rel table")
+                existing_df = pd.read_sql(check_duplicate_query, conn, 
+                                        params={"tag_id": tag_id, "piece_ids": tuple(piece_ids)})
+                
+                # Remove duplicates
+                if not existing_df.empty:
+                    tag_piece_df = tag_piece_df.merge(existing_df, 
+                                                     on=['tag_id', 'piece_id'], 
+                                                     how='left', 
+                                                     indicator=True)
+                    tag_piece_df = tag_piece_df[tag_piece_df['_merge'] == 'left_only']
+                    tag_piece_df = tag_piece_df.drop('_merge', axis=1)
+                    
+                # Insert new relations
+                if not tag_piece_df.empty:
+                    tag_piece_df.to_sql('tag_piece_rel', conn, if_exists='append', index=False)
+                    logger.info(f"Added {len(tag_piece_df)} new piece mappings for tag: {tag_name}")
                 else:
-                    print("Duplicate found , skipping insert")
-                    flash("Duplicate found , skipping insert")
+                    logger.info("No new tag-piece relations to insert")
 
-        if not len(alterations_tuple) == 0:
-            alterations_df = pd.read_sql(alteration_id_query, engine, params={"alterations_tuple": alterations_tuple})
-            alteration_ids = alterations_df['alteration_id'].tolist()
-            # For each alteration add the tag and insert many-to-many relation values into piece_alteration_rel table
-            for alteration_id in alteration_ids:
-                data = {
-                    'tag_id': tag_id,
-                    'alteration_id': alteration_id
+            # Process alterations
+            if alterations_tuple:
+                alteration_id_query = text("""
+                    SELECT alteration_id 
+                    FROM alterations
+                    WHERE alteration_name in :alterations_tuple 
+                """)
+                alterations_df = pd.read_sql(alteration_id_query, conn, params={"alterations_tuple": alterations_tuple})
+                alteration_ids = [int(aid) for aid in alterations_df['alteration_id'].tolist()]
+                
+                tag_alteration_data = {
+                    'tag_id': [tag_id] * len(alteration_ids),
+                    'alteration_id': alteration_ids
                 }
-                df_to_insert = pd.DataFrame(data, index=[0])
-                check_duplicate_df_query = text("""
-                    SELECT tag_id ,alteration_id
+                tag_alteration_df = pd.DataFrame(tag_alteration_data)
+                
+                # Check for duplicates
+                check_duplicate_query = text("""
+                    SELECT tag_id, alteration_id
                     FROM tag_alteration_rel
-                    WHERE tag_id = :tag_id AND alteration_id = :alteration_id
+                    WHERE tag_id = :tag_id 
+                    AND alteration_id IN :alteration_ids
                 """)
-                check_duplicate_df = pd.read_sql(check_duplicate_df_query, engine,
-                                                 params={"tag_id": tag_id, "alteration_id": alteration_id})
-                if not (df_to_insert.equals(check_duplicate_df)):
-                    df_to_insert.to_sql('tag_alteration_rel', engine, if_exists='append', index=False)
-                    print("Inserted tag into tag_alteration_rel table")
+                existing_df = pd.read_sql(check_duplicate_query, conn, 
+                                        params={"tag_id": tag_id, "alteration_ids": tuple(alteration_ids)})
+                
+                # Remove duplicates
+                if not existing_df.empty:
+                    tag_alteration_df = tag_alteration_df.merge(existing_df, 
+                                                              on=['tag_id', 'alteration_id'], 
+                                                              how='left', 
+                                                              indicator=True)
+                    tag_alteration_df = tag_alteration_df[tag_alteration_df['_merge'] == 'left_only']
+                    tag_alteration_df = tag_alteration_df.drop('_merge', axis=1)
+                    
+                # Insert new relations
+                if not tag_alteration_df.empty:
+                    tag_alteration_df.to_sql('tag_alteration_rel', conn, if_exists='append', index=False)
+                    logger.info(f"Added {len(tag_alteration_df)} new alteration mappings for tag: {tag_name}")
                 else:
-                    print("Duplicate found , skipping insert")
-                    flash("Duplicate found , skipping insert")
+                    logger.info("No new tag-alteration relations to insert")
 
-        if not alteration_amnt == '':
-            data = {
-                'tag_id': tag_id,
-                'alteration_amnt': alteration_amnt
-            }
-            # pd.set_option('display.float_format', lambda x: '%.3f' % x)
-            df_to_insert = pd.DataFrame(data, index=[0])
-            check_duplicate_df_query = text("""
-                                SELECT tag_id ,alteration_amnt
-                                FROM tag_alteration_amnt_rel
-                                WHERE tag_id = :tag_id AND alteration_amnt = :alteration_amnt
-                            """)
-            check_duplicate_df = pd.read_sql(check_duplicate_df_query, engine,
-                                             params={"tag_id": tag_id, "alteration_amnt": alteration_amnt})
-            if not (df_to_insert.equals(check_duplicate_df)):
-                df_to_insert.to_sql('tag_alteration_amnt_rel', engine, if_exists='append', index=False)
-                print("Inserted tag into tag_alteration_rel table")
-            else:
-                print("Duplicate found , skipping insert")
-                flash("Duplicate found , skipping insert")
+            # Process alteration amount
+            if alteration_amnt:
+                tag_amount_data = {
+                    'tag_id': [tag_id],
+                    'alteration_amnt': [alteration_amnt.strip()]
+                }
+                tag_amount_df = pd.DataFrame(tag_amount_data)
+                
+                # Check for duplicates
+                check_duplicate_query = text("""
+                    SELECT tag_id, alteration_amnt
+                    FROM tag_alteration_amnt_rel
+                    WHERE tag_id = :tag_id 
+                    AND alteration_amnt = :alteration_amnt
+                """)
+                existing_df = pd.read_sql(check_duplicate_query, conn, 
+                                        params={"tag_id": tag_id, "alteration_amnt": alteration_amnt.strip()})
+                
+                # Insert if no duplicate
+                if existing_df.empty:
+                    tag_amount_df.to_sql('tag_alteration_amnt_rel', conn, if_exists='append', index=False)
+                    logger.info(f"Added alteration amount {alteration_amnt} for tag: {tag_name}")
+                else:
+                    logger.debug(f"Skipped duplicate alteration amount for tag: {tag_name}")
 
-        return jsonify({"message": "Processing completed successfully."})
+            conn.commit()
+            logger.info(f"Successfully completed tag mapping for: {tag_name}")
+            return jsonify({"message": "Processing completed successfully."})
 
     except Exception as e:
+        logger.error(f"Error in save_mapped_tags_to_db: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
     finally:
@@ -193,28 +259,47 @@ def save_mapped_tags_to_db(tag_name, pieces_list, alterations_list, alteration_a
 def save_piece_to_db(entered_piece, entered_item):
     engine = create_engine(connection_string)
     try:
-        data = {
-            'piece_name': entered_piece,
-            'item': entered_item
-        }
-        df_to_insert = pd.DataFrame(data, index=[0])
-        check_duplicate_df_query = text("""
-                                       SELECT piece_name ,item
-                                       FROM pieces
-                                       WHERE piece_name = :piece_name AND item = :item
-                                   """)
-        check_duplicate_df = pd.read_sql(check_duplicate_df_query, engine,
-                                         params={"piece_name": entered_piece, "item": entered_item})
-        if not (df_to_insert.equals(check_duplicate_df)):
-            df_to_insert.to_sql('pieces', engine, if_exists='append', index=False)
-            print("Inserted tag into pieces table")
-        else:
-            print("Duplicate found , skipping insert")
-            flash("Duplicate found , skipping insert")
+        if not all([entered_piece, entered_item]):
+            flash("All fields (Piece Name and Item) are required", "error")
+            return jsonify({"error": "Missing required fields"}), 400
 
-        return jsonify({"message": "Processing completed successfully."})
+        # Clean and prepare input data
+        entered_piece = entered_piece.strip().upper()
+        entered_item = entered_item.strip().lower()
+
+        # Check for duplicates using direct SQL query
+        check_duplicate_df_query = text("""
+            SELECT COUNT(*) 
+            FROM pieces 
+            WHERE UPPER(piece_name) = :piece_name 
+            AND LOWER(item) = :item
+        """)
+        
+        with engine.connect() as conn:
+            result = conn.execute(
+                check_duplicate_df_query, 
+                {"piece_name": entered_piece, "item": entered_item}
+            ).scalar()
+            
+            if result > 0:
+                logger.info("Duplicate found, skipping insert")
+                flash("Duplicate found, skipping insert", "warning")
+                return jsonify({"message": "Duplicate found"})
+            
+            # No duplicate found, proceed with insert
+            data = {
+                'piece_name': entered_piece,
+                'item': entered_item
+            }
+            df_to_insert = pd.DataFrame(data, index=[0])
+            df_to_insert.to_sql('pieces', engine, if_exists='append', index=False)
+            logger.info("Inserted piece into pieces table")
+            flash("Successfully added new piece!", "success")
+            return jsonify({"message": "Processing completed successfully."})
 
     except Exception as e:
+        logger.error(f"Error in save_piece_to_db: {str(e)}")
+        flash(f"Error: {str(e)}", "error")
         return jsonify({"error": str(e)}), 500
 
     finally:
@@ -224,63 +309,90 @@ def save_piece_to_db(entered_piece, entered_item):
 def save_alteration_to_db(entered_alteration, entered_item):
     engine = create_engine(connection_string)
     try:
-        data = {
-            'alteration_name': entered_alteration,
-            'item': entered_item
-        }
-        df_to_insert = pd.DataFrame(data, index=[0])
-        check_duplicate_df_query = text("""
-                                           SELECT alteration_name ,item
-                                           FROM alterations
-                                           WHERE alteration_name = :alteration_name AND item = :item
-                                       """)
-        check_duplicate_df = pd.read_sql(check_duplicate_df_query, engine,
-                                         params={"alteration_name": entered_alteration, "item": entered_item})
-        if not (df_to_insert.equals(check_duplicate_df)):
-            df_to_insert.to_sql('alterations', engine, if_exists='append', index=False)
-            print("Inserted tag into alterations table")
-        else:
-            print("Duplicate found , skipping insert")
-            flash("Duplicate found , skipping insert")
+        if not all([entered_alteration, entered_item]):
+            flash("All fields (Alteration Name and Item) are required", "error")
+            return jsonify({"error": "Missing required fields"}), 400
 
-        return jsonify({"message": "Processing completed successfully."})
+        # Clean and prepare input data
+        entered_alteration = entered_alteration.strip().upper()
+        entered_item = entered_item.strip().lower()
+
+        # Check for duplicates using direct SQL query
+        check_duplicate_df_query = text("""
+            SELECT COUNT(*) 
+            FROM alterations 
+            WHERE UPPER(alteration_name) = :alteration_name 
+            AND LOWER(item) = :item
+        """)
+        
+        with engine.connect() as conn:
+            result = conn.execute(
+                check_duplicate_df_query, 
+                {"alteration_name": entered_alteration, "item": entered_item}
+            ).scalar()
+            
+            if result > 0:
+                logger.info("Duplicate found, skipping insert")
+                flash("Duplicate found, skipping insert", "warning")
+                return jsonify({"message": "Duplicate found"})
+            
+            # No duplicate found, proceed with insert
+            data = {
+                'alteration_name': entered_alteration,
+                'item': entered_item
+            }
+            df_to_insert = pd.DataFrame(data, index=[0])
+            df_to_insert.to_sql('alterations', engine, if_exists='append', index=False)
+            logger.info("Inserted alteration into alterations table")
+            flash("Successfully added new alteration!", "success")
+            return jsonify({"message": "Processing completed successfully."})
 
     except Exception as e:
+        logger.error(f"Error in save_alteration_to_db: {str(e)}")
+        flash(f"Error: {str(e)}", "error")
         return jsonify({"error": str(e)}), 500
 
     finally:
         engine.dispose()
 
 
-def save_tag_to_db(entered_tagname, entered_tagsubcategory, entered_tagcategory):
+def save_tag_to_db(entered_tagname, entered_tagsubcategory, entered_tagcategory, entered_tag_item):
     engine = create_engine(connection_string)
     try:
+        if not all([entered_tagname, entered_tagsubcategory, entered_tagcategory, entered_tag_item]):
+            flash("All fields (Tag Name, Subcategory, Category, and Item) are required", "error")
+            return jsonify({"error": "Missing required fields"}), 400
+
         data = {
-            'tag_name': entered_tagname,
-            'tag_subcategory': entered_tagsubcategory,
-            'tag_category': entered_tagcategory,
+            'tag_name': entered_tagname.strip(),
+            'tag_subcategory': entered_tagsubcategory.strip(),
+            'tag_category': entered_tagcategory.strip(),
+            'tag_item': entered_tag_item.strip()
         }
         df_to_insert = pd.DataFrame(data, index=[0])
         check_duplicate_df_query = text("""
                                                SELECT tag_name ,tag_subcategory,tag_category
                                                FROM tags
-                                               WHERE tag_name = :tag_name 
-                                               AND tag_subcategory = :tag_subcategory 
-                                               AND tag_category = :tag_category 
+                                               WHERE LOWER(tag_name) = LOWER(:tag_name) 
+                                               AND LOWER(tag_subcategory) = LOWER(:tag_subcategory) 
+                                               AND LOWER(tag_category) = LOWER(:tag_category) 
+                                               AND LOWER(tag_item) = LOWER(:tag_item)
                                            """)
         check_duplicate_df = pd.read_sql(check_duplicate_df_query, engine,
                                          params={'tag_name': entered_tagname, 'tag_subcategory': entered_tagsubcategory,
-                                                 'tag_category': entered_tagcategory, })
+                                                 'tag_category': entered_tagcategory, 'tag_item': entered_tag_item})
         if not (df_to_insert.equals(check_duplicate_df)):
             df_to_insert.to_sql('tags', engine, if_exists='append', index=False)
-            print("Inserted tag into tags table")
+            logger.info("Inserted tag into tags table")
+            flash("Successfully added new tag!", "success")
         else:
-            print("Duplicate found , skipping insert")
-            flash("Duplicate found , skipping insert")
+            logger.info("Duplicate found, skipping insert")
+            flash("Duplicate found, skipping insert", "warning")
 
         return jsonify({"message": "Processing completed successfully."})
 
     except Exception as e:
+        flash(f"Error: {str(e)}", "error")
         return jsonify({"error": str(e)}), 500
 
     finally:
@@ -324,34 +436,52 @@ def add_tag_form():
 
 @app.route('/get-options/pieces', methods=['GET'])
 def get_options_table1():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT piece_name FROM pieces')
-    options = cursor.fetchall()
-    conn.close()
-    return jsonify([option[0] for option in options])
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT piece_name FROM pieces')
+        options = cursor.fetchall()
+        logger.debug(f"Retrieved {len(options)} pieces from database")
+        return jsonify([option[0] for option in options])
+    except Exception as e:
+        logger.error(f"Error retrieving pieces: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
 
 
 # Route to get options from Table 2
 @app.route('/get-options/alterations', methods=['GET'])
 def get_options_table2():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT alteration_name FROM alterations')
-    options = cursor.fetchall()
-    conn.close()
-    return jsonify([option[0] for option in options])
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT alteration_name FROM alterations')
+        options = cursor.fetchall()
+        logger.debug(f"Retrieved {len(options)} alterations from database")
+        return jsonify([option[0] for option in options])
+    except Exception as e:
+        logger.error(f"Error retrieving alterations: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
 
 
 # Route to get options from Table 3
 @app.route('/get-options/tags', methods=['GET'])
 def get_options_table3():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT tag_name FROM tags')
-    options = cursor.fetchall()
-    conn.close()
-    return jsonify([option[0] for option in options])
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT tag_name, tag_subcategory FROM tags')
+        options = cursor.fetchall()
+        logger.debug(f"Retrieved {len(options)} tags from database")
+        return jsonify([{"tag_name": option[0], "tag_subcategory": option[1]} for option in options])
+    except Exception as e:
+        logger.error(f"Error retrieving tags: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
 
 
 @app.route("/map_tags", methods=["POST", "GET"])
@@ -380,20 +510,62 @@ def add_tag():
     entered_tagname = request.form.get('tag_name')
     entered_tagsubcategory = request.form.get('tag_subcategory')
     entered_tagcategory = request.form.get('tag_category')
-    save_tag_to_db(entered_tagname, entered_tagsubcategory, entered_tagcategory)
+    entered_tag_item = request.form.get('tag_item')
+    save_tag_to_db(entered_tagname, entered_tagsubcategory, entered_tagcategory, entered_tag_item)
     return redirect("/add_tag_form")
 
 
 # Route to handle form submission
 @app.route('/submit', methods=['POST'])
 def handle_form_submission():
-    # Get selected options from the form
-    selected_pieces = request.form.getlist('pieces_options')  # Multiple selections for Pieces (Table 1)
-    selected_alterations = request.form.getlist('alterations_options')  # Multiple selections for Alterations (Table 2)
-    selected_tag = request.form.get('tag_option')  # Single selection for Tags (Table 3)
-    entered_alteration_amnt = request.form.get('alteration_amnt')
-    save_mapped_tags_to_db(selected_tag, selected_pieces, selected_alterations, entered_alteration_amnt)
-    return redirect("/map_tags")
+    try:
+        # Log the raw form data for debugging
+        logger.info("Raw form data received:")
+        for key, value in request.form.items():
+            logger.info(f"{key}: {value}")
+
+        selected_pieces = request.form.getlist('pieces_options')
+        selected_alterations = request.form.getlist('alterations_options')
+        tag_combined = request.form.get('tag_option', '')
+        entered_alteration_amnt = request.form.get('alteration_amnt')
+
+        # Parse the combined tag value
+        if '|' not in tag_combined:
+            logger.error(f"Invalid tag format received: {tag_combined}")
+            flash("Please select a valid tag with subcategory")
+            return redirect("/map_tags")
+
+        selected_tag, selected_tag_subcategory = tag_combined.split('|')
+        
+        logger.info(f"Parsed values - Tag: {selected_tag}, Subcategory: {selected_tag_subcategory}")
+
+        if not selected_tag or not selected_tag_subcategory:
+            flash("Tag and subcategory are required")
+            return redirect("/map_tags")
+
+        result = save_mapped_tags_to_db(
+            selected_tag.strip(), 
+            selected_tag_subcategory.strip(), 
+            selected_pieces, 
+            selected_alterations, 
+            entered_alteration_amnt
+        )
+
+        if isinstance(result, tuple):
+            response, status_code = result
+            if status_code >= 400:
+                flash(response.json.get('error', 'An error occurred'))
+            else:
+                flash("Tags mapped successfully!")
+        else:
+            flash("Tags mapped successfully!")
+            
+        return redirect("/map_tags")
+
+    except Exception as e:
+        logger.error(f"Error in form submission: {str(e)}")
+        flash("An error occurred while processing your request")
+        return redirect("/map_tags")
 
 
 ''' 
@@ -711,5 +883,4 @@ def run_main_process():
 
 
 if __name__ == "__main__":
-    app.secret_key = secrets.token_hex(16)
     app.run(host='0.0.0.0', port=5000)

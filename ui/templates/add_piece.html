@@ -70,6 +70,33 @@
         .form-group:last-child {
             margin-bottom: 0;
         }
+
+        /* Add these new styles for flash messages */
+        .flash-message {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .flash-message.error {
+            background-color: #ffebee;
+            color: #c62828;
+            border: 1px solid #ffcdd2;
+        }
+
+        .flash-message.success {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #c8e6c9;
+        }
+
+        .flash-message.warning {
+            background-color: #fff3e0;
+            color: #ef6c00;
+            border: 1px solid #ffe0b2;
+        }
+
         .button-container {
     text-align: center; /* Center the button horizontally */
     margin-top: 20px;   /* Add spacing above the button container */
@@ -97,18 +124,14 @@
 
 
 <div class="form-container">
-    <h4 style="color: red;">
-        {% with messages = get_flashed_messages(with_categories=True) %}
-        {% if messages %}
-        <div>
-            {% for category, message in messages %}
-            <div class="flash-message {{ category }}">{{ message }}</div>
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% endwith %}
+    {% with messages = get_flashed_messages(with_categories=True) %}
+    {% if messages %}
+        {% for category, message in messages %}
+        <div class="flash-message {{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+    {% endwith %}
 
-    </h4>
     <h2>Enter Item and Piecename</h2>
     <form action="/add_piece" method="POST">
         <div class="form-group">
