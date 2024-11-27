@@ -305,8 +305,8 @@ class PatternVisualizer:
                     # Initialize scaling factor at the class level or method start
                     self.scaling_factor = None
                     
-                    # Much larger figure
-                    plt.figure(figsize=(200, 200), dpi=150)
+                    # Create larger figure (same as PlotGradedMTM)
+                    plt.figure(figsize=(200, 200))
                     
                     # Calculate scaling factor based on data extents
                     x_min = min(df['Point_X'].min(), df['Line_Start_X'].min(), df['Line_End_X'].min())
@@ -369,56 +369,42 @@ class PatternVisualizer:
                                     va='center'
                                 )
                     
-                    # Larger title
-                    plt.title(f"{piece_name} - Size {size}", fontsize=80, pad=20)
-                    
-                    # Thicker grid lines
-                    plt.grid(True, which='major', linestyle='-', linewidth=1.5, color='gray', alpha=0.3)
-                    
-                    # Add axis formatting here
-                    # Increase font size for tick labels
-                    plt.xticks(fontsize=100)
-                    plt.yticks(fontsize=100)
-                    
-                    # Increase font size and padding for axis labels
-                    plt.xlabel('X Coordinate', fontsize=120, labelpad=20)
-                    plt.ylabel('Y Coordinate', fontsize=120, labelpad=20)
-                    
-                    # Make tick marks thicker
-                    plt.tick_params(axis='both', which='major', width=2, length=10)
-                    
-                    # Adjust number of ticks shown
-                    plt.locator_params(axis='both', nbins=10)
-                    
-                    # Rotate tick labels for better readability
-                    plt.xticks(rotation=45)
-                    
-                    # Calculate the data extent
+                    # Calculate the data extent from all coordinates
                     if x_coords_all and y_coords_all:
                         x_min, x_max = min(x_coords_all), max(x_coords_all)
                         y_min, y_max = min(y_coords_all), max(y_coords_all)
                         
-                        # Only calculate padding if we have valid min/max values
-                        if all(not np.isnan(v) and not np.isinf(v) for v in [x_min, x_max, y_min, y_max]):
-                            x_padding = (x_max - x_min) * 0.05 if x_max != x_min else 1.0
-                            y_padding = (y_max - y_min) * 0.05 if y_max != y_min else 1.0
-                            
-                            plt.xlim(x_min - x_padding, x_max + x_padding)
-                            plt.ylim(y_min - y_padding, y_max + y_padding)
-                        else:
-                            # Use default limits if values are invalid
-                            plt.xlim(-1, 1)
-                            plt.ylim(-1, 1)
+                        # Add small padding (3%)
+                        x_padding = (x_max - x_min) * 0.03
+                        y_padding = (y_max - y_min) * 0.03
+                        
+                        # Set limits with padding
+                        ax = plt.gca()
+                        ax.set_xlim(x_min - x_padding, x_max + x_padding)
+                        ax.set_ylim(y_min - y_padding, y_max + y_padding)
+                        ax.set_aspect('equal', adjustable='box')
                     
-                    # Keep aspect ratio equal
-                    plt.axis('equal')
+                    # Rest of the styling remains the same
+                    plt.grid(True, which='major', linestyle='-', linewidth=1.5, color='gray', alpha=0.5)
+                    plt.grid(True, which='minor', linestyle=':', linewidth=0.8, color='gray', alpha=0.3)
+                    plt.minorticks_on()
                     
-                    # Adjust layout to prevent label cutoff
-                    plt.tight_layout(pad=1.5)
+                    ax.xaxis.set_minor_locator(plt.MultipleLocator(0.5))
+                    ax.yaxis.set_minor_locator(plt.MultipleLocator(0.5))
+                    ax.xaxis.set_major_locator(plt.MultipleLocator(2))
+                    ax.yaxis.set_major_locator(plt.MultipleLocator(2))
+                    
+                    # Larger title
+                    plt.title(f"{piece_name} - Size {size}", fontsize=80, pad=20)
+                    
+                    # Configure labels and title with larger fonts
+                    plt.xlabel('X', fontsize=100, labelpad=20, weight='bold')
+                    plt.ylabel('Y', fontsize=100, labelpad=20, weight='bold')
+                    plt.tick_params(axis='both', which='major', labelsize=60, length=20, width=3, pad=15)
                     
                     # Save and close the figure
                     output_path = os.path.join(piece_viz_dir, f"{piece_name}-{size}.png")
-                    plt.savefig(output_path, bbox_inches='tight', dpi=75)
+                    plt.savefig(output_path, bbox_inches='tight', dpi=72, pad_inches=0.0)
                     plt.close()
                 
                 except Exception as e:

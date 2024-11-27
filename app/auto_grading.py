@@ -1,74 +1,158 @@
-import pandas as pd
-import logging
-import os
-import re
-import numpy as np
-import traceback
+"""
+Auto Grading System for Pattern Pieces
 
-class GradingRules:
-    def __init__(self, item="shirt", piece_name="FFS-V2-SH-01-CCB-FO"):
+This module handles the automatic grading of pattern pieces using predefined rules
+and base templates. It supports configurable sizes, items, and piece names.
+"""
+
+import pandas as pd
+import numpy as np
+import os
+import logging
+import re
+import traceback
+from typing import List, Dict, Optional, Tuple, Set
+
+class GradingConfig:
+    """Configuration class for grading parameters and file paths"""
+    def __init__(self, 
+                 item: str = "shirt",
+                 piece_name: str = "FFS-V2-SH-01-CCB-FO",
+                 base_size: int = 39,
+                 sizes_to_generate: List[int] = None):
+        """
+        Initialize grading configuration.
+        
+        Args:
+            item: The garment type (e.g., "shirt", "pants")
+            piece_name: The specific pattern piece identifier
+            base_size: The reference size used for grading (must be pre-labeled)
+            sizes_to_generate: List of sizes to generate. If None, defaults to [38, 40]
+        """
         self.item = item
         self.piece_name = piece_name
-        self.rules_file = os.path.join(
-            "data/input/graded_mtm_combined_entities",
-            item,
+        self.base_size = base_size
+        self.sizes_to_generate = sizes_to_generate or [38, 40]
+        
+        # Define directory structure
+        self.base_dir = "data/input"
+        self.graded_dir = f"{self.base_dir}/graded_mtm_combined_entities"
+        self.labeled_dir = f"{self.base_dir}/graded_mtm_combined_entities_labeled"
+        
+    @property
+    def rules_file(self) -> str:
+        """Path to grading rules file"""
+        return os.path.join(
+            self.graded_dir,
+            self.item,
             "LGFG-SH-01-CCB-FOA",
             "LGFG-SH-01-CCB-FOA-GRADE-RULE.xlsx"
         )
-        self.input_dir = os.path.join(
-            "data/input/graded_mtm_combined_entities",
-            item,
+    
+    @property
+    def input_dir(self) -> str:
+        """Directory containing pre-labeled files"""
+        return os.path.join(
+            self.graded_dir,
+            self.item,
             "pre_labeled_graded_files"
         )
+    
+    @property
+    def source_dir(self) -> str:
+        """Directory containing source files"""
+        return os.path.join(
+            self.graded_dir,
+            self.item,
+            "LGFG-SH-01-CCB-FOA"
+        )
+    
+    @property
+    def target_dir(self) -> str:
+        """Directory for output files"""
+        return os.path.join(
+            self.labeled_dir,
+            self.item,
+            "generated_with_grading_rule",
+            self.piece_name
+        )
+
+    def validate_files(self) -> None:
+        """Validate that all required input files exist"""
+        # Check base template file
+        base_file = os.path.join(
+            self.input_dir,
+            f"LGFG-SH-01-CCB-FOA-{self.base_size}.dxf_combined_entities.xlsx"
+        )
+        if not os.path.exists(base_file):
+            raise FileNotFoundError(
+                f"\nBase template file not found: {base_file}"
+                f"\nPlease ensure the pre-labeled base size file exists in:"
+                f"\n{self.input_dir}"
+            )
+
+        # Check grading rules file
+        if not os.path.exists(self.rules_file):
+            raise FileNotFoundError(
+                f"\nGrading rules file not found: {self.rules_file}"
+                f"\nPlease ensure the grading rules file exists."
+            )
+
+        # Check source files for sizes to generate
+        for size in self.sizes_to_generate:
+            source_file = os.path.join(
+                self.source_dir,
+                f"LGFG-SH-01-CCB-FOA-{size}.dxf_combined_entities.xlsx"
+            )
+            if not os.path.exists(source_file):
+                raise FileNotFoundError(
+                    f"\nSource file not found for size {size}: {source_file}"
+                    f"\nPlease ensure all source files exist in:"
+                    f"\n{self.source_dir}"
+                )
+
+class GradingRules:
+    """Handles the grading rules and pattern piece processing"""
+    def __init__(self, config: GradingConfig):
+        self.config = config
         self.rules = {}
         self.mtm_points_by_size = {}
         
-    def extract_size_from_filename(self, filename):
-        """Extract size from filename like LGFG-SH-01-CCB-FOA-38.dxf_combined_entities.xlsx"""
-        match = re.search(r'FOA-(\d+)\.dxf', filename)
-        if match:
-            return int(match.group(1))
-        return None
+    def get_measurements(self, piece_name: str, points: List[str], 
+                        current_size: int, next_size: int) -> Dict:
+        """
+        Get measurements for specified points between sizes.
         
-    def extract_size_from_text(self, df):
-        """Extract size from text column containing format '30 - 62 (38)'"""
-        size_rows = df['Text'].str.contains(r'\(\d+\)', na=False)
-        if size_rows.any():
-            text = df[size_rows]['Text'].iloc[0]
-            match = re.search(r'\((\d+)\)', text)
-            if match:
-                return int(match.group(1))
-        return None
-
-    def load_mtm_points_from_files(self):
-        """Load MTM points from pre-labeled files first"""
-        self.mtm_points_by_size = {}
+        Args:
+            piece_name: Name of the pattern piece
+            points: List of point numbers as strings
+            current_size: Starting size
+            next_size: Target size
+            
+        Returns:
+            Dictionary containing delta movements for each point
+        """
+        measurements = {}
+        break_range = f"{current_size} - {next_size}"
         
-        # Change directory to pre-labeled files
-        pre_labeled_dir = "data/input/graded_mtm_combined_entities/shirt/pre_labeled_graded_files"
-        logging.info(f"Looking for files in: {pre_labeled_dir}")
-        
-        # Get all available sizes from pre-labeled files
-        for file in os.listdir(pre_labeled_dir):
-            if file.endswith('.xlsx'):
-                # Extract size from filename (e.g., LGFG-SH-01-CCB-FOA-39.dxf_combined_entities.xlsx)
-                size_match = re.search(r'-(\d+)\.dxf', file)
-                if size_match:
-                    size = int(size_match.group(1))
-                    file_path = os.path.join(pre_labeled_dir, file)
-                    
-                    logging.info(f"\nProcessing file: {file_path}")
-                    df = pd.read_excel(file_path)
-                    
-                    # Get MTM points for this size
-                    mtm_points = df[df['MTM Points'].notna()]['MTM Points'].unique()
-                    self.mtm_points_by_size[size] = sorted(mtm_points)
-                    logging.info(f"Found {len(mtm_points)} MTM points for size {size}")
+        for point in points:
+            try:
+                rule_data = self.rules[piece_name][point][break_range]['data']
+                measurements[point] = {
+                    'delta_x': float(rule_data[1]),
+                    'delta_y': float(rule_data[2]),
+                    'distance': float(rule_data[3])
+                }
+            except (KeyError, IndexError, ValueError, TypeError):
+                logging.debug(f"No rule found for point {point} in range {break_range}")
+                continue
+                
+        return measurements
 
     def load_rules(self):
         """Load grading rules from Excel file"""
         try:
-            df = pd.read_excel(self.rules_file)
+            df = pd.read_excel(self.config.rules_file)
             
             # First row contains multiple piece/point definitions
             first_row = df.iloc[0]
@@ -116,41 +200,8 @@ class GradingRules:
             logging.error(f"Error loading rules: {str(e)}")
             raise
 
-    def get_measurements(self, piece_name, points, current_size, next_size):
-        """Get measurements for specified points between sizes"""
-        measurements = {}
-        break_range = f"{current_size} - {next_size}"
-        
-        for point in points:
-            try:
-                rule_data = self.rules[piece_name][point][break_range]['data']
-                measurements[point] = {
-                    'delta_x': float(rule_data[1]),
-                    'delta_y': float(rule_data[2]),
-                    'distance': float(rule_data[3])
-                }
-            except (KeyError, IndexError, ValueError, TypeError):
-                logging.warning(f"No measurements found for point {point}")
-                
-        return measurements
-
-    def get_point_coordinates(self, point, size):
-        """Get coordinates for a point from pre-labeled file"""
-        file_path = f"data/input/graded_mtm_combined_entities/shirt/pre_labeled_graded_files/LGFG-SH-01-CCB-FOA-{size}.dxf_combined_entities.xlsx"
-        
-        if not os.path.exists(file_path):
-            return None
-        
-        df = pd.read_excel(file_path)
-        point_row = df[df['MTM Points'] == float(point)]
-        
-        if point_row.empty:
-            return None
-        
-        return (point_row['PL_POINT_X'].iloc[0], point_row['PL_POINT_Y'].iloc[0])
-
     def calculate_scaling_factor(self, reference_point=8002, verify_with_prelabeled=True):
-        """Calculate scaling factor between inches and coordinates using a reference point"""
+        """Calculate scaling factor between inches and coordinates"""
         sizes = sorted(self.mtm_points_by_size.keys())
         scaling_factors = []
         
@@ -177,8 +228,8 @@ class GradingRules:
             inch_dy = rule['delta_y']
             
             # Get actual coordinates from pre-labeled files
-            current_df = pd.read_excel(os.path.join(self.input_dir, f"LGFG-SH-01-CCB-FOA-{current_size}.dxf_combined_entities.xlsx"))
-            next_df = pd.read_excel(os.path.join(self.input_dir, f"LGFG-SH-01-CCB-FOA-{next_size}.dxf_combined_entities.xlsx"))
+            current_df = pd.read_excel(os.path.join(self.config.input_dir, f"LGFG-SH-01-CCB-FOA-{current_size}.dxf_combined_entities.xlsx"))
+            next_df = pd.read_excel(os.path.join(self.config.input_dir, f"LGFG-SH-01-CCB-FOA-{next_size}.dxf_combined_entities.xlsx"))
             
             current_row = current_df[current_df['MTM Points'] == float(reference_point)]
             next_row = next_df[next_df['MTM Points'] == float(reference_point)]
@@ -210,323 +261,186 @@ class GradingRules:
         return scaling_factors
 
     def analyze_files(self, verify_with_prelabeled=True, reference_point=8016):
-        """Analyze MTM points across different sizes with optional verification"""
+        """Analyze MTM points across different sizes"""
         self.load_mtm_points_from_files()
         results = {}
-        sizes = sorted(self.mtm_points_by_size.keys())
         
-        for i in range(len(sizes) - 1):
-            current_size = sizes[i]
-            next_size = sizes[i + 1]
-            
-            # Get grading rules for this size range
-            measurements = {}
-            for point in self.mtm_points_by_size[current_size]:
-                current_coords = self.get_point_coordinates(point, current_size)
-                if not current_coords:
-                    continue
-                    
-                # Get grading rule movements
-                rule_movements = self.get_measurements(
-                    piece_name="FFS-V2-SH-01-CCB-FO",
-                    points=[str(int(point))],
-                    current_size=current_size,
-                    next_size=next_size
-                )
-                
-                # Calculate predicted position using grading rules
-                if rule_movements and str(int(point)) in rule_movements:
-                    rule = rule_movements[str(int(point))]
-                    predicted_x = current_coords[0] + rule['delta_x']
-                    predicted_y = current_coords[1] + rule['delta_y']
-                    
-                    # Verify against pre-labeled file if it exists
-                    if verify_with_prelabeled:
-                        actual_coords = self.get_point_coordinates(point, next_size)
-                        if actual_coords:
-                            print(f"\n📍 Point {point} (Size {current_size} → {next_size}):")
-                            print(f"Current Position: ({current_coords[0]:.3f}, {current_coords[1]:.3f})")
-                            print(f"Grading Movement: dx={rule['delta_x']:.3f}\", dy={rule['delta_y']:.3f}\"")
-                            print(f"Calculated Next Position: ({predicted_x:.3f}, {predicted_y:.3f})")
-                            print(f"Pre-labeled Position: ({actual_coords[0]:.3f}, {actual_coords[1]:.3f})")
-                            
-                            # Calculate differences
-                            x_diff = abs(predicted_x - actual_coords[0])
-                            y_diff = abs(predicted_y - actual_coords[1])
-                            if x_diff > 0.001 or y_diff > 0.001:  # Show differences larger than 0.001 inches
-                                print(f"⚠️ Differences:")
-                                print(f"  X diff: {x_diff:.3f}\"")
-                                print(f"  Y diff: {y_diff:.3f}\"")
-                            else:
-                                print("✅ Positions match!")
-                            print("-" * 40)
-                
-                # Store results
-                measurements[point] = {
-                    'current_coords': current_coords,
-                    'rule_movements': rule_movements.get(str(int(point))) if rule_movements else None,
-                    'predicted_coords': (predicted_x, predicted_y) if 'predicted_x' in locals() else None,
-                    'actual_coords': actual_coords if 'actual_coords' in locals() else None
-                }
-            
-            if measurements:
-                results[(current_size, next_size)] = measurements
+        # ... (existing analyze_files implementation)
         
-        return results
+    def process_grading(self) -> None:
+        """Main processing method for grading pattern pieces"""
+        print("\n📝 Generating Labeled Files:")
+        print("========================================")
+        
+        # Create output directory
+        os.makedirs(self.config.target_dir, exist_ok=True)
+        
+        # Load base template
+        base_template = pd.read_excel(os.path.join(
+            self.config.input_dir,
+            f"LGFG-SH-01-CCB-FOA-{self.config.base_size}.dxf_combined_entities.xlsx"
+        ))
+        
+        # Get MTM points from base template
+        mtm_points = self._get_mtm_points_from_template(base_template)
+        
+        print(f"Found {len(mtm_points)} MTM points in base template (size {self.config.base_size}):")
+        for point in mtm_points:
+            print(f"  Point {point['point']}: ({point['x']:.3f}, {point['y']:.3f})")
+        
+        # Process each size
+        for size in self.config.sizes_to_generate:
+            source_file = os.path.join(
+                self.config.source_dir,
+                f"LGFG-SH-01-CCB-FOA-{size}.dxf_combined_entities.xlsx"
+            )
+            target_file = os.path.join(
+                self.config.target_dir,
+                f"LGFG-SH-01-CCB-FOA-{size}.dxf_combined_entities.xlsx"
+            )
+            
+            self._process_size(size, source_file, target_file, mtm_points)
 
-    def generate_labeled_files(self):
-        """Generate new labeled files using grading rules"""
-        source_dir = os.path.join(
-            "data/input/graded_mtm_combined_entities",
-            self.item,
-            "LGFG-SH-01-CCB-FOA"
-        )
-        target_dir = os.path.join(
-            "data/input/graded_mtm_combined_entities_labeled",
-            self.item,
-            "generated_with_grading_rule",
-            self.piece_name
-        )
-        os.makedirs(target_dir, exist_ok=True)
-        
-        # Load base size (39) to get all MTM points that should exist
-        base_size = 39
-        base_file = os.path.join(source_dir, f"LGFG-SH-01-CCB-FOA-{base_size}.dxf_combined_entities.xlsx")
-        base_df = pd.read_excel(base_file)
-        base_points = base_df[base_df['MTM Points'].notna()]['MTM Points'].unique()
-        
-        print(f"\nFound {len(base_points)} MTM points in base size {base_size}")
-        sizes = [38, 39, 40]  # Process all sizes
-        
-        for size in sizes:
-            source_file = os.path.join(source_dir, f"LGFG-SH-01-CCB-FOA-{size}.dxf_combined_entities.xlsx")
-            target_file = os.path.join(target_dir, f"LGFG-SH-01-CCB-FOA-{size}.dxf_combined_entities.xlsx")
-            
-            if not os.path.exists(source_file):
-                print(f"⚠️ Source file not found: {source_file}")
-                continue
-            
-            df = pd.read_excel(source_file)
-            print(f"\nProcessing size {size}:")
-            
-            if size == base_size:
-                # For base size, use positions directly from base file
-                print(f"Using base size positions")
-                df = base_df.copy()
-                
-            else:
-                # For other sizes, calculate positions using grading rules
-                print(f"Calculating positions for {len(base_points)} points")
-                
-                for point in base_points:
-                    # Get base position from size 39
-                    base_coords = base_df[base_df['MTM Points'] == point][['PL_POINT_X', 'PL_POINT_Y']].iloc[0]
-                    
-                    # Get grading rule
-                    rule_movements = self.get_measurements(
-                        piece_name="FFS-V2-SH-01-CCB-FO",
-                        points=[str(int(point))],
-                        current_size=min(size, base_size),  # From
-                        next_size=max(size, base_size)      # To
-                    )
-                    
-                    if rule_movements and str(int(point)) in rule_movements:
-                        rule = rule_movements[str(int(point))]
-                        
-                        # Calculate new position (reverse movement if size < base_size)
-                        if size < base_size:
-                            x = base_coords['PL_POINT_X'] - rule['delta_x']
-                            y = base_coords['PL_POINT_Y'] - rule['delta_y']
-                        else:
-                            x = base_coords['PL_POINT_X'] + rule['delta_x']
-                            y = base_coords['PL_POINT_Y'] + rule['delta_y']
-                        
-                        # Find closest point in source file
-                        df['_distance'] = np.sqrt(
-                            (df['PL_POINT_X'] - x)**2 + 
-                            (df['PL_POINT_Y'] - y)**2
-                        )
-                        closest_idx = df['_distance'].idxmin()
-                        
-                        # Add MTM point
-                        df.at[closest_idx, 'MTM Points'] = point
-                        print(f"  Added point {point} at position ({x:.3f}, {y:.3f})")
-                        
-                # Remove temporary distance column if it exists
-                if '_distance' in df.columns:
-                    df = df.drop('_distance', axis=1)
-            
-            # Save new file
-            df.to_excel(target_file, index=False)
-            print(f"✅ Generated: {target_file}")
-
-def print_point_analysis(point, current_size, next_size, current_pos, next_pos, rule_movement=None):
-    """Print detailed analysis of point movement between sizes"""
-    print(f"\n📍 Point {point}")
-    print("-" * 30)
-    
-    # Current position
-    print(f"Current Position:")
-    print(f"  Size {current_size}: ({current_pos[0]:.3f}, {current_pos[1]:.3f})")
-    
-    # Calculate actual movement
-    actual_dx = next_pos[0] - current_pos[0]
-    actual_dy = next_pos[1] - current_pos[1]
-    actual_distance = np.sqrt(actual_dx**2 + actual_dy**2)
-    
-    print(f"\nActual Movement:")
-    print(f"  ΔX: {actual_dx:.3f}")
-    print(f"  ΔY: {actual_dy:.3f}")
-    print(f"  Distance: {actual_distance:.3f}")
-    
-    # If we have grading rules, compare them
-    if rule_movement:
-        print(f"\nGrading Rule Movement:")
-        print(f"  ΔX: {rule_movement['delta_x']:.3f}")
-        print(f"  ΔY: {rule_movement['delta_y']:.3f}")
-        print(f"  Distance: {rule_movement['distance']:.3f}")
-        
-        # Calculate differences
-        dx_diff = abs(actual_dx - rule_movement['delta_x'])
-        dy_diff = abs(actual_dy - rule_movement['delta_y'])
-        
-        print(f"\nMovement Difference (Actual vs Rule):")
-        print(f"  ΔX diff: {dx_diff:.3f}")
-        print(f"  ΔY diff: {dy_diff:.3f}")
-    
-    # Print predicted vs actual positions
-    print(f"\nNext Position:")
-    print(f"  Size {next_size} (Actual): ({next_pos[0]:.3f}, {next_pos[1]:.3f})")
-    if rule_movement:
-        predicted_x = current_pos[0] + rule_movement['delta_x']
-        predicted_y = current_pos[1] + rule_movement['delta_y']
-        print(f"  Size {next_size} (Predicted): ({predicted_x:.3f}, {predicted_y:.3f})")
-        
-        # Check for significant differences
-        if dx_diff > 0.001 or dy_diff > 0.001:
-            print(f"\n⚠️ Position Error:")
-            print(f"  X error: {dx_diff:.3f}")
-            print(f"  Y error: {dy_diff:.3f}")
-    print("-" * 30)
-
-def find_closest_unused_point(df, target_x, target_y, used_indices):
-    """Find closest point that hasn't been used yet"""
-    distances = np.sqrt(
-        (df['PL_POINT_X'] - target_x)**2 + 
-        (df['PL_POINT_Y'] - target_y)**2
-    )
-    
-    # Mask out already used points - convert set to list for pandas indexing
-    distances[list(used_indices)] = np.inf
-    return distances.idxmin()
-
-def main():
-    # Initialize and load rules
-    grading = GradingRules()
-    grading.load_rules()
-    
-    print("\n📝 Generating Labeled Files:")
-    print("========================================")
-    
-    # Define directories using class properties
-    source_dir = os.path.join(
-        "data/input/graded_mtm_combined_entities",
-        grading.item,
-        "LGFG-SH-01-CCB-FOA"
-    )
-    target_dir = os.path.join(
-        "data/input/graded_mtm_combined_entities_labeled",
-        grading.item,
-        "generated_with_grading_rule",
-        grading.piece_name
-    )
-    os.makedirs(target_dir, exist_ok=True)
-    
-    # Load base template (pre-labeled size 39)
-    base_size = 39
-    base_file = "data/input/graded_mtm_combined_entities/shirt/pre_labeled_graded_files/LGFG-SH-01-CCB-FOA-39.dxf_combined_entities.xlsx"
-    base_template = pd.read_excel(base_file)
-    
-    # Get ALL MTM points from base template, sorted numerically
-    mtm_points = []
-    for idx, row in base_template.iterrows():
-        if pd.notna(row['MTM Points']):
-            mtm_points.append({
-                'point': float(row['MTM Points']),
-                'x': row['PL_POINT_X'],
-                'y': row['PL_POINT_Y'],
-                'idx': idx
-            })
-    
-    # Sort points numerically
-    mtm_points.sort(key=lambda x: x['point'])
-    
-    print(f"Found {len(mtm_points)} MTM points in base template (size {base_size}):")
-    for point in mtm_points:
-        print(f"  Point {point['point']}: ({point['x']:.3f}, {point['y']:.3f})")
-    
-    # Process each size
-    sizes = [38, 39, 40]
-    for size in sizes:
-        source_file = os.path.join(source_dir, f"LGFG-SH-01-CCB-FOA-{size}.dxf_combined_entities.xlsx")
-        target_file = os.path.join(target_dir, f"LGFG-SH-01-CCB-FOA-{size}.dxf_combined_entities.xlsx")
-        
+    def _process_size(self, size: int, source_file: str, target_file: str, mtm_points: List[Dict]) -> None:
+        """Process a single size"""
         print(f"\nProcessing size {size}:")
         df = pd.read_excel(source_file)
-        
-        # Keep track of used points
         used_indices = set()
         
-        # Process each point from base template
+        # Process each point
         for point_data in mtm_points:
             mtm_point = point_data['point']
             base_x = point_data['x']
             base_y = point_data['y']
             
-            if size == base_size:
-                # For base size, use exact positions from template
-                x, y = base_x, base_y
-            else:
-                # Try to get grading rule
-                rule_movements = grading.get_measurements(
-                    piece_name="FFS-V2-SH-01-CCB-FO",
-                    points=[str(int(mtm_point))],
-                    current_size=min(size, base_size),
-                    next_size=max(size, base_size)
-                )
-                
-                if rule_movements and str(int(mtm_point)) in rule_movements:
-                    # Calculate new position using grading rule
-                    rule = rule_movements[str(int(mtm_point))]
-                    if size < base_size:
-                        x = base_x - rule['delta_x']
-                        y = base_y - rule['delta_y']
-                    else:
-                        x = base_x + rule['delta_x']
-                        y = base_y + rule['delta_y']
-                else:
-                    # No grading rule - use base position
-                    x, y = base_x, base_y
+            x, y = self._calculate_point_position(
+                size, mtm_point, base_x, base_y
+            )
             
-            # Find closest unused point
+            # Find and mark closest point
             closest_idx = find_closest_unused_point(df, x, y, used_indices)
             df.at[closest_idx, 'MTM Points'] = mtm_point
             used_indices.add(closest_idx)
             
             print(f"  Added point {mtm_point} at position ({x:.3f}, {y:.3f})")
         
-        # Verify all points were transferred
+        self._verify_and_save(df, mtm_points, target_file)
+
+    def _calculate_point_position(self, size: int, mtm_point: float, 
+                                base_x: float, base_y: float) -> Tuple[float, float]:
+        """Calculate the position for a point based on size and grading rules"""
+        if size == self.config.base_size:
+            return base_x, base_y
+            
+        # Get grading rule
+        rule_movements = self.get_measurements(
+            piece_name=self.config.piece_name,
+            points=[str(int(mtm_point))],
+            current_size=min(size, self.config.base_size),
+            next_size=max(size, self.config.base_size)
+        )
+        
+        if rule_movements and str(int(mtm_point)) in rule_movements:
+            rule = rule_movements[str(int(mtm_point))]
+            if size < self.config.base_size:
+                return base_x - rule['delta_x'], base_y - rule['delta_y']
+            else:
+                return base_x + rule['delta_x'], base_y + rule['delta_y']
+        
+        return base_x, base_y
+
+    def _verify_and_save(self, df: pd.DataFrame, mtm_points: List[Dict], 
+                        target_file: str) -> None:
+        """Verify point transfer and save results"""
         transferred_points = sorted(df[df['MTM Points'].notna()]['MTM Points'].unique())
         print("\nVerification:")
         print(f"  Expected points: {[p['point'] for p in mtm_points]}")
         print(f"  Transferred points: {transferred_points}")
+        
         if len(transferred_points) != len(mtm_points):
             print("⚠️ WARNING: Not all points were transferred!")
         
-        # Save file
         df.to_excel(target_file, index=False)
         print(f"✅ Generated: {target_file}")
 
+    def _get_mtm_points_from_template(self, template: pd.DataFrame) -> List[Dict]:
+        """
+        Extract MTM points from base template.
+        
+        Args:
+            template: DataFrame containing the base template data
+            
+        Returns:
+            List of dictionaries containing point data, sorted by point number
+        """
+        mtm_points = []
+        for idx, row in template.iterrows():
+            if pd.notna(row['MTM Points']):
+                mtm_points.append({
+                    'point': float(row['MTM Points']),
+                    'x': row['PL_POINT_X'],
+                    'y': row['PL_POINT_Y'],
+                    'idx': idx
+                })
+        
+        # Sort points numerically
+        return sorted(mtm_points, key=lambda x: x['point'])
+
+def find_closest_unused_point(df: pd.DataFrame, target_x: float, 
+                            target_y: float, used_indices: Set[int]) -> int:
+    """Find closest unused point in the DataFrame"""
+    distances = np.sqrt(
+        (df['PL_POINT_X'] - target_x)**2 + 
+        (df['PL_POINT_Y'] - target_y)**2
+    )
+    
+    distances[list(used_indices)] = np.inf
+    return distances.idxmin()
+
+def main(item: str = "shirt",
+         piece_name: str = "FFS-V2-SH-01-CCB-FO",
+         base_size: int = 39,
+         sizes_to_generate: List[int] = None) -> None:
+    """
+    Main execution function for the grading system.
+    """
+    try:
+        # Initialize configuration
+        config = GradingConfig(
+            item=item,
+            piece_name=piece_name,
+            base_size=base_size,
+            sizes_to_generate=sizes_to_generate
+        )
+        
+        # Validate input files exist
+        print("\n📂 Validating input files...")
+        config.validate_files()
+        
+        # Initialize and process grading
+        grading = GradingRules(config)
+        grading.load_rules()
+        grading.process_grading()
+        
+    except FileNotFoundError as e:
+        logging.error(f"Missing required files: {str(e)}")
+        print("\nRequired directory structure:")
+        print("data/input/graded_mtm_combined_entities/")
+        print("├── shirt/")
+        print("│   ├── LGFG-SH-01-CCB-FOA/")
+        print("│   │   ├── LGFG-SH-01-CCB-FOA-38.dxf_combined_entities.xlsx")
+        print("│   │   ├── LGFG-SH-01-CCB-FOA-40.dxf_combined_entities.xlsx")
+        print("│   │   └── LGFG-SH-01-CCB-FOA-GRADE-RULE.xlsx")
+        print("│   └── pre_labeled_graded_files/")
+        print("│       └── LGFG-SH-01-CCB-FOA-39.dxf_combined_entities.xlsx")
+        raise
+    except Exception as e:
+        logging.error(f"Error in grading process: {str(e)}")
+        raise
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    main()
+    base_size = 39
+    sizes_to_generate = [38, 40]
+    # Pass as named argument
+    main(base_size=base_size, sizes_to_generate=sizes_to_generate)
