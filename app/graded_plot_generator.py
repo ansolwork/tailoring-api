@@ -53,7 +53,7 @@ class PlotGradedMTM:
         output_dir (str): Directory where generated plots will be saved
     """
 
-    def __init__(self, item="shirt", piece_name="FFS-V2-SH-01-CCB-FO", 
+    def __init__(self, item="shirt", piece_name="LGFG-SH-01-CCB-FOA", 
                  single_file_mode=False, custom_file_path=None):
         """
         Initialize the PlotGradedMTM instance.
@@ -247,7 +247,7 @@ def main():
     """
     plotter = PlotGradedMTM(
         item="shirt",
-        piece_name="FFS-V2-SH-01-CCB-FO",
+        piece_name="LGFG-SH-01-CCB-FOA",
         single_file_mode=False,
         custom_file_path="data/input/sample/LGFG-SH-01-CCB-FOA-39.dxf_combined_entities.xlsx"
     )
