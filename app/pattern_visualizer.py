@@ -37,9 +37,9 @@ data/input/
     ├── mtm_combined_entities_labeled/{item}/
     │   ├── images/                    # Base pattern visualizations
     │   │   └── {piece_name}/         
-    │   │       └── {piece_name}_pattern.png
+    │   │       └── {piece_name}-size.png
     │   ├── images_labeled/            # Reference pattern visualizations
-    │   │   └── {piece_name}_labeled_pattern.png
+    │   │   └── {piece_name}_labeled-size.png
     │   └── coordinates/               # Coordinate data (if needed)
     └── graded_mtm_combined_entities/{item}/
         └── images_graded/             # Graded pattern visualizations

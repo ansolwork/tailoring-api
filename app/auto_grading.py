@@ -148,12 +148,15 @@ class GradingRules:
                 point_str = str(int(float(point)))
                 
                 if piece_name not in self.rules:
+                    print(f"Debug: No rules for piece {piece_name}")
                     continue
                     
                 if point_str not in self.rules[piece_name]:
+                    print(f"Debug: No rules for point {point_str} in piece {piece_name}")
                     continue
                     
                 if break_range not in self.rules[piece_name][point_str]:
+                    print(f"Debug: No rules for range {break_range} for point {point_str}")
                     continue
                     
                 rule_data = self.rules[piece_name][point_str][break_range]
@@ -161,6 +164,7 @@ class GradingRules:
                     'delta_x': float(rule_data['dx']),
                     'delta_y': float(rule_data['dy'])
                 }
+                print(f"Debug: Found rule for {break_range} on point {point_str}: dx={rule_data['dx']}, dy={rule_data['dy']}")
                 
             except (KeyError, IndexError, ValueError, TypeError) as e:
                 print(f"Debug: Error processing rule for point {point}: {str(e)}")
@@ -757,76 +761,117 @@ def main(item="shirt", piece_name="LGFG-SH-01-CCB-FOA", base_size=39, sizes_to_g
     # Process each size
     sizes = sizes_to_generate or [base_size - 1, base_size, base_size + 1]
     processed_sizes = []
+    points_data = {}
     
-    points_data = {}  # Store results for summary
+    # Sort sizes into smaller and larger than base_size
+    smaller_sizes = sorted([s for s in sizes if s < base_size], reverse=True)
+    larger_sizes = sorted([s for s in sizes if s > base_size])
     
-    for target_size in sizes:
-        if target_size == base_size:
-            continue  # Skip base size as it's already labeled
-            
-        source_file = os.path.join(source_dir, f"{piece_name}-{target_size}.dxf_combined_entities.xlsx")
-        target_file = os.path.join(target_dir, f"{piece_name}-{target_size}.dxf_combined_entities.xlsx")
+    print(f"\nProcessing sizes: smaller={smaller_sizes}, larger={larger_sizes}")
+    
+    # Process sizes smaller than base size
+    current_size = base_size
+    for target_size in smaller_sizes:
+        # Generate all intermediate sizes if needed
+        intermediate_sizes = list(range(target_size + 1, current_size + 1))[::-1]  # Reverse order
+        for size in intermediate_sizes:
+            if size not in processed_sizes and size != base_size:
+                process_size(size, current_size, piece_name, source_dir, target_dir, mtm_points, grading, points_data)
+                processed_sizes.append(size)
+                current_size = size
         
-        print(f"\n🔄 Processing size {target_size} from size {base_size}:")
-        print("-" * 40)
-        
-        print(f"\nProcessing size {target_size}:")
-        df = pd.read_excel(source_file)
-        
-        # Initialize points data for this size
-        points_data[target_size] = {}
-        
-        # Keep track of used points
-        used_indices = set()
-        
-        # Process each point from base template
-        for point_data in mtm_points:
-            mtm_point = point_data['point']
-            base_x = point_data['x']
-            base_y = point_data['y']
-            
-            # Get grading rule
-            rule_movements = grading.get_measurements(
-                piece_name="LGFG-SH-01-CCB-FOA",
-                points=[str(int(mtm_point))],
-                current_size=min(target_size, base_size),
-                next_size=max(target_size, base_size)
-            )
-            
-            if rule_movements and str(int(mtm_point)) in rule_movements:
-                # Calculate new position using grading rule
-                rule = rule_movements[str(int(mtm_point))]
-                if target_size < base_size:
-                    x = base_x - rule['delta_x']
-                    y = base_y - rule['delta_y']
-                else:
-                    x = base_x + rule['delta_x']
-                    y = base_y + rule['delta_y']
-            else:
-                # No grading rule - use base position
-                x, y = base_x, base_y
-            
-            # Store point data for summary
-            points_data[target_size][mtm_point] = {
-                'original_x': base_x,
-                'original_y': base_y,
-                'new_x': x,
-                'new_y': y,
-                'dx': x - base_x,
-                'dy': y - base_y
-            }
-            
-            # Find closest unused point and update df
-            closest_idx = find_closest_unused_point(df, x, y, used_indices)
-            df.at[closest_idx, 'MTM Points'] = mtm_point
-            used_indices.add(closest_idx)
-                    
-        # Save file
-        df.to_excel(target_file, index=False)
-        print(f"✅ Generated: {target_file}")
+        # Process target size
+        process_size(target_size, current_size, piece_name, source_dir, target_dir, mtm_points, grading, points_data)
         processed_sizes.append(target_size)
+        current_size = target_size
+    
+    # Reset to base size for processing larger sizes
+    current_size = base_size
+    for target_size in larger_sizes:
+        # Generate all intermediate sizes if needed
+        intermediate_sizes = list(range(current_size + 1, target_size))
+        for size in intermediate_sizes:
+            if size not in processed_sizes:
+                process_size(size, current_size, piece_name, source_dir, target_dir, mtm_points, grading, points_data)
+                processed_sizes.append(size)
+                current_size = size
+        
+        # Process target size
+        process_size(target_size, current_size, piece_name, source_dir, target_dir, mtm_points, grading, points_data)
+        processed_sizes.append(target_size)
+        current_size = target_size
     
     print_grading_summary(piece_name, base_size, processed_sizes, points_data)
+    
+    # Copy base size file to output directory
+    base_file = f"data/input/graded_mtm_combined_entities/shirt/pre_labeled_graded_files/{piece_name}-{base_size}.dxf_combined_entities.xlsx"
+    target_base_file = os.path.join(target_dir, f"{piece_name}-{base_size}.dxf_combined_entities.xlsx")
+    
+    # Read and save base file to maintain consistent format
+    base_df = pd.read_excel(base_file)
+    base_df.to_excel(target_base_file, index=False)
+    print(f"\n✅ Copied base size file: {target_base_file}")
+
+def process_size(target_size, current_size, piece_name, source_dir, target_dir, mtm_points, grading, points_data):
+    """Process a single size, using the current_size as reference"""
+    source_file = os.path.join(source_dir, f"{piece_name}-{target_size}.dxf_combined_entities.xlsx")
+    target_file = os.path.join(target_dir, f"{piece_name}-{target_size}.dxf_combined_entities.xlsx")
+    
+    print(f"\n🔄 Processing size {target_size} from size {current_size}:")
+    print("-" * 40)
+    
+    df = pd.read_excel(source_file)
+    points_data[target_size] = {}
+    used_indices = set()
+    
+    # Process each point
+    for point_data in mtm_points:
+        mtm_point = point_data['point']
+        
+        # Get coordinates from current size
+        if current_size in points_data and mtm_point in points_data[current_size]:
+            current_x = points_data[current_size][mtm_point]['new_x']
+            current_y = points_data[current_size][mtm_point]['new_y']
+        else:
+            current_x = point_data['x']
+            current_y = point_data['y']
+        
+        # Get grading rule for this size step
+        rule_movements = grading.get_measurements(
+            piece_name=piece_name,
+            points=[str(int(mtm_point))],
+            current_size=min(current_size, target_size),
+            next_size=max(current_size, target_size)
+        )
+        
+        if rule_movements and str(int(mtm_point)) in rule_movements:
+            rule = rule_movements[str(int(mtm_point))]
+            if target_size > current_size:
+                x = current_x + rule['delta_x']
+                y = current_y + rule['delta_y']
+            else:
+                x = current_x - rule['delta_x']
+                y = current_y - rule['delta_y']
+        else:
+            x, y = current_x, current_y
+        
+        # Store point data and update DataFrame
+        points_data[target_size][mtm_point] = {
+            'original_x': point_data['x'],
+            'original_y': point_data['y'],
+            'new_x': x,
+            'new_y': y,
+            'dx': x - point_data['x'],
+            'dy': y - point_data['y']
+        }
+        
+        closest_idx = find_closest_unused_point(df, x, y, used_indices)
+        df.at[closest_idx, 'MTM Points'] = mtm_point
+        used_indices.add(closest_idx)
+    
+    # Save file
+    df.to_excel(target_file, index=False)
+    print(f"✅ Generated: {target_file}")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
@@ -835,9 +880,9 @@ if __name__ == "__main__":
     item = "shirt"
     piece_name = "LGFG-SH-01-CCB-FOA"
     base_size = 39
-    min_size = 38
-    max_size = 40
-    sizes_to_generate = list(range(min_size, max_size))  
+    min_size = 30
+    max_size = 62
+    sizes_to_generate = list(range(min_size, max_size + 1))
     
     # Call main with all inputs
     main(
