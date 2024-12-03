@@ -9,7 +9,13 @@
             flex-direction: column;
             align-items: center; /* Center items horizontally */
             justify-content: center; /* Center items vertically */
-            height: 100vh; /* Full viewport height for centering */
+            min-height: 100vh; /* Use min-height for better responsiveness */
+            max-width: 90%; /* Use percentage for better responsiveness */
+            margin: 0 auto;
+            padding: 2rem;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         /* Centering the input elements */
@@ -17,7 +23,8 @@
         .form-container select {
             margin: 10px 0;
             padding: 10px;
-            width: 300px; /* You can adjust this width */
+            width: 100%; /* Use full width for better responsiveness */
+            max-width: 300px; /* Limit max width */
             text-align: center;
         }
 
@@ -60,24 +67,136 @@
         form:has(input[type="submit"]:active) ~ .loading-overlay {
             display: block !important;
         }
+
+        .form-section {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .form-section h3 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+        }
+
+        .form-section p {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        select, input[type="file"] {
+            width: 100%;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: white;
+        }
+
+        input[type="submit"] {
+            background-color: #3498db;
+            color: white;
+            padding: 0.75rem 2rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        input[type="submit"]:hover {
+            background-color: #2980b9;
+        }
+
+        .button-container {
+            margin-top: 2rem;
+            text-align: center;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 2rem;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+
+        .btn-primary {
+            background-color: #2ecc71;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #27ae60;
+        }
+
+        .naming-convention {
+            text-align: left;
+            margin: 1rem auto;
+            padding: 1rem;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+
+        .naming-convention h4 {
+            color: #2c3e50;
+            margin: 1rem 0 0.5rem 0;
+        }
+
+        .naming-convention ul {
+            list-style-type: none;
+            padding-left: 1rem;
+            margin: 0.5rem 0;
+        }
+
+        .naming-convention code {
+            background-color: #e9ecef;
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+
+        .selection-guide {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            background-color: white;
+        }
+
+        .selection-guide th,
+        .selection-guide td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        .selection-guide th {
+            background-color: #f5f5f5;
+            font-weight: bold;
+        }
+
+        .selection-guide tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .selection-guide tr:hover {
+            background-color: #f5f5f5;
+        }
     </style>
 </head>
 <body>
 <div class="form-container">
-    <h3>File Operations in S3</h3>
+    <div class="form-section">
+        <h3>File Operations in S3</h3>
+        <p>Upload and process your files using the form below</p>
+    </div>
 
-    <div>
-        <h3>Please upload input file to S3 here</h3>
-        <p>Option 1: Upload DXF File. Get MTM Combined entities (unlabeled)</p>
-        <p>Option 2: After adding labels to MTM points column, upload your CSV file here, and it will store it to the
-            Database. Also visualizes the result.</p>
-        <form method="POST" action="/upload_file" enctype="multipart/form-data">
-            <input type="file" id="fileInput" name="file-to-s3" required>
-            <select id="file_choice" name="file_choice" required onchange="handleFileChoice()">
-                <option disabled selected>Select the type of File</option>
-                <option id="DXF_file" value="DXF_file">DXF File</option>
-                <option id="Graded_DXF_file" value="Graded_DXF_file">Graded DXF File</option>
-                <option id="MTM_points_file" value="MTM_points_file">MTM points File</option>
+    <div class="form-section">
+        <form method="POST" action="/upload_file" enctype="multipart/form-data" onsubmit="showLoadingSpinner()">
+            <select id="piece_choice" name="piece_choice" required onchange="handleFileChoice()">
+                <option disabled selected>Select Type of Piece</option>
+                <option value="Graded_piece">Graded piece</option>
+                <option value="Single_piece">Base piece</option>
             </select>
 
             <select id="item_choice" name="item_choice" required>
@@ -86,12 +205,91 @@
                     <option value="{{ item }}">{{ item }}</option>
                 {% endfor %}
             </select>
+
+            <select id="file_choice" name="file_choice" required onchange="handleFileChoice()">
+                <option disabled selected>Select the type of File</option>
+                <option id="DXF_file" value="DXF_file">DXF file</option>
+                <option id="unlabeled_file" value="unlabeled_file">unlabeled file(excel)</option>
+                <option id="labeled_file" value="labeled_file">labeled file(excel)</option>
+                <option id="grading_rule_file" value="grading_rule_file">grading rule file(excel)</option>
+            </select>
+
+            <input type="file" id="fileInput" name="file-to-s3" 
+                   required>
             <input type="submit" name="action" value="Upload">
         </form>
     </div>
 
+    <div class="form-section">
+        <h4>Instructions:</h4>
+        <p><strong>Option 1: DXF File</strong> Upload DXF File to get MTM Combined entities (unlabeled)</p>
+        <p><strong>Option 2: unlabeled file</strong> Upload Excel file with MTM points column for visualization and labeling</p>
+        <p><strong>Option 3: labeled file</strong> Upload Excel file with labels added to MTM points column for database storage and visualization</p>
+        <p><strong>Option 4: grading rule file</strong> Upload Excel file with grading rules for grading the combined entities</p> 
+        <p><strong>Note : When uploading graded folders,select the piece type as graded piece and select the file type as DXF file</strong></p> 
+        <br>
+        
+        <h4>Selection Guide:</h4>
+        <table class="selection-guide">
+            <thead>
+                <tr>
+                    <th>Selection</th>
+                    <th>Choose File or Folder</th>
+                    <th>Result</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Base piece, DXF file</td>
+                    <td>File</td>
+                    <td>Plot image, unlabeled combined entities file</td>
+                </tr>
+                <tr>
+                    <td>Graded piece, DXF file</td>
+                    <td>Folder</td>
+                    <td>Unlabeled combined entities will be uploaded to S3</td>
+                </tr>
+                <tr>
+                    <td>Unlabeled file</td>
+                    <td>File</td>
+                    <td>Plot image with number points which will help you to label the file</td>
+                </tr>
+                <tr>
+                    <td>Labeled file, Base piece</td>
+                    <td>File</td>
+                    <td>Plot image with MTM points, Approve/Discard for uploading the image and labeled file to base files directory in S3 database</td>
+                </tr>
+                <tr>
+                    <td>Labeled file, Graded piece</td>
+                    <td>File</td>
+                    <td>Plot image with MTM points, Approve/Discard for uploading the image and labeled file to graded files directory in S3 database</td>
+                </tr>
+                <tr>
+                    <td>Grading rule file</td>
+                    <td>File</td>
+                    <td>Uploaded to grading rule directory in S3 database</td>
+                </tr>
+            </tbody>
+        </table>
 
-    <br>
+        <p><strong>File Naming Convention:</strong></p>
+        <div class="naming-convention">
+            <h4>Base Piece Files:</h4>
+            <ul>
+                <li>DXF: <code>(piece_name).dxf</code></li>
+                <li>Unlabeled Files: <code>(piece_name)_combined_entities.xlsx</code></li>
+                <li>Labeled Files: <code>(piece_name)_combined_entities_labeled.xlsx</code></li>
+            </ul>
+            
+            <h4>Graded Piece Files:</h4>
+            <ul>
+                <li>DXF: <code>(piece_name)_(size).dxf</code></li>
+                <li>Unlabeled Files: <code>(piece_name)_(size)_combined_entities.xlsx</code></li>
+                <li>Labeled Files: <code>(piece_name)_(size)_combined_entities_labeled.xlsx</code></li>
+            </ul>
+        </div>
+    </div>
+
     <div class="button-container">
         <a href="/home" class="btn btn-primary">Return to Main page</a>
     </div>
@@ -111,14 +309,19 @@
 
     function handleFileChoice() {
         const fileInput = document.getElementById('fileInput');
-        const selectedOption = document.getElementById('file_choice').value;
+        const pieceChoice = document.getElementById('piece_choice').value;
+        const fileChoice = document.getElementById('file_choice').value;
 
-        if (selectedOption === 'Graded_DXF_file') {
-            fileInput.setAttribute('webkitdirectory', '');
+        if (pieceChoice === 'Graded_piece' && fileChoice === 'DXF_file') {
             fileInput.setAttribute('multiple', '');
+            fileInput.setAttribute('webkitdirectory', '');
+            fileInput.setAttribute('directory', '');
+            fileInput.placeholder = 'Select a folder containing DXF files...';
         } else {
-            fileInput.removeAttribute('webkitdirectory');
             fileInput.removeAttribute('multiple');
+            fileInput.removeAttribute('webkitdirectory');
+            fileInput.removeAttribute('directory');
+            fileInput.placeholder = 'Select a file...';
         }
     }
 </script>

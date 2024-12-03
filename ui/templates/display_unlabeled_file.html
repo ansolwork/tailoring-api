@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unlabeled File Plot</title>
+</head>
+<style>
+    .download-button {
+        background-color: #3498db;
+        color: white;
+        padding: 10px 20px;
+        text-decoration: none;
+        border-radius: 5px;
+        margin: 10px;
+        transition: background-color 0.3s;
+    }
+
+    .download-button:hover {
+        background-color: #2980b9;
+    }
+
+    .return-button {
+        background-color: #3498db;
+        color: white;
+        padding: 10px 20px;
+        text-decoration: none;
+        border-radius: 5px;
+        margin: 10px;
+        transition: background-color 0.3s;
+    }
+    .return-button:hover{
+        background-color: #2980b9;
+    }
+
+    .button-container {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 20px;
+    }       
+
+    body {
+        font-family: Arial, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        text-align: center;
+    }
+
+    h1 {
+        color: #2c3e50;
+        margin-bottom: 20px;
+    }
+
+    img {
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        border-radius: 5px;
+        margin: 20px 0;
+    }
+</style>
+<body>
+    <h1>Unlabeled File Plot: {{ filename }}</h1>
+    <img src="{{ plot_url }}" alt="Unlabeled File Plot" style="max-width: 100%;">
+        <div class="button-container">
+        <a href="{{ url_for('download_unlabeled_plot') }}" class="download-button">Download Plot</a>
+        <a href="/file_operations_home" class="return-button">Return to Home</a>
+    </div>
+</body>
+</html>

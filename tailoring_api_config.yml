@@ -8,10 +8,7 @@ ALLOWED_MIME_TYPES :
   - 'text/csv'
 GARMENT_TYPES:
   - 'Shirt'
-  - 'Trouser'
-  - 'Jacket'
-  - 'Waistcoat'
-  - 'Suit'
+
 AWS_S3_BUCKET_NAME : 'lgfgbucket'
 AWS_DXF_DIR_PATH : "data/input/recurrent/base_files/dxf_files/"
 AWS_DXF_GRADED_DIR_PATH : "data/input/recurrent/graded_files/graded_dxf/"
@@ -19,7 +16,15 @@ AWS_MTM_DIR_PATH : "data/input/recurrent/base_files/mtm_combined_entites/"
 AWS_MTM_GRADED_DIR_PATH : "data/input/recurrent/graded_files/graded_mtm_combined_entites/"
 AWS_MTM_DIR_PATH_LABELED : "data/input/primary/mtm_combined_entites_labeled/"
 AWS_MTM_GRADED_DIR_PATH_LABELED : "data/input/primary/graded_mtm_combined_entites_labeled/"
-AWS_PLOT_DIR_BASE : "data/plots/base_pieces"
+UI_AWS_DXF_DIR_PATH : "data/input/ui_uploads/dxf_files/base_files/"
+UI_AWS_DXF_GRADED_DIR_PATH : "data/input/ui_uploads/dxf_files/graded_files/"
+UI_AWS_MTM_LABELED_DIR_PATH : "data/input/ui_uploads/mtm_labeled_files/base_files/"
+UI_AWS_MTM_GRADED_LABELED_DIR_PATH : "data/input/ui_uploads/mtm_labeled_files/graded_files/"
+UI_AWS_MTM_FROM_DXF_DIR_PATH : "data/input/ui_uploads/mtm_from_dxf_files/base_files/"
+UI_AWS_MTM_FROM_DXF_GRADED_DIR_PATH : "data/input/ui_uploads/mtm_from_dxf_files/graded_files/"
+UI_AWS_PLOT_DIR_BASE : "data/plots/base_pieces"
+UI_AWS_PLOT_DIR_GRADED : "data/plots/graded_pieces"
+UI_AWS_GRADING_RULE_DIR_PATH : "data/input/ui_uploads/grading_rule_files/"
 AWS_OUTPUT_DIR_PATH : "data/output"
 AWS_S3_SIGNATURE_VERSION : "s3v4"
 AWS_PROFILE : "tailoring_api"
