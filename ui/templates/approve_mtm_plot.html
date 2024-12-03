@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Approve MTM Plot</title>
+    <style>
+        .plot-container {
+            margin: 20px;
+            text-align: center;
+        }
+        .button-container {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 20px;
+        }       
+
+    body {
+        font-family: Arial, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        text-align: center;
+        }
+
+    h1 {
+        color: #2c3e50;
+        margin-bottom: 20px;
+    }
+
+    img {
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        border-radius: 5px;
+        margin: 20px 0;
+    }
+        .approve-button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 10px;
+            transition: background-color 0.3s;
+        }
+        .discard-button {
+            background-color: #f44336;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 10px;
+            transition: background-color 0.3s;
+        }
+        .download-button {
+            background-color: #3498db;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 10px;
+            transition: background-color 0.3s;
+    }
+
+    .download-button:hover {
+        background-color: #2980b9;
+    }
+
+        
+    </style>
+</head>
+<body>
+    <div class="plot-container">
+        <h2>Review Plot</h2>
+        <p>Filename: {{ filename }}</p>
+        <img src="{{ plot_url }}" alt="MTM Plot">
+    </div>
+    
+    <div class="button-container">
+        <form method="post" action="{{ url_for('approve_mtm_upload') }}" style="display: inline;">
+            <button type="submit" name="action" value="download" class="download-button">
+                Download PNG
+            </button>
+            <button type="submit" name="action" value="approve" class="approve-button">
+                Approve
+            </button>
+            <button type="submit" name="action" value="discard" class="discard-button">
+                Discard
+            </button>
+        </form>
+    </div>
+</body>
+</html>
