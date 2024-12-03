@@ -17,6 +17,9 @@ COPY . /app/ui
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Create temp directory if not exists
+RUN mkdir -p /app/ui/temp /app/ui/ui/static/plots
+RUN chmod 777 /app/ui/temp /app/ui/ui/static/plots
 # Add API Call method
 EXPOSE 5000
 
