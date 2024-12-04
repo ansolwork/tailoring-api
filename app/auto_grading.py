@@ -88,7 +88,7 @@ class GradingConfig:
         # Check base template file
         base_file = os.path.join(
             self.input_dir,
-            f"{self.piece_name}-{self.base_size}.dxf_combined_entities.xlsx"
+            f"{self.piece_name}-{self.base_size}_combined_entities.xlsx"
         )
         if not os.path.exists(base_file):
             raise FileNotFoundError(
@@ -108,7 +108,7 @@ class GradingConfig:
         for size in self.sizes_to_generate:
             source_file = os.path.join(
                 self.source_dir,
-                f"{self.piece_name}-{size}.dxf_combined_entities.xlsx"
+                f"{self.piece_name}-{size}_combined_entities.xlsx"
             )
             if not os.path.exists(source_file):
                 raise FileNotFoundError(
@@ -125,8 +125,8 @@ class GradingRules:
         self.rules_file = os.path.join(
             "data/input/graded_mtm_combined_entities",
             item,
-            "LGFG-SH-01-CCB-FOA",
-            "LGFG-SH-01-CCB-FOA-GRADE-RULE.xlsx"
+            piece_name,
+            f"{piece_name}-GRADE-RULE.xlsx"
         )
         self.input_dir = os.path.join(
             "data/input/graded_mtm_combined_entities",
@@ -146,18 +146,6 @@ class GradingRules:
             try:
                 # Convert point to string to match the format in rules
                 point_str = str(int(float(point)))
-                
-                if piece_name not in self.rules:
-                    print(f"Debug: No rules for piece {piece_name}")
-                    continue
-                    
-                if point_str not in self.rules[piece_name]:
-                    print(f"Debug: No rules for point {point_str} in piece {piece_name}")
-                    continue
-                    
-                if break_range not in self.rules[piece_name][point_str]:
-                    print(f"Debug: No rules for range {break_range} for point {point_str}")
-                    continue
                     
                 rule_data = self.rules[piece_name][point_str][break_range]
                 measurements[point_str] = {
@@ -167,7 +155,6 @@ class GradingRules:
                 print(f"Debug: Found rule for {break_range} on point {point_str}: dx={rule_data['dx']}, dy={rule_data['dy']}")
                 
             except (KeyError, IndexError, ValueError, TypeError) as e:
-                print(f"Debug: Error processing rule for point {point}: {str(e)}")
                 continue
             
         return measurements
@@ -175,20 +162,15 @@ class GradingRules:
     def load_rules(self):
         """Load grading rules from Excel file"""
         try:
-            print("\n📋 Loading Grading Rules:")
-            print("=" * 50)
-            print(f"Reading file: {self.rules_file}")
-            
             # Check if file exists
             if not os.path.exists(self.rules_file):
                 raise FileNotFoundError(f"Grade rule file not found: {self.rules_file}")
-                
+            
             # Load Excel file
             df = pd.read_excel(self.rules_file)
             
             # First row contains multiple piece/point definitions
             first_row = df.iloc[0]
-            print("\nAnalyzing first row for piece/point definitions:")
             
             for col in range(len(first_row)):
                 cell_value = str(first_row.iloc[col])
@@ -228,7 +210,13 @@ class GradingRules:
                                 'dx': delta_x,
                                 'dy': delta_y
                             }
-                        
+            
+            # Add print of loaded rules file
+            print("\n📋 Loaded Grading Rules File:")
+            print("=" * 80)
+            print(f"File: {self.rules_file}")
+            print("=" * 80)
+                    
         except Exception as e:
             logging.error(f"Error loading rules: {str(e)}")
             logging.error(traceback.format_exc())
@@ -254,9 +242,9 @@ class GradingRules:
             try:
                 # Get actual coordinates from pre-labeled files
                 current_df = pd.read_excel(os.path.join(self.config.input_dir, 
-                    f"{self.config.piece_name}-{current_size}.dxf_combined_entities.xlsx"))
+                    f"{self.config.piece_name}-{current_size}_combined_entities.xlsx"))
                 next_df = pd.read_excel(os.path.join(self.config.input_dir, 
-                    f"{self.config.piece_name}-{next_size}.dxf_combined_entities.xlsx"))
+                    f"{self.config.piece_name}-{next_size}_combined_entities.xlsx"))
                 
                 for point in [reference_point]:
                     # Get grading rule movements (in inches)
@@ -306,10 +294,8 @@ class GradingRules:
                     })
                     
             except FileNotFoundError:
-                print(f"❌ Required files not found for size range {current_size}-{next_size}")
                 continue
             except Exception as e:
-                print(f"❌ Error processing size range {current_size}-{next_size}: {str(e)}")
                 continue
         
         print("\n" + "=" * 80)
@@ -330,7 +316,7 @@ class GradingRules:
         # Load base template first
         base_template = pd.read_excel(os.path.join(
             self.config.input_dir,
-            f"{self.config.piece_name}-{self.config.base_size}.dxf_combined_entities.xlsx"
+            f"{self.config.piece_name}-{self.config.base_size}_combined_entities.xlsx"
         ))
         
         # Get MTM points from base template
@@ -350,16 +336,14 @@ class GradingRules:
         # Process sizes smaller than base size (in descending order)
         current_size = base_size
         for target_size in smaller_sizes:
-            print(f"\n🔄 Processing size {target_size} from size {current_size}:")
-            print("----------------------------------------")
             
             source_file = os.path.join(
                 self.config.source_dir,
-                f"{self.config.piece_name}-{current_size}.dxf_combined_entities.xlsx"
+                f"{self.config.piece_name}-{current_size}_combined_entities.xlsx"
             )
             target_file = os.path.join(
                 self.config.target_dir,
-                f"{self.config.piece_name}-{target_size}.dxf_combined_entities.xlsx"
+                f"{self.config.piece_name}-{target_size}_combined_entities.xlsx"
             )
             
             self._process_size(target_size, source_file, target_file, mtm_points)
@@ -369,27 +353,22 @@ class GradingRules:
         # Process sizes larger than base size (in ascending order)
         current_size = base_size
         for target_size in larger_sizes:
-            print(f"\n🔄 Processing size {target_size} from size {current_size}:")
-            print("----------------------------------------")
             
             source_file = os.path.join(
                 self.config.source_dir,
-                f"{self.config.piece_name}-{current_size}.dxf_combined_entities.xlsx"
+                f"{self.config.piece_name}-{current_size}_combined_entities.xlsx"
             )
             target_file = os.path.join(
                 self.config.target_dir,
-                f"{self.config.piece_name}-{target_size}.dxf_combined_entities.xlsx"
+                f"{self.config.piece_name}-{target_size}_combined_entities.xlsx"
             )
             
             self._process_size(target_size, source_file, target_file, mtm_points)
             processed_sizes.append(target_size)
             current_size = target_size
         
-        print(f"\n✅ Successfully processed sizes: {processed_sizes}")
-
     def _process_size(self, size: int, source_file: str, target_file: str, mtm_points: List[Dict]) -> None:
         """Process a single size"""
-        print(f"\nProcessing size {size}:")
         df = pd.read_excel(source_file)
         used_indices = set()
         
@@ -508,7 +487,6 @@ class GradingRules:
         os.makedirs(os.path.dirname(target_file), exist_ok=True)
         
         df.to_excel(target_file, index=False)
-        print(f"✅ Generated: {target_file}")
 
     def _get_mtm_points_from_template(self, template: pd.DataFrame) -> List[Dict]:
         """
@@ -576,9 +554,6 @@ def print_points_summary(size, points):
             print(f"  • Point {point.id:.0f}: ({point.x:.3f}, {point.y:.3f})")
 
 def print_grading_changes(from_size, to_size, points_data):
-    print(f"\n🔄 Size {from_size} → {to_size}:")
-    print("----------------------------------------")
-    print(f"✓ Processing {len(points_data)} points")
     
     # Group points by their movement patterns
     movement_groups = {}
@@ -606,8 +581,6 @@ def print_grading_changes(from_size, to_size, points_data):
         
         print(f"  • Points {', '.join(ranges)}:")
         print(f"    Δx: {dx:+.3f}, Δy: {dy:+.3f}")
-
-    print(f"\n✅ Generated: {output_file}")
 
 def extract_mtm_points(df):
     """Extract MTM points and their coordinates from the dataframe"""
@@ -723,9 +696,6 @@ def main(item="shirt", piece_name="LGFG-SH-01-CCB-FOA", base_size=39, sizes_to_g
     grading = GradingRules(item=item, piece_name=piece_name)
     grading.load_rules()
     
-    print("\n📝 Generating Labeled Files:")
-    print("========================================")
-    
     # Define directories
     source_dir = os.path.join(
         "data/input/graded_mtm_combined_entities",
@@ -741,7 +711,11 @@ def main(item="shirt", piece_name="LGFG-SH-01-CCB-FOA", base_size=39, sizes_to_g
     os.makedirs(target_dir, exist_ok=True)
     
     # Load base template (pre-labeled base size)
-    base_file = f"data/input/graded_mtm_combined_entities/shirt/pre_labeled_graded_files/{piece_name}-{base_size}.dxf_combined_entities.xlsx"
+    base_file = os.path.join(
+        "data/input/graded_mtm_combined_entities/shirt/pre_labeled_graded_files",
+        piece_name,
+        f"{piece_name}-{base_size}_combined_entities.xlsx"
+    )
     base_template = pd.read_excel(base_file)
     
     # Get ALL MTM points from base template, sorted numerically
@@ -766,9 +740,7 @@ def main(item="shirt", piece_name="LGFG-SH-01-CCB-FOA", base_size=39, sizes_to_g
     # Sort sizes into smaller and larger than base_size
     smaller_sizes = sorted([s for s in sizes if s < base_size], reverse=True)
     larger_sizes = sorted([s for s in sizes if s > base_size])
-    
-    print(f"\nProcessing sizes: smaller={smaller_sizes}, larger={larger_sizes}")
-    
+        
     # Process sizes smaller than base size
     current_size = base_size
     for target_size in smaller_sizes:
@@ -804,21 +776,28 @@ def main(item="shirt", piece_name="LGFG-SH-01-CCB-FOA", base_size=39, sizes_to_g
     print_grading_summary(piece_name, base_size, processed_sizes, points_data)
     
     # Copy base size file to output directory
-    base_file = f"data/input/graded_mtm_combined_entities/shirt/pre_labeled_graded_files/{piece_name}-{base_size}.dxf_combined_entities.xlsx"
-    target_base_file = os.path.join(target_dir, f"{piece_name}-{base_size}.dxf_combined_entities.xlsx")
+    base_file = os.path.join(
+        "data/input/graded_mtm_combined_entities/shirt/pre_labeled_graded_files",
+        piece_name,
+        f"{piece_name}-{base_size}_combined_entities.xlsx"
+    )
+    target_base_file = os.path.join(target_dir, f"{piece_name}-{base_size}_combined_entities.xlsx")
     
     # Read and save base file to maintain consistent format
     base_df = pd.read_excel(base_file)
     base_df.to_excel(target_base_file, index=False)
     print(f"\n✅ Copied base size file: {target_base_file}")
 
+    # Add print of loaded rules file at the very end
+    print("\n📋 Loaded Grading Rules File:")
+    print("=" * 80)
+    print(f"File: {grading.rules_file}")
+    print("=" * 80)
+
 def process_size(target_size, current_size, piece_name, source_dir, target_dir, mtm_points, grading, points_data):
     """Process a single size, using the current_size as reference"""
-    source_file = os.path.join(source_dir, f"{piece_name}-{target_size}.dxf_combined_entities.xlsx")
-    target_file = os.path.join(target_dir, f"{piece_name}-{target_size}.dxf_combined_entities.xlsx")
-    
-    print(f"\n🔄 Processing size {target_size} from size {current_size}:")
-    print("-" * 40)
+    source_file = os.path.join(source_dir, f"{piece_name}-{target_size}_combined_entities.xlsx")
+    target_file = os.path.join(target_dir, f"{piece_name}-{target_size}_combined_entities.xlsx")
     
     df = pd.read_excel(source_file)
     points_data[target_size] = {}
@@ -871,23 +850,93 @@ def process_size(target_size, current_size, piece_name, source_dir, target_dir, 
     
     # Save file
     df.to_excel(target_file, index=False)
-    print(f"✅ Generated: {target_file}")
+
+def rename_files_in_directory(directory):
+    """Rename files in the directory by removing '.dxf' from their filenames."""
+    for root, _, files in os.walk(directory):
+        for file in files:
+            if '.dxf_combined_entities.xlsx' in file:
+                old_path = os.path.join(root, file)
+                new_file = file.replace('.dxf_combined_entities.xlsx', '_combined_entities.xlsx')
+                new_path = os.path.join(root, new_file)
+                
+                # Rename the file
+                os.rename(old_path, new_path)
+                print(f"Renamed: {old_path} -> {new_path}")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+
+    # Define the directory to rename files
+    base_dir = "data/input/graded_mtm_combined_entities"
     
-    # Set inputs directly
+    # Rename files in the directory
+    rename_files_in_directory(base_dir)
+    
+    # List of all pieces
+    pieces = [
+        "LGFG-SH-01-CCB-FOA",
+        "LGFG-SH-03-CCB-FOA",
+        "LGFG-SH-04FS-FOA",
+        "LGFG-SH-04HS-FOA",
+        "LGFG-SH-02-BIAS",
+        "LGFG-SH-02-STRAIGHT",
+        "LGFG-SH-01-STB-FOA",
+        "LGFG-SH-03-STB-FOA",
+        "LGFG-SH-01-STB-SLIT-FOA",
+        "LGFG-SH-03-STB-SLIT-FOA",
+        "LGFG-1648-FG-07P",
+        "LGFG-1648-FG-07S",
+        "LGFG-1648-FG-08P",
+        "LGFG-1648-FG-08S",
+        "LGFG-1648-SH-07",
+        "LGFG-1648-SH-08",
+        "LGFG-FG-CUFF-S2",
+        "LGFG-SH-01-STB-FOA"
+    ]
+    
+    # Common parameters
     item = "shirt"
-    piece_name = "LGFG-SH-01-CCB-FOA"
     base_size = 39
     min_size = 30
     max_size = 62
     sizes_to_generate = list(range(min_size, max_size + 1))
     
-    # Call main with all inputs
-    main(
-        item=item,
-        piece_name=piece_name,
-        base_size=base_size,
-        sizes_to_generate=sizes_to_generate
-    )
+    # Track successful and failed pieces
+    successful_pieces = []
+    failed_pieces = []
+    
+    # Process each piece
+    for piece_name in pieces:
+        print("\n" + "=" * 80)
+        print(f"Processing piece: {piece_name}")
+        print("=" * 80 + "\n")
+        
+        try:
+            main(
+                item=item,
+                piece_name=piece_name,
+                base_size=base_size,
+                sizes_to_generate=sizes_to_generate
+            )
+            successful_pieces.append(piece_name)
+        except Exception as e:
+            print(f"❌ Error processing {piece_name}: {str(e)}")
+            failed_pieces.append((piece_name, str(e)))
+            continue
+    
+    # Print final summary
+    print("\n\n" + "=" * 80)
+    print("FINAL PROCESSING SUMMARY")
+    print("=" * 80)
+    
+    print(f"\n✅ Successfully Processed ({len(successful_pieces)}/{len(pieces)}):")
+    for piece in successful_pieces:
+        print(f"  • {piece}")
+    
+    print(f"\n❌ Failed to Process ({len(failed_pieces)}/{len(pieces)}):")
+    for piece, error in failed_pieces:
+        print(f"  • {piece}")
+        print(f"    Error: {error}")
+    
+    print("\n" + "=" * 80)

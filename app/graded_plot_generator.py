@@ -243,16 +243,46 @@ def main():
     """
     Main execution function for demonstration purposes.
     
-    Creates a PlotGradedMTM instance and generates plots for a sample file.
+    Creates a PlotGradedMTM instance and generates plots for each piece.
     """
-    plotter = PlotGradedMTM(
-        item="shirt",
-        piece_name="LGFG-SH-01-CCB-FOA",
-        single_file_mode=False,
-        custom_file_path="data/input/sample/LGFG-SH-01-CCB-FOA-39.dxf_combined_entities.xlsx"
-    )
+    # List of all pieces
+    pieces = [
+        "LGFG-SH-01-CCB-FOA",
+        "LGFG-SH-03-CCB-FOA",
+        "LGFG-SH-04FS-FOA",
+        "LGFG-SH-04HS-FOA",
+        "LGFG-02-BIAS",
+        "LGFG-02-STRAIGHT",
+        "LGFG-SH-01-STB-FOA",
+        "LGFG-SH-03-STB-FOA",
+        "LGFG-SH-01-STB-SLIT-FOA",
+        "LGFG-SH-03-STB-SLIT-FOA",
+        "LGFG-1648-FG-07P",
+        "LGFG-1648-FG-07S",
+        "LGFG-1648-FG-08P",
+        "LGFG-1648-FG-08S",
+        "LGFG-1648-SH-07",
+        "LGFG-1648-SH-08",
+        "LGFG-FG-CUFF-S2",
+        "LGFG-SH-01-STB-FOA"
+    ]
     
-    plotter.plot_mtm_points()
+    # Process each piece
+    for piece_name in pieces:
+        print("\n" + "=" * 80)
+        print(f"Generating plots for piece: {piece_name}")
+        print("=" * 80 + "\n")
+        
+        try:
+            plotter = PlotGradedMTM(
+                item="shirt",
+                piece_name=piece_name,
+                single_file_mode=False
+            )
+            plotter.plot_mtm_points()
+        except Exception as e:
+            print(f"❌ Error generating plots for {piece_name}: {str(e)}")
+            continue
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
