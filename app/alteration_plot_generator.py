@@ -203,7 +203,7 @@ class PlotGenerator:
 if __name__ == "__main__":
     piece_name = "LGFG-SH-01-CCB-FOA"
     alteration_rule = "1LTH-FULL"
-    item_size = "32"
+    item_size = "39"
     graded_or_base = "graded"
     item = "shirt"
 
