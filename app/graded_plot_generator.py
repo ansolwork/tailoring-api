@@ -135,8 +135,9 @@ class PlotGradedMTM:
         try:
             # Extract size from filename
             file_name = os.path.basename(file_path)
-            size_match = re.search(r'-(\d+)\.dxf', file_name)
+            size_match = re.search(r'-(\d+)_combined_entities\.xlsx', file_name)
             if not size_match:
+                print(f"⚠️ Could not extract size from filename: {file_name}")
                 return
             
             size = size_match.group(1)
@@ -251,8 +252,8 @@ def main():
         "LGFG-SH-03-CCB-FOA",
         "LGFG-SH-04FS-FOA",
         "LGFG-SH-04HS-FOA",
-        "LGFG-02-BIAS",
-        "LGFG-02-STRAIGHT",
+        "LGFG-SH-02-BIAS",
+        "LGFG-SH-02-STRAIGHT",
         "LGFG-SH-01-STB-FOA",
         "LGFG-SH-03-STB-FOA",
         "LGFG-SH-01-STB-SLIT-FOA",
@@ -280,6 +281,7 @@ def main():
                 single_file_mode=False
             )
             plotter.plot_mtm_points()
+            print("✅ Done")
         except Exception as e:
             print(f"❌ Error generating plots for {piece_name}: {str(e)}")
             continue
