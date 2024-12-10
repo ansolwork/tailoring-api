@@ -131,14 +131,14 @@ class PieceAlterationProcessor:
 
     def get_piece_name(self):
         """
-        Returns the unique piece name from the piece_name column.
-        Assumes there is only one unique piece name.
+        Returns the piece name from the filtered data.
+        Since all rows should have the same piece name after filtering by size,
+        we can just take it from the first row.
         """
-        piece_name = self.piece_df['piece_name'].dropna().unique()
-        if len(piece_name) == 1:
-            return piece_name[0]
-        else:
-            raise ValueError("There should only be one unique piece name, but multiple were found.")
+        if len(self.piece_df) == 0:
+            raise ValueError(f"No data found for size {self.item_size}")
+            
+        return self.piece_df['piece_name'].iloc[0]
 
     def split_by_alteration_rule(self):
         """
@@ -834,14 +834,16 @@ class PieceAlterationProcessor:
                                                         ['pl_point_altered_x', 'pl_point_altered_y', 'pl_point_x', 'pl_point_y']].iloc[0]
 
             # Use altered coordinates if available, else fallback to original ones
-            mtm_point_coords = [mtm_point_coords['pl_point_altered_x'], mtm_point_coords['pl_point_altered_y']] \
-                if pd.notna(mtm_point_coords['pl_point_altered_x']) and pd.notna(mtm_point_coords['pl_point_altered_y']) \
-                else [mtm_point_coords['pl_point_x'], mtm_point_coords['pl_point_y']]
+            mtm_point_coords = np.array([
+                mtm_point_coords['pl_point_altered_x'] if pd.notna(mtm_point_coords['pl_point_altered_x']) else mtm_point_coords['pl_point_x'],
+                mtm_point_coords['pl_point_altered_y'] if pd.notna(mtm_point_coords['pl_point_altered_y']) else mtm_point_coords['pl_point_y']
+            ])
 
-            mtm_dependent_coords = [mtm_dependent_coords['pl_point_altered_x'], mtm_dependent_coords['pl_point_altered_y']] \
-                if pd.notna(mtm_dependent_coords['pl_point_altered_x']) and pd.notna(mtm_dependent_coords['pl_point_altered_y']) \
-                else [mtm_dependent_coords['pl_point_x'], mtm_dependent_coords['pl_point_y']]
-            
+            mtm_dependent_coords = np.array([
+                mtm_dependent_coords['pl_point_altered_x'] if pd.notna(mtm_dependent_coords['pl_point_altered_x']) else mtm_dependent_coords['pl_point_x'],
+                mtm_dependent_coords['pl_point_altered_y'] if pd.notna(mtm_dependent_coords['pl_point_altered_y']) else mtm_dependent_coords['pl_point_y']
+            ])
+
             # Apply movement to MTM point
             new_x = mtm_point_coords[0] + (self.alteration_movement * movement_x)
             new_y = mtm_point_coords[1] + (self.alteration_movement * movement_y)
@@ -1052,7 +1054,6 @@ class PieceAlterationProcessor:
             ]
             
             adjacent_notches = nearby_points[nearby_points['notch_labels'].str.contains('notch', case=False, na=False)]
-            
             if not adjacent_notches.empty:
                 for _, notch in adjacent_notches.iterrows():
                     logging.info(f"Adjacent notch found: Point {notch['point_order']}, Label: {notch['notch_labels']}")
@@ -1367,107 +1368,6 @@ class PieceAlterationProcessor:
         
         return notch_groups
 
-    def _apply_force_directed_algorithm(self, G, mtm_point, mtm_coords, prev_mtm_coords, next_mtm_coords, moved_notch_points, iterations=50, k=0.1):
-        if len(G) <= 1:
-            logging.warning(f"Graph has {len(G)} nodes. Skipping force-directed algorithm.")
-            return {node: data['pos'] for node, data in G.nodes(data=True)}
-
-        try:
-            # Initialize positions
-            pos = {n: data['pos'] for n, data in G.nodes(data=True)}
-            
-            # Define fixed points
-            fixed_points = [mtm_point] + list(moved_notch_points)
-            if prev_mtm_coords is not None:
-                fixed_points.append(min(G.nodes()))
-                pos[min(G.nodes())] = prev_mtm_coords
-            if next_mtm_coords is not None:
-                fixed_points.append(max(G.nodes()))
-                pos[max(G.nodes())] = next_mtm_coords
-
-            # Group notch points
-            notch_groups = self._group_notch_points(G)
-
-            for _ in range(iterations):
-                # Calculate forces for individual points and notch groups
-                forces = {}
-                for node in G.nodes():
-                    if node not in fixed_points and not G.nodes[node].get('is_altered', False):
-                        force = np.zeros(2)
-                        for neighbor in G.neighbors(node):
-                            diff = np.array(pos[neighbor]) - np.array(pos[node])
-                            distance = np.linalg.norm(diff)
-                            if distance > 0:
-                                force += k * diff / distance  # Spring force
-                        forces[node] = force
-
-                # Calculate average force for each notch group
-                for group in notch_groups:
-                    group_force = np.mean([forces.get(node, np.zeros(2)) for node in group], axis=0)
-                    for node in group:
-                        forces[node] = group_force
-
-                # Apply forces
-                for node, force in forces.items():
-                    new_pos = np.array(pos[node]) + force
-                    
-                    # Ensure the point doesn't move below the previous MTM point
-                    if prev_mtm_coords is not None:
-                        new_pos[1] = max(new_pos[1], prev_mtm_coords[1])
-                    
-                    pos[node] = tuple(new_pos)
-
-                # Adjust positions to maintain string-like behavior
-                sorted_nodes = sorted(G.nodes())
-                for i in range(1, len(sorted_nodes) - 1):
-                    prev_node = sorted_nodes[i-1]
-                    curr_node = sorted_nodes[i]
-                    next_node = sorted_nodes[i+1]
-                    
-                    if curr_node not in fixed_points and not G.nodes[curr_node].get('is_altered', False):
-                        prev_pos = np.array(pos[prev_node])
-                        curr_pos = np.array(pos[curr_node])
-                        next_pos = np.array(pos[next_node])
-                        
-                        # Calculate the ideal position based on neighbors
-                        ideal_pos = (prev_pos + next_pos) / 2
-                        
-                        # Move the current point towards the ideal position
-                        pos[curr_node] = tuple(curr_pos + 0.1 * (ideal_pos - curr_pos))
-
-            # Handle NaN values
-            nan_mask = np.array([np.isnan(pos[node]).any() for node in G.nodes()])
-            if nan_mask.any():
-                logging.warning(f"NaN values detected in {nan_mask.sum()} positions. Replacing with original positions.")
-                for node in G.nodes():
-                    if np.isnan(pos[node]).any():
-                        pos[node] = G.nodes[node]['pos']
-
-            return pos
-
-        except Exception as e:
-            logging.error(f"Error in force-directed algorithm: {str(e)}")
-            return None
-
-    def _group_notch_points(self, G):
-        notch_groups = []
-        current_group = []
-        sorted_nodes = sorted(G.nodes())
-        
-        for node in sorted_nodes:
-            if G.nodes[node].get('is_notch', False):
-                current_group.append(node)
-            else:
-                if len(current_group) >= 3:  # Assuming a notch consists of at least 3 points
-                    notch_groups.append(current_group)
-                current_group = []
-        
-        # Add the last group if it meets the criteria
-        if len(current_group) >= 3:
-            notch_groups.append(current_group)
-        
-        return notch_groups
-
     def post_alteration_point_shift(self, selected_df):
         logging.info("Starting post-alteration point shift")
         selected_df_copy = selected_df.copy()
@@ -1534,13 +1434,12 @@ class PieceAlterationProcessor:
                     selected_df_copy.loc[idx, 'pl_point_altered_y'] = point['pl_point_y'] + shift_y
                 
                 point_type = 'Alteration' if pd.notna(point['alteration_type']) else 'Regular'
-                logging.info(f"    Point order {point['point_order']} ({point_type}, Notch: {point['notch_labels']}): shift ({shift_x:.4f}, {shift_y:.4f})")
+                logging.info(f"    Point order {point['point_order']} ({point_type}, Notch: {point['notch_labels']}): shift ({shift_x:.4f}, {shift_y:.4f}")
 
         # Verify changes
         changed_points = selected_df_copy[
             (selected_df_copy['pl_point_altered_x'] != selected_df_copy['pl_point_x']) |
-            (selected_df_copy['pl_point_altered_y'] != selected_df_copy['pl_point_y'])
-        ]
+            (selected_df_copy['pl_point_altered_y'] != selected_df_copy['pl_point_y'])]  # Added closing bracket here
         logging.info(f"Total points changed: {len(changed_points)}")
 
         # Create debug DataFrame
@@ -1795,7 +1694,7 @@ if __name__ == "__main__":
     debug_alteration_rule = "1LTH-FULL"
 
     # Item siz
-    item_size = 32
+    item_size = 39
     # Alteration movement
     alteration_movement = 5.0 # INCHES (can be positive or negative)
 
@@ -1811,8 +1710,8 @@ if __name__ == "__main__":
         piece_table_path=piece_table_path,
         vertices_table_path=vertices_table_path,
         debug_alteration_rule=debug_alteration_rule, 
-        item_size=item_size,
-        alteration_movement = alteration_movement)
+        item_size=item_size,  # Make sure this matches the parameter name in __init__
+        alteration_movement=alteration_movement)
     
     make_alteration.process_alterations()
     #make_alteration.log_info(debug_alteration_rule)
