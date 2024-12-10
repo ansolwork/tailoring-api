@@ -108,6 +108,8 @@ tailoring-api/
 - matplotlib
 - networkx
 
+> **Note:** The current `requirements.txt` file contains additional packages that were used during development and experimentation. Not all packages listed are necessary for the core functionality. The list above shows the main dependencies, while the full `requirements.txt` will be optimized in future releases to include only essential packages.
+
 ## Prerequisites
 - Python 3.8+
 - AWS Account
