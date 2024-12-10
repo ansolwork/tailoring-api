@@ -18,10 +18,66 @@ tailoring-api/
 ├── app/                                # Core application logic
 │   ├── auto_grading.py                # Automated grading system
 │   ├── create_table.py                # Preprocessing and table creation
-│   └── piece_alteration_processor.py  # Pattern alterations
+│   ├── piece_alteration_processor.py  # Pattern alterations
+│   ├── aws_load.py                    # AWS S3 file loading utility
+│   ├── aws_save.py                    # AWS S3 file saving utility
+│   ├── api.py                         # REST API for processing alterations
+│   └── plot_generator.py              # Visualization tool for pattern pieces
 ├── ui/                                # User interface components
 └── data/                              # Local development data
+    ├── debug/                         # Debugging output and intermediate files
+    ├── input/                         # Raw input files
+    │   ├── mtm_points.xlsx           # MTM point specifications
+    │   ├── mtm_combined_entities_labeled/  # Base size labeled entities
+    │   └── graded_mtm_combined_entities_labeled/  # Graded size labeled entities
+    ├── output/                        # Final processed outputs
+    │   └── plots/                     # Generated visualization plots
+    ├── staging/                       # Intermediate processing data
+    │   ├── base/                      # Base size processing
+    │   │   └── shirt/                 # Shirt-specific data
+    │   │       ├── alteration_by_piece/
+    │   │       ├── combined_alteration_tables/
+    │   │       └── vertices/
+    │   └── graded/                    # Graded sizes processing
+    │       └── shirt/                 # Shirt-specific data
+    │           ├── alteration_by_piece/
+    │           ├── combined_alteration_tables/
+    │           └── vertices/
+    └── staging_processed/             # Final stage processing
+        ├── base/                      # Base size final processing
+        └── graded/                    # Graded sizes final processing
 ```
+
+## Data Directory Structure
+
+### /data/input/
+- Contains raw input files and labeled entities
+- Includes MTM point specifications and combined entities
+- Separate directories for base and graded sizes
+
+### /data/staging/
+- Intermediate processing stage
+- Organized by base and graded sizes
+- Contains:
+  - Alteration tables by piece
+  - Combined alteration tables
+  - Vertices information
+
+### /data/staging_processed/
+- Final processing stage
+- Contains processed alterations and vertices
+- Organized by base and graded sizes
+- Includes debug information for alterations
+
+### /data/output/
+- Final output files
+- Contains generated plots and visualizations
+- Organized by piece and alteration type
+
+### /data/debug/
+- Debugging information and intermediate files
+- Helpful for troubleshooting and development
+- Contains step-by-step processing information
 
 ## Input/Output Specifications
 
@@ -190,6 +246,45 @@ Core alteration engine that:
 - Handles MTM point movements
 - Maintains pattern integrity
 - Generates output files
+
+### aws_load.py
+AWS S3 loading utility that:
+- Loads files from S3 bucket using boto3
+- Handles Excel and CSV file formats
+- Implements parallel file loading with ThreadPoolExecutor
+- Includes file size checks and optimizations
+- Saves downloaded files to local directory
+
+### aws_save.py
+AWS S3 saving utility that:
+- Uploads local files to S3 bucket
+- Maintains directory structure when uploading
+- Supports Excel and CSV file formats
+- Handles error logging and reporting
+- Configurable through YAML configuration files
+
+### api.py
+REST API for processing alterations that:
+- Provides endpoints to apply alterations and retrieve entities
+- Uses Flask for API routing
+- Connects to a PostgreSQL database using SQLAlchemy
+- Handles JSON and YAML input formats
+- Computes alteration amounts based on input measurements
+- Logs detailed information for debugging and monitoring
+
+### plot_generator.py
+Visualization tool that:
+- Generates detailed plots of pattern pieces
+- Features:
+  - Plots original vertices and MTM points
+  - Shows altered points and notch points
+  - Visualizes alterations with before/after comparisons
+  - Supports both PNG and SVG output formats
+- Key functionalities:
+  - `plot_vertices`: Displays original pattern with MTM points
+  - `plot_vertices_and_altered`: Shows comparison of original and altered patterns
+  - Includes detailed labeling and color-coding for different point types
+  - Saves high-resolution outputs with configurable DPI
 
 ## Configuration Examples
 
