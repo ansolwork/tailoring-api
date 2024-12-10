@@ -13,13 +13,15 @@ The Tailoring-api is a specialized system designed to generate alterations for L
 - PLT/HPGL output file generation
 
 ## Project Structure
+```
 tailoring-api/
-├── app/         # Core application logic for file processing and alterations
-│   ├── auto_grading.py          # Automated grading system
-│   ├── create_table.py          # Preprocessing and table creation
+├── app/                                # Core application logic
+│   ├── auto_grading.py                # Automated grading system
+│   ├── create_table.py                # Preprocessing and table creation
 │   └── piece_alteration_processor.py  # Pattern alterations
-├── ui/          # User interface components for data ingestion
-└── data/        # Local development data storage
+├── ui/                                # User interface components
+└── data/                              # Local development data
+```
 
 ## Input/Output Specifications
 
@@ -59,15 +61,17 @@ tailoring-api/
 ## Getting Started
 
 ### 1. Clone the Repository
-bash
+```bash
 git clone https://github.com/your-org/tailoring-api.git
 cd tailoring-api
+```
 
 ### 2. Environment Setup
-bash
+```bash
 python -m venv venv
-source venv/bin/activate # On Windows: venv\Scripts\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
+```
 
 ### 3. AWS Setup
 1. Create an AWS account
